@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.05.11.11">
+<meta name="app-version" content="2026.05.11.12">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2a4a3a">
@@ -2211,6 +2211,7 @@ function refreshAll() {
   try { if (typeof renderPayments === 'function') renderPayments(); } catch(e) { console.error('renderPayments', e); }
   try { if (typeof renderReports === 'function') renderReports(); } catch(e) { console.error('renderReports', e); }
   try { if (typeof refreshGroupDetailIfOpen === 'function') refreshGroupDetailIfOpen(); } catch(e) { console.error('refreshGroupDetailIfOpen', e); }
+  try { if (typeof refreshMemberDetailIfOpen === 'function') refreshMemberDetailIfOpen(); } catch(e) { console.error('refreshMemberDetailIfOpen', e); }
 }
 // ========== NAV ==========
 function switchPage(page) {
@@ -3518,7 +3519,15 @@ function saveMember() {
   renderMembers(); renderGroups(); renderDashboard();
 }
 
+// v12: Aktif üye detayı (cross-modal refresh için)
+let currentMemberDetailId = null;
+function refreshMemberDetailIfOpen() {
+  if (currentMemberDetailId && document.getElementById('modal-member-detail').classList.contains('open')) {
+    openMemberDetail(currentMemberDetailId);
+  }
+}
 function openMemberDetail(id) {
+  currentMemberDetailId = id;
   const m = state.members.find(x=>x.id===id); if(!m) return;
   // v10: Navigation — aktif üye listesindeki sıralamayla önceki/sonraki
   const memList = state.members.slice().filter(x => !x.archived).sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
@@ -3567,7 +3576,7 @@ function openMemberDetail(id) {
     ${m.note?`<div class="note-block" style="background:#e3f2fd;border-left-color:var(--blue);color:#0d47a1;">📝 ${escapeHtml(m.note)}</div>`:''}
     <div class="row" style="margin:12px 0;flex-wrap:wrap;gap:6px;">
       <button class="btn" onclick="openPaymentModal('${id}');closeModal('modal-member-detail');">+ Paket/Ödeme</button>
-      <button class="btn ok" onclick="openIndividualBatchLessons('${id}')" title="Bireysel üye için 8 ders toplu olarak takvime ekle">📋 Toplu Ders Yaz (Bireysel)</button>
+      <button class="btn ok" onclick="openBatchDatesMember('${id}')" title="Bireysel üye için 8 dersin tarih/saatini toplu olarak gir (grup gibi)">📋 Toplu Ders Yaz (Bireysel)</button>
       <button class="btn secondary" onclick="openMemberModal('${id}');closeModal('modal-member-detail');">✏️ Düzenle</button>
       ${m.archived
         ? `<button class="btn ok" onclick="reactivateMember('${id}');closeModal('modal-member-detail');">↩️ Aktive Et</button>`
@@ -4775,6 +4784,9 @@ function saveGroup() {
   renderGroups();
   renderMembers();
   renderCalendar(); renderDashboard();
+  // v12: Arkaplanda grup veya üye detayı varsa anlık yenile (cross-modal sync)
+  refreshGroupDetailIfOpen();
+  refreshMemberDetailIfOpen();
   let finalMsg = '';
   if (transferNotes.length) {
     finalMsg += `ℹ️ ${transferNotes.length} üye başka yerden bu gruba taşındı:\n` + transferNotes.join('\n');
@@ -5086,7 +5098,7 @@ function openGroupDetail(id, monthISO) {
       <td>${badge}</td>
       <td>${priceLabel} <button class="btn small" style="${priceBtnStyle}padding:2px 8px;margin-left:4px;font-size:11px;" onclick="event.stopPropagation();setMemberPriceInGroup('${m.id}','${id}')" title="${hasPrice?'Fiyatı düzenle':'Bu üyeye ücret tanımla'}">${priceBtnLabel}</button></td>
       <td><button class="btn small" style="${tickStyle}padding:4px 10px;font-weight:600;" onclick="togglePaidTick('${m.id}','${id}',event)" title="${hasGroupPay?'Ödemeyi kaldır':'Varsayılan paket fiyatıyla hızlı ödeme kaydı yarat'}">${tickLabel}</button></td>
-      <td><button class="btn small secondary" onclick="event.stopPropagation();closeModal('modal-group-detail');openMemberDetail('${m.id}')">Detay</button></td>
+      <td><button class="btn small secondary" onclick="event.stopPropagation();openMemberDetail('${m.id}')" title="Üye detayı — grup detayı arka planda açık kalır">Detay</button></td>
     </tr>`;
   }).join('') || '<tr><td colspan="6"><div class="empty" style="padding:20px;">Gruba henüz üye eklenmedi.</div></td></tr>';
 
@@ -5152,7 +5164,7 @@ function openGroupDetail(id, monthISO) {
     <div class="row" style="margin:12px 0;flex-wrap:wrap;">
       <button class="btn" onclick="openGroupPaymentModal('${id}')">💳 Gruba Ödeme Al</button>
       <button class="btn" onclick="openLessonModalForGroup('${id}')">📅 Ders Ekle</button>
-      <button class="btn secondary" onclick="openGroupModal('${id}');closeModal('modal-group-detail');">✏️ Düzenle</button>
+      <button class="btn secondary" onclick="openGroupModal('${id}')" title="Grubu düzenle — grup detayı arka planda açık kalır">✏️ Düzenle</button>
       <button class="btn secondary" onclick="scheduleGroupMonth('${id}')" title="Varsayılan gün ve saati kullanarak 4 haftalık ders planlaması yap">📆 4 Hafta Otomatik Planla</button>
       <button class="btn secondary" onclick="regenGroupLessons('${id}')" title="Paket başlangıcından itibaren paket ders sayısı kadar ders oluşturur (var olanlara dokunmaz)">🧩 Otomatik Ders Doldur</button>
       ${monthISO ? `<button class="btn secondary" onclick="markGroupPackageExtended('${id}','${monthISO}', true)" title="Bu ay ödeme alınmadan paket devam ediyor (0 TL)">📌 Paket Uzadı (0 TL)</button>` : ''}
@@ -5321,26 +5333,51 @@ function scheduleGroupMonth(groupId) {
 }
 function openLessonModalForGroup(groupId) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
-  closeModal('modal-group-detail');
+  // v12: Grup detayı açık kalsın (closeModal kaldırıldı)
   openLessonModal(null, todayISO(), g.defaultTime || hourSlots()[0], groupId);
 }
 
-// ========== BATCH GROUP LESSON DATES ==========
+// ========== BATCH LESSON DATES (v11: hem GRUP hem BİREYSEL ÜYE) ==========
 // 8 dersin tarih/saatini toplu girme — kullanıcı isteği
-let __batchDatesGroupId = null;
+let __batchDatesTarget = null; // {type:'group'|'member', id, packageMonth}
 let __batchDatesRows = []; // {lessonId|null, date, time}
 function openBatchDates(groupId) {
+  return openBatchDatesGroup(groupId);
+}
+function openBatchDatesGroup(groupId, monthISO) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
-  __batchDatesGroupId = groupId;
+  __batchDatesTarget = { type: 'group', id: groupId, packageMonth: monthISO || (g.packageStartDate ? g.packageStartDate.slice(0,7) : currentMonth()) };
   document.getElementById('bd-title').textContent = `📅 ${g.name} — Toplu Ders Tarihleri`;
-  // Mevcut grup derslerini al, üzerine boş satırlarla 8'e tamamla
-  const existing = state.lessons.filter(l=>l.groupId===groupId)
-    .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  // O paket ayına ait mevcut dersleri al
+  const existing = state.lessons.filter(l => {
+    if (l.groupId !== groupId) return false;
+    if (l.packageMonth) return l.packageMonth === __batchDatesTarget.packageMonth;
+    return (l.date||'').startsWith(__batchDatesTarget.packageMonth);
+  }).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
   __batchDatesRows = existing.map(l => ({ lessonId:l.id, date:l.date||'', time:l.time||'' }));
   while (__batchDatesRows.length < 8) {
     __batchDatesRows.push({ lessonId:null, date:'', time: g.defaultTime || '' });
   }
-  closeModal('modal-group-detail');
+  renderBatchDatesRows();
+  openModal('modal-batch-dates');
+}
+// v11: Bireysel üye için toplu ders modal'ı
+function openBatchDatesMember(memberId, monthISO) {
+  const m = state.members.find(x => x.id === memberId); if (!m) return;
+  const month = monthISO || currentMonth();
+  __batchDatesTarget = { type: 'member', id: memberId, packageMonth: month };
+  document.getElementById('bd-title').textContent = `📅 ${escapeHtml(m.name||'')} — Toplu Bireysel Ders Tarihleri (${month})`;
+  // O üyenin o paket ayına ait BİREYSEL (grupId yok) derslerini al
+  const existing = state.lessons.filter(l => {
+    if (l.groupId) return false;
+    if (!(l.memberIds||[]).includes(memberId)) return false;
+    if (l.packageMonth) return l.packageMonth === month;
+    return (l.date||'').startsWith(month);
+  }).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  __batchDatesRows = existing.map(l => ({ lessonId:l.id, date:l.date||'', time:l.time||'' }));
+  while (__batchDatesRows.length < 8) {
+    __batchDatesRows.push({ lessonId:null, date:'', time: m.defaultTime || '' });
+  }
   renderBatchDatesRows();
   openModal('modal-batch-dates');
 }
@@ -5360,8 +5397,15 @@ function batchDatesUpdate(idx, field, val) {
   if (__batchDatesRows[idx]) __batchDatesRows[idx][field] = val;
 }
 function batchDatesAddRow() {
-  const g = state.groups.find(x=>x.id===__batchDatesGroupId);
-  __batchDatesRows.push({ lessonId:null, date:'', time: (g && g.defaultTime) || '' });
+  let defTime = '';
+  if (__batchDatesTarget?.type === 'group') {
+    const g = state.groups.find(x => x.id === __batchDatesTarget.id);
+    defTime = g?.defaultTime || '';
+  } else if (__batchDatesTarget?.type === 'member') {
+    const m = state.members.find(x => x.id === __batchDatesTarget.id);
+    defTime = m?.defaultTime || '';
+  }
+  __batchDatesRows.push({ lessonId:null, date:'', time: defTime });
   renderBatchDatesRows();
 }
 function batchDatesRemoveRow(idx) {
@@ -5369,17 +5413,35 @@ function batchDatesRemoveRow(idx) {
   renderBatchDatesRows();
 }
 function batchDatesAutoFill() {
-  // Varsayılan gün/saatten başlayarak boş tarih satırlarını doldur
-  const g = state.groups.find(x=>x.id===__batchDatesGroupId); if (!g) return;
-  if (!g.defaultTime || !(g.defaultDays||[]).length) {
-    alert('Grubun varsayılan gün/saati yok. Önce grup ayarlarından belirle.');
-    return;
+  if (!__batchDatesTarget) return;
+  let defaultDays = [];
+  let defaultTime = '';
+  let startStr = '';
+  if (__batchDatesTarget.type === 'group') {
+    const g = state.groups.find(x => x.id === __batchDatesTarget.id); if (!g) return;
+    defaultDays = g.defaultDays || [];
+    defaultTime = g.defaultTime || '';
+    startStr = g.packageStartDate || todayISO();
+  } else {
+    const m = state.members.find(x => x.id === __batchDatesTarget.id); if (!m) return;
+    defaultDays = m.defaultDays || [];
+    defaultTime = m.defaultTime || '';
+    startStr = todayISO();
   }
-  const start = new Date(g.packageStartDate || todayISO());
+  if (!defaultTime || !defaultDays.length) {
+    const dayStr = prompt('Hangi günler? (virgülle, 0=Paz, 1=Pzt, 2=Sal, 3=Çar, 4=Per, 5=Cum, 6=Cmt)\nÖrnek: 2,4 → Salı-Perşembe', '2,4');
+    if (!dayStr) return;
+    defaultDays = dayStr.split(',').map(s => +s.trim()).filter(n => !isNaN(n) && n >= 0 && n <= 6);
+    if (!defaultDays.length) { alert('Geçerli gün girilmedi.'); return; }
+    const time = prompt('Hangi saatte? (HH:MM)', defaultTime || '10:00');
+    if (!time || !/^\d{2}:\d{2}$/.test(time)) { alert('Geçersiz saat.'); return; }
+    defaultTime = time;
+  }
+  const start = new Date(startStr);
   const dates = [];
   let week = 0;
   while (dates.length < __batchDatesRows.length) {
-    for (const dow of g.defaultDays) {
+    for (const dow of defaultDays) {
       const base = addDays(start, week*7);
       const baseDow = base.getDay();
       const diff = (dow - baseDow + 7) % 7;
@@ -5391,50 +5453,85 @@ function batchDatesAutoFill() {
   }
   __batchDatesRows.forEach((r,i) => {
     if (!r.date) r.date = dates[i] || '';
-    if (!r.time) r.time = g.defaultTime;
+    if (!r.time) r.time = defaultTime;
   });
   renderBatchDatesRows();
 }
 function saveBatchDates() {
-  const g = state.groups.find(x=>x.id===__batchDatesGroupId); if (!g) return;
+  if (!__batchDatesTarget) return;
+  const packageMonth = __batchDatesTarget.packageMonth || currentMonth();
+  let g = null, m = null;
+  if (__batchDatesTarget.type === 'group') {
+    g = state.groups.find(x => x.id === __batchDatesTarget.id);
+    if (!g) return;
+    // O ay için paket kaydı yoksa oluştur
+    if (!(g.packages||[]).find(p => p.month === packageMonth)) {
+      createGroupPackage(g, packageMonth, todayISO());
+    }
+  } else {
+    m = state.members.find(x => x.id === __batchDatesTarget.id);
+    if (!m) return;
+    if (!(m.packages||[]).find(p => p.month === packageMonth)) {
+      createMemberPackage(m, packageMonth, todayISO());
+    }
+  }
   let updated = 0, created = 0, removed = 0;
-  // Boş satırları silinmeli olarak işaretle (mevcut lesson'ı sil)
   for (const r of __batchDatesRows) {
     const empty = !r.date || !r.time;
     if (r.lessonId) {
-      const idx = state.lessons.findIndex(l=>l.id===r.lessonId);
+      const idx = state.lessons.findIndex(l => l.id === r.lessonId);
       if (idx < 0) continue;
       if (empty) { state.lessons.splice(idx,1); removed++; }
       else {
         if (state.lessons[idx].date !== r.date || state.lessons[idx].time !== r.time) {
           state.lessons[idx].date = r.date;
           state.lessons[idx].time = r.time;
+          state.lessons[idx].packageMonth = packageMonth;
           updated++;
         }
       }
     } else if (!empty) {
-      state.lessons.push({
-        id: uid(), date: r.date, time: r.time,
-        instructorId: g.defaultInstructorId || '',
-        size: g.size,
-        memberIds: (g.memberIds||[]).filter(x => x && state.members.find(m=>m.id===x)),
-        groupId: g.id, status:'planned', note:''
-      });
+      const newLesson = {
+        id: uid(),
+        date: r.date, time: r.time,
+        durationMin: +state.settings.lessonDuration || +state.settings.duration || 60,
+        status:'planned', note:'',
+        packageMonth,
+      };
+      if (g) {
+        newLesson.instructorId = g.defaultInstructorId || '';
+        newLesson.size = g.size;
+        newLesson.memberIds = (g.memberIds||[]).filter(x => x && state.members.find(mm => mm.id === x));
+        newLesson.groupId = g.id;
+        newLesson.packageOwnerType = 'group';
+        newLesson.packageOwnerId = g.id;
+      } else if (m) {
+        newLesson.instructorId = m.instructorId || '';
+        newLesson.size = 1;
+        newLesson.memberIds = [m.id];
+        newLesson.groupId = '';
+        newLesson.packageOwnerType = 'member';
+        newLesson.packageOwnerId = m.id;
+      }
+      state.lessons.push(newLesson);
       created++;
     }
   }
+  autoCompletePackages();
   save();
   closeModal('modal-batch-dates');
   alert(`✓ ${created} yeni ders, ${updated} güncellendi${removed?`, ${removed} silindi`:''}.`);
   if (typeof renderCalendar === 'function') renderCalendar();
   if (typeof renderDashboard === 'function') renderDashboard();
-  openGroupDetail(g.id);
+  if (typeof renderMembers === 'function') renderMembers();
+  // Cross-modal sync: arkaplandaki grup/üye detayı varsa yenile
+  refreshGroupDetailIfOpen();
+  refreshMemberDetailIfOpen();
 }
 function openGroupPaymentModal(groupId) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
   if (!groupActiveMemberCount(g)) { alert('Önce gruba üye ekle.'); return; }
-  closeModal('modal-group-detail');
-  // Open the payment modal with first member, but set groupId and default package from group
+  // v12: Grup detayı açık kalsın (closeModal kaldırıldı)
   const firstMember = g.memberIds[0];
   openPaymentModal(firstMember, null, groupId);
 }
@@ -5728,6 +5825,9 @@ function savePayment() {
   closeModal('modal-payment');
   renderPayments(); renderDashboard(); renderMembers(); renderCalendar();
   if (groupId) renderGroups();
+  // v12: Cross-modal sync — arkaplandaki grup/üye detayı varsa yenile
+  refreshGroupDetailIfOpen();
+  refreshMemberDetailIfOpen();
 }
 function saveGroupPaymentAll() {
   clearModalErrors('modal-payment');
@@ -5771,6 +5871,9 @@ function saveGroupPaymentAll() {
   save();
   closeModal('modal-payment');
   renderPayments(); renderDashboard(); renderMembers(); renderGroups(); renderCalendar();
+  // v12: Cross-modal sync
+  refreshGroupDetailIfOpen();
+  refreshMemberDetailIfOpen();
   alert(`${groupActiveMemberCount(g)} üye için ödeme kaydedildi.`);
 }
 function deletePayment() {
@@ -6992,7 +7095,7 @@ async function verifyPinLock() {
 }
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.05.11.11';
+const APP_VERSION = '2026.05.11.12';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
