@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.05.11.10">
+<meta name="app-version" content="2026.05.11.11">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2a4a3a">
@@ -206,15 +206,15 @@
     text-transform: uppercase;
     letter-spacing: .5px;
   }
-  /* Sticky tablo başlıkları (v10): scroll edince üst tarafta kalsın
+  /* Sticky tablo başlıkları (v11): scroll edince üst tarafta kalsın
      thead tablo başı, tabs altında konumlanmalı. Tabs 56-100px arası — 110 güvenli. */
   thead.sticky-thead th,
   table.sticky-head thead th {
     position: sticky;
     top: 110px;
     z-index: 8;
-    background: #fafafa;
-    box-shadow: 0 1px 0 var(--border);
+    background: #fafafa !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.07);
   }
   @media (max-width: 768px) {
     thead.sticky-thead th,
@@ -222,6 +222,13 @@
   }
   tr:hover { background: #fafafa; }
   .table-wrap { overflow-x: auto; border-radius: 8px; }
+  /* v11 fix: sticky thead'in çalışması için parent table-wrap'ın overflow visible olması lazım.
+     :has() selector modern tarayıcılarda destekleniyor (Chrome 105+, Safari 15.4+, Firefox 121+). */
+  .table-wrap:has(table.sticky-head),
+  .table-wrap:has(thead.sticky-thead) {
+    overflow-x: visible;
+    overflow-y: visible;
+  }
   /* Pasif (arşiv) üye listesi stilleri (v10) */
   .archived-row td { background: #f5efe2; color: #7c6b4d; }
   .archived-row:hover td { background: #ece2c8; }
@@ -1705,6 +1712,9 @@ function load() {
     if (!merged.settings.slotStepMin) merged.settings.slotStepMin = 15; // takvim slot adımı (çeyrek saat: 15dk)
     if (!merged.settings.openMinute) merged.settings.openMinute = 0;
     if (!merged.settings.closeMinute) merged.settings.closeMinute = 0;
+    // v11: Ek olarak helper'ı da çağır (idempotent, eski local state'lerde
+    // packages dizisi boş kalmış olabilirse onları da düzeltir)
+    applyV10MigrationToState(merged);
     return merged;
   } catch(e) {
     // BUG FIX (v9): bozuk veriyi sessizce silip default'a dönmek YERİNE
@@ -1748,6 +1758,70 @@ function save() {
   }
 }
 function uid() { return Math.random().toString(36).slice(2,10); }
+
+// v11: Migration helper — buluttan çekme (pullFromCloud) sonrası da çağırılır
+// Idempotent: var olan v10+ alanlarını koruyor, sadece eksikleri tamamlıyor.
+function applyV10MigrationToState(s) {
+  if (!s || typeof s !== 'object') return s;
+  // 1) Lesson packageMonth + owner
+  s.lessons = (s.lessons || []).map(l => {
+    if (!l) return l;
+    if (!l.packageMonth && l.date) l.packageMonth = String(l.date).slice(0,7);
+    if (l.groupId && !l.packageOwnerType) {
+      l.packageOwnerType = 'group';
+      l.packageOwnerId = l.groupId;
+    }
+    return l;
+  });
+  // 2) Payment packageMonth
+  s.payments = (s.payments || []).map(p => {
+    if (!p) return p;
+    if (!p.packageMonth) {
+      if (p.groupId) {
+        const g = (s.groups||[]).find(x => x.id === p.groupId);
+        if (g && g.packageStartDate) p.packageMonth = String(g.packageStartDate).slice(0,7);
+        else p.packageMonth = String(p.date||'').slice(0,7);
+      } else {
+        p.packageMonth = String(p.date||'').slice(0,7);
+      }
+    }
+    return p;
+  });
+  // 3) Group packages array
+  s.groups = (s.groups || []).map(g => {
+    if (!g.packages) g.packages = [];
+    if (g.archived === undefined) g.archived = false;
+    if (!g.memberInstructorRates || typeof g.memberInstructorRates !== 'object') g.memberInstructorRates = {};
+    if (g.packageStartDate && g.packages.length === 0) {
+      const month = String(g.packageStartDate).slice(0,7);
+      const pkg = (s.packageTypes||[]).find(p => p.id === g.defaultPackageId) || (s.packageTypes||[])[0] || {sessions:8, price:7000};
+      g.packages.push({
+        month: month,
+        startDate: g.packageStartDate,
+        sessions: pkg.sessions || 8,
+        price: g.customTotalPrice !== undefined && g.customTotalPrice !== null && g.customTotalPrice !== '' ? +g.customTotalPrice : (pkg.price || 0),
+        rescheduleUsed: +g.rescheduleUsed || 0,
+        cancelUsed: +g.cancelUsed || 0,
+        status: 'active'
+      });
+    }
+    return g;
+  });
+  // 4) Members
+  s.members = (s.members || []).map(m => {
+    if (m.archived === undefined) m.archived = false;
+    if (!m.packages) m.packages = [];
+    return m;
+  });
+  // 5) Settings defaults
+  if (s.settings) {
+    if (!s.settings.lessonDuration) s.settings.lessonDuration = s.settings.duration || 60;
+    if (!s.settings.slotStepMin) s.settings.slotStepMin = 15;
+    if (!s.settings.openMinute) s.settings.openMinute = 0;
+    if (!s.settings.closeMinute) s.settings.closeMinute = 0;
+  }
+  return s;
+}
 
 // ========== HELPERS ==========
 // XSS koruma — kullanıcı stringini DOM'a yazmadan önce escape et
@@ -4334,15 +4408,27 @@ function renderGroups() {
     (g.name||'').toLowerCase().includes(q) ||
     (g.memberIds||[]).some(mid => (memberName(mid)||'').toLowerCase().includes(q))
   );
-  // v10: Ay filtresi — gruba o ay'a denk gelen paket varsa veya o ay için ödeme varsa göster
+  // v11: Ay filtresi — Üye listesindeki ile TUTARLI:
+  // - Grubun o ay'da aktif (archived olmayan, enrolled) üyesi varsa göster
+  // - Veya o ay'a denk gelen ödeme/paket/packageStart varsa göster
   if (monthISO) {
     list = list.filter(g => {
-      const hasPkg = (g.packages||[]).some(p => p.month === monthISO && p.status !== 'completed');
+      // 1) Aktif üye filtresi (üye listesiyle aynı mantık)
+      const activeMids = (g.memberIds||[]).filter(mid => {
+        if (!mid) return false;
+        const mm = state.members.find(x => x.id === mid);
+        if (!mm || mm.archived) return false;
+        return isMemberEnrolledInMonth(mid, monthISO);
+      });
+      if (activeMids.length > 0) return true;
+      // 2) O ay için ödeme varsa
       const hasPay = state.payments.some(p => p.groupId === g.id && (p.packageMonth || (p.date||'').slice(0,7)) === monthISO);
-      const startInMonth = g.packageStartDate && g.packageStartDate.startsWith(monthISO);
-      // Geçmiş aylar için: o ay'a denk gelen paket KAYDI varsa göster (status fark etmez)
-      const hadPkg = (g.packages||[]).some(p => p.month === monthISO);
-      return hasPkg || hasPay || startInMonth || hadPkg;
+      if (hasPay) return true;
+      // 3) Paket o ay'a denk gelirse (sarkma/sonradan paket için)
+      const hasPkg = (g.packages||[]).some(p => p.month === monthISO);
+      if (hasPkg) return true;
+      // 4) packageStartDate o ay'da başlıyorsa
+      return g.packageStartDate && g.packageStartDate.startsWith(monthISO);
     });
   }
   const el = document.getElementById('groups-list');
@@ -6610,6 +6696,9 @@ async function pullFromCloud(silent) {
     }
     state = { ...structuredClone(DEFAULT_STATE), ...record };
     delete state._updatedAt;
+    // v11 FIX: Buluttan çekilen veri eski v9 formatında olabilir — migration uygula!
+    // (load() içindekiyle aynı, idempotent: var olan v10 alanlarını koruyor)
+    applyV10MigrationToState(state);
     // PIN hash'i localStorage yedeğine de yaz (offline açılışta çalışsın)
     // DİKKAT: Cloud'da _pinHash yoksa yedeği silmiyoruz — aksi halde eski sürümde
     // yerel olarak koyulmuş PIN, cloud sync sonrası kaybolur. Yalnızca set et.
@@ -6903,7 +6992,7 @@ async function verifyPinLock() {
 }
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.05.11.10';
+const APP_VERSION = '2026.05.11.11';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
