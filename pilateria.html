@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.05.11.14">
+<meta name="app-version" content="2026.05.11.15">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2a4a3a">
@@ -2233,30 +2233,99 @@ document.getElementById('tabs').addEventListener('click', e => {
 });
 
 // ========== MODALS ==========
-function openModal(id) {
-  // Önceki hata işaretlerini temizle (her açılışta temiz başla)
-  const m = document.getElementById(id);
-  if (m) {
-    m.querySelectorAll('.field.invalid').forEach(f => f.classList.remove('invalid'));
-    m.querySelectorAll('.field-error').forEach(e => e.remove());
-    // MOBİL (v9): kapat × butonu yoksa ekle
-    const inner = m.querySelector('.modal');
-    if (inner && !inner.querySelector('.modal-close-x')) {
-      const x = document.createElement('button');
-      x.className = 'modal-close-x';
-      x.textContent = '✕';
-      x.setAttribute('aria-label', 'Kapat');
-      x.onclick = () => closeModal(id);
-      inner.insertBefore(x, inner.firstChild);
+// v15: Modal stack + z-index hiyerarşisi + tarayıcı geri-ileri navigation
+const __modalStack = []; // sırasıyla açık modal id'leri (en sondaki en üstte)
+let __modalSuppressPopstate = false; // closeModal'dan history.back() çağrıldığında popstate handler ikinci kez kapatmasın
+function __modalUpdateBackButtons() {
+  // Stack > 1 olan modallara "← Geri" butonu ekle/güncelle, sadece en alttakinde gizle
+  __modalStack.forEach((mid, idx) => {
+    const el = document.getElementById(mid);
+    if (!el) return;
+    const inner = el.querySelector('.modal');
+    if (!inner) return;
+    let back = inner.querySelector('.modal-back-btn');
+    if (idx > 0) {
+      if (!back) {
+        back = document.createElement('button');
+        back.className = 'modal-back-btn';
+        back.type = 'button';
+        back.setAttribute('aria-label', 'Geri');
+        back.style.cssText = 'position:absolute;top:8px;left:8px;width:36px;height:36px;border-radius:50%;background:#f5f5f5;border:none;font-size:18px;line-height:1;cursor:pointer;color:#555;display:flex;align-items:center;justify-content:center;z-index:10;font-weight:600;';
+        back.textContent = '←';
+        back.onclick = () => { history.back(); };
+        inner.insertBefore(back, inner.firstChild);
+      }
+      const h2 = inner.querySelector('h2');
+      if (h2) h2.style.paddingLeft = '48px';
+    } else {
+      if (back) back.remove();
+      const h2 = inner.querySelector('h2');
+      if (h2 && h2.style.paddingLeft === '48px') h2.style.paddingLeft = '';
     }
-  }
-  document.getElementById(id).classList.add('open');
-  // FAB açıksa kapat (üst üste binmesin)
-  closeFab();
+  });
 }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  // Aynı modal stack'te varsa kaldır, sona ekle (en üst pozisyon)
+  const existingIdx = __modalStack.indexOf(id);
+  if (existingIdx >= 0) __modalStack.splice(existingIdx, 1);
+  __modalStack.push(id);
+  // Önceki hata işaretlerini temizle
+  m.querySelectorAll('.field.invalid').forEach(f => f.classList.remove('invalid'));
+  m.querySelectorAll('.field-error').forEach(e => e.remove());
+  // MOBİL: kapat × butonu yoksa ekle
+  const inner = m.querySelector('.modal');
+  if (inner && !inner.querySelector('.modal-close-x')) {
+    const x = document.createElement('button');
+    x.className = 'modal-close-x';
+    x.textContent = '✕';
+    x.setAttribute('aria-label', 'Kapat');
+    x.onclick = () => closeModal(id);
+    inner.insertBefore(x, inner.firstChild);
+  }
+  // v15: z-index dinamik — sonradan açılan üstte olsun (alt modallar görünür kalır)
+  m.style.zIndex = String(200 + __modalStack.length * 10);
+  m.classList.add('open');
+  __modalUpdateBackButtons();
+  closeFab();
+  // v15: history.pushState — tarayıcı geri butonu ile modal kapanır
+  try {
+    history.pushState({ pilateriaModal: id, stackLen: __modalStack.length }, '', '#m=' + id);
+  } catch(e) { /* private mode vs. — sessizce geç */ }
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('open');
+  el.style.zIndex = '';
+  const idx = __modalStack.indexOf(id);
+  if (idx >= 0) __modalStack.splice(idx, 1);
+  __modalUpdateBackButtons();
+  // v15: history'den geri çek (eğer popstate event'i sebebiyle gelmediyse)
+  if (!__modalSuppressPopstate) {
+    try {
+      if (history.state && history.state.pilateriaModal) history.back();
+    } catch(e) {}
+  }
+}
+// v15: Tarayıcı geri tuşu ile en üstteki modal kapanır
+window.addEventListener('popstate', (e) => {
+  if (__modalStack.length === 0) return;
+  __modalSuppressPopstate = true;
+  const top = __modalStack.pop();
+  const el = document.getElementById(top);
+  if (el) {
+    el.classList.remove('open');
+    el.style.zIndex = '';
+  }
+  __modalUpdateBackButtons();
+  __modalSuppressPopstate = false;
+});
 document.querySelectorAll('.modal-bg').forEach(bg=>{
-  bg.addEventListener('click', e => { if (e.target===bg) bg.classList.remove('open'); });
+  bg.addEventListener('click', e => {
+    if (e.target===bg) closeModal(bg.id);
+  });
 });
 
 // ========== FAB (Floating Action Button) ==========
@@ -2282,11 +2351,14 @@ document.addEventListener('click', (e) => {
   const wrap = document.getElementById('fab-wrap');
   if (wrap && !wrap.contains(e.target)) closeFab();
 });
-// Escape ile tüm modal ve FAB kapat
+// v15: Escape ile sadece EN ÜSTTEKİ modal kapanır (stack uyumlu)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeFab();
-    document.querySelectorAll('.modal-bg.open').forEach(m => m.classList.remove('open'));
+    if (__modalStack.length > 0) {
+      const top = __modalStack[__modalStack.length - 1];
+      closeModal(top);
+    }
   }
 });
 
@@ -7207,7 +7279,7 @@ async function verifyPinLock() {
 }
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.05.11.14';
+const APP_VERSION = '2026.05.11.15';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
