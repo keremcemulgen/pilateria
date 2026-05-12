@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.05.11.15">
+<meta name="app-version" content="2026.05.11.16">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2a4a3a">
@@ -2267,9 +2267,11 @@ function __modalUpdateBackButtons() {
 function openModal(id) {
   const m = document.getElementById(id);
   if (!m) return;
-  // Aynı modal stack'te varsa kaldır, sona ekle (en üst pozisyon)
+  // Aynı modal stack'te zaten varsa: tekrar açılış (örn. detay yenileme veya navigation).
+  // history'ye DOUBLE pushState ekleme (v16 BUG#1 fix).
   const existingIdx = __modalStack.indexOf(id);
-  if (existingIdx >= 0) __modalStack.splice(existingIdx, 1);
+  const wasInStack = existingIdx >= 0;
+  if (wasInStack) __modalStack.splice(existingIdx, 1);
   __modalStack.push(id);
   // Önceki hata işaretlerini temizle
   m.querySelectorAll('.field.invalid').forEach(f => f.classList.remove('invalid'));
@@ -2289,10 +2291,12 @@ function openModal(id) {
   m.classList.add('open');
   __modalUpdateBackButtons();
   closeFab();
-  // v15: history.pushState — tarayıcı geri butonu ile modal kapanır
-  try {
-    history.pushState({ pilateriaModal: id, stackLen: __modalStack.length }, '', '#m=' + id);
-  } catch(e) { /* private mode vs. — sessizce geç */ }
+  // v15/v16: history.pushState — sadece YENİ modal için (refresh/navigation'ta değil)
+  if (!wasInStack) {
+    try {
+      history.pushState({ pilateriaModal: id, stackLen: __modalStack.length }, '', '#m=' + id);
+    } catch(e) { /* private mode vs. — sessizce geç */ }
+  }
 }
 function closeModal(id) {
   const el = document.getElementById(id);
@@ -2302,11 +2306,17 @@ function closeModal(id) {
   const idx = __modalStack.indexOf(id);
   if (idx >= 0) __modalStack.splice(idx, 1);
   __modalUpdateBackButtons();
-  // v15: history'den geri çek (eğer popstate event'i sebebiyle gelmediyse)
+  // v16 BUG#2 fix: history.back() öncesi suppress flag set et ki popstate handler
+  // ikinci kez modalı pop etmesin (alt modalı kapatırdı).
   if (!__modalSuppressPopstate) {
     try {
-      if (history.state && history.state.pilateriaModal) history.back();
-    } catch(e) {}
+      if (history.state && history.state.pilateriaModal) {
+        __modalSuppressPopstate = true;
+        history.back();
+        // popstate event microtask'tan sonra çalışır — bir sonraki tick'te resetle
+        setTimeout(() => { __modalSuppressPopstate = false; }, 0);
+      }
+    } catch(e) { __modalSuppressPopstate = false; }
   }
 }
 // v15: Tarayıcı geri tuşu ile en üstteki modal kapanır
@@ -3599,8 +3609,11 @@ function refreshMemberDetailIfOpen() {
   }
 }
 function openMemberDetail(id) {
+  // v16 BUG#4 fix: boş id ile çağrılırsa (örn navigation'da prev=null) hiçbir şey yapma
+  if (!id) return;
+  const m = state.members.find(x=>x.id===id);
+  if (!m) return;
   currentMemberDetailId = id;
-  const m = state.members.find(x=>x.id===id); if(!m) return;
   // v10: Navigation — aktif üye listesindeki sıralamayla önceki/sonraki
   const memList = state.members.slice().filter(x => !x.archived).sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
   // archived üyeler için de gezilebilsin
@@ -5206,9 +5219,12 @@ function refreshGroupDetailIfOpen() {
   }
 }
 function openGroupDetail(id, monthISO) {
+  // v16 BUG#4 fix: boş id ile çağrılırsa (örn navigation prev/next yoksa) hiçbir şey yapma
+  if (!id) return;
+  const g = state.groups.find(x=>x.id===id);
+  if (!g) return;
   currentGroupDetailId = id;
   currentGroupDetailMonth = monthISO || '';
-  const g = state.groups.find(x=>x.id===id); if (!g) return;
   // v10: Navigation — listedeki sıralamayla aynı sırayla önceki/sonraki grup
   const groupsList = state.groups.slice().filter(x => !x.archived).sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
   const idx = groupsList.findIndex(x => x.id === id);
@@ -7279,7 +7295,7 @@ async function verifyPinLock() {
 }
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.05.11.15';
+const APP_VERSION = '2026.05.11.16';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
