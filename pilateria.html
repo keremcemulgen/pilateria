@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.05.11.16">
+<meta name="app-version" content="2026.05.11.17">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2a4a3a">
@@ -2320,9 +2320,13 @@ function closeModal(id) {
   }
 }
 // v15: Tarayıcı geri tuşu ile en üstteki modal kapanır
+// v17 CRITICAL FIX: closeModal() history.back() çağırırken __modalSuppressPopstate=true
+// set ediliyor — popstate handler bu flag'i kontrol etmeliydi ama unutulmuştu.
+// Bu eksiklik "Düzenle butonuna tıklayınca yeni modal yanlışlıkla kapanıyor" bug'ına yol açıyordu.
 window.addEventListener('popstate', (e) => {
+  // Eğer closeModal tarafından programatik tetiklendiyse, modal stack'i pop ETME (zaten yapıldı)
+  if (__modalSuppressPopstate) return;
   if (__modalStack.length === 0) return;
-  __modalSuppressPopstate = true;
   const top = __modalStack.pop();
   const el = document.getElementById(top);
   if (el) {
@@ -2330,7 +2334,6 @@ window.addEventListener('popstate', (e) => {
     el.style.zIndex = '';
   }
   __modalUpdateBackButtons();
-  __modalSuppressPopstate = false;
 });
 document.querySelectorAll('.modal-bg').forEach(bg=>{
   bg.addEventListener('click', e => {
@@ -7295,7 +7298,7 @@ async function verifyPinLock() {
 }
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.05.11.16';
+const APP_VERSION = '2026.05.11.17';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
