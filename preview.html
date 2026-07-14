@@ -1065,6 +1065,98 @@
   #pl-dlg{max-width:none;border-radius:16px 16px 0 0;padding-bottom:calc(14px + env(safe-area-inset-bottom));}
   #pl-dlg-btns .btn{flex:1;padding:12px;}
 }
+
+/* ===== GOOGLE TARZI TAKVİM (v29) ===== */
+.calendar.gcal-host, .calendar.gmonth-host { display:block !important; background:transparent; border:none; }
+.gcal { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); }
+.gcal-head { display:flex; border-bottom:1px solid var(--border); }
+.gcal-gutterhead { width:52px; flex-shrink:0; border-right:1px solid var(--border); }
+.gcal-dayhead { flex:1; min-width:0; text-align:center; padding:8px 2px 10px; border-right:1px solid var(--border); user-select:none; }
+.gcal-dayhead:last-child { border-right:none; }
+.gcal-dayhead .gdh-name { display:block; font-size:11px; font-weight:600; letter-spacing:.8px; color:var(--muted); text-transform:uppercase; }
+.gcal-dayhead .gdh-num { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; font-size:20px; font-weight:500; margin-top:2px; color:var(--text); }
+.gcal-dayhead.today .gdh-num { background:var(--acc); color:#fff; font-weight:600; }
+.gcal-dayhead.closed { opacity:.45; }
+.gcal-dayhead .gdh-cnt { display:block; font-size:10px; color:var(--acc-strong,var(--acc)); font-weight:600; margin-top:1px; }
+.gcal-dayhead .gdh-cnt.none { color:var(--muted); font-weight:400; }
+.gcal-body { display:flex; max-height:72vh; overflow-y:auto; }
+.gcal-gutter { width:52px; flex-shrink:0; position:relative; border-right:1px solid var(--border); }
+.gcal-hlabel { position:absolute; right:6px; transform:translateY(-50%); font-size:10.5px; color:var(--muted); background:var(--card); padding:0 2px; }
+.gcal-cols { flex:1; display:flex; min-width:0; }
+.gcal-col { flex:1; min-width:0; position:relative; border-right:1px solid var(--border); }
+.gcal-col:last-child { border-right:none; }
+.gcal-col.closed { background:repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(128,128,128,.05) 6px, rgba(128,128,128,.05) 7px); }
+.gcal-col.today { background:color-mix(in srgb, var(--acc) 3%, transparent); }
+.gcal-hline { position:absolute; left:0; right:0; height:0; border-top:1px solid var(--border); opacity:.55; pointer-events:none; }
+.gcal-hcell { position:absolute; left:0; right:0; cursor:pointer; }
+.gcal-hcell:hover { background:color-mix(in srgb, var(--acc) 7%, transparent); }
+.gcal-hcell .cal-avail { position:absolute; right:3px; top:3px; font-size:9px; padding:1px 5px; border-radius:8px; opacity:0; transition:opacity .15s; background:var(--bg); border:1px solid var(--border); color:var(--muted); }
+.gcal-hcell:hover .cal-avail { opacity:1; }
+.gcal-hcell .cal-avail.full { color:var(--bad); border-color:var(--bad); opacity:.75; }
+.gcal-hcell .cal-avail.some { color:var(--warn); }
+.gcal-ev { position:absolute; border-radius:6px; padding:3px 6px; font-size:11.5px; line-height:1.35; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.14); z-index:2; transition:filter .12s, box-shadow .12s; }
+.gcal-ev:hover { filter:brightness(1.06); box-shadow:0 3px 10px rgba(0,0,0,.22); z-index:3; }
+.gcal-ev .gev-l1 { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gcal-ev .gev-time { font-weight:700; opacity:.9; }
+.gcal-ev .gev-l2 { font-size:10.5px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gcal-ev .gev-cnt { float:right; font-size:10px; opacity:.85; }
+.gcal-ev .gev-pm { font-size:9.5px; }
+.gst-planned   { background:var(--acc); color:#fff; }
+.gst-completed { background:color-mix(in srgb, var(--ok) 22%, var(--card)); color:var(--text); border-left:3px solid var(--ok); }
+.gst-missed    { background:color-mix(in srgb, var(--bad) 18%, var(--card)); color:var(--text); border-left:3px solid var(--bad); }
+.gst-cancelled { background:transparent; color:var(--muted); border:1px dashed var(--border); text-decoration:line-through; box-shadow:none; }
+.gcal-now { position:absolute; left:0; right:0; height:0; border-top:2px solid #ea4335; z-index:4; pointer-events:none; }
+.gcal-now-dot { position:absolute; left:-5px; top:-6px; width:10px; height:10px; border-radius:50%; background:#ea4335; }
+/* Üst bar */
+.gcal-topbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.gcal-nav { border:none; background:transparent; color:var(--text); font-size:22px; width:34px; height:34px; border-radius:50%; cursor:pointer; line-height:1; }
+.gcal-nav:hover { background:var(--acc-soft, rgba(0,0,0,.06)); }
+.gcal-topbar .cal-week-label { font-size:19px; font-weight:500; letter-spacing:-.2px; margin:0 4px; }
+.gcal-right { margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.gcal-viewseg { display:inline-flex; border:1px solid var(--border); border-radius:20px; overflow:hidden; background:var(--card); }
+.gcal-viewseg button { border:none; background:transparent; padding:7px 14px; font-size:13px; color:var(--text); cursor:pointer; }
+.gcal-viewseg button:hover { background:var(--acc-soft, rgba(0,0,0,.05)); }
+.gcal-viewseg button.active-view { background:var(--acc); color:#fff; font-weight:600; }
+/* AY görünümü */
+.gmonth { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); }
+.gm-dowrow { display:grid; grid-template-columns:repeat(7,1fr); border-bottom:1px solid var(--border); }
+.gm-dow { text-align:center; font-size:11px; font-weight:600; letter-spacing:.8px; color:var(--muted); padding:8px 0; }
+.gm-grid { display:grid; grid-template-columns:repeat(7,1fr); }
+.gm-cell { min-height:104px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); padding:4px; cursor:pointer; overflow:hidden; }
+.gm-cell:nth-child(7n) { border-right:none; }
+.gm-cell:hover { background:color-mix(in srgb, var(--acc) 5%, transparent); }
+.gm-cell.out { background:color-mix(in srgb, var(--muted) 4%, transparent); }
+.gm-cell.out .gm-num span { color:var(--muted); opacity:.6; }
+.gm-num { text-align:center; margin-bottom:3px; }
+.gm-num span { display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; border-radius:50%; font-size:12.5px; font-weight:500; }
+.gm-cell.today .gm-num span { background:var(--acc); color:#fff; font-weight:700; }
+.gm-chip { border-radius:4px; padding:1px 5px; font-size:10.5px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.gm-chip .gmc-time { font-weight:700; }
+.gm-chip.gst-cancelled { text-decoration:line-through; }
+.gm-more { font-size:10px; color:var(--muted); font-weight:600; padding-left:5px; }
+/* Mobil */
+@media (max-width:768px) {
+  .gcal-gutterhead, .gcal-gutter { width:38px; }
+  .gcal-dayhead .gdh-num { width:28px; height:28px; font-size:15px; }
+  .gcal-dayhead .gdh-cnt { display:none; }
+  .gcal-ev { font-size:10px; padding:2px 3px; }
+  .gcal-ev .gev-l2 { display:none; }
+  .gcal-topbar .cal-week-label { font-size:15px; }
+  .gcal-viewseg button { padding:6px 9px; font-size:12px; }
+  .gm-cell { min-height:64px; }
+  .gm-chip { font-size:9px; }
+  .gcal-body { max-height:none; }
+}
+
+/* ===== MODAL / DETAY PROFESYONEL CİLA (v29) ===== */
+.modal h3 { text-align:left; font-size:17.5px; font-weight:650; letter-spacing:-.2px; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:14px; }
+.modal label { font-size:12px; font-weight:600; color:var(--muted); }
+.modal .btn { font-weight:600; }
+.md-stats .stat, #md-content .stat { border-radius:10px; }
+.stat .label, .stat-label { font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+.detail-actions .btn, .md-actions .btn { font-weight:600; }
+.bd-row:nth-child(even), .batch-row:nth-child(even) { background:color-mix(in srgb, var(--muted) 5%, transparent); border-radius:8px; }
+.note-block { border-radius:10px; }
 </style>
 </head>
 <body>
@@ -1176,22 +1268,22 @@
 <!-- CALENDAR -->
 <section class="page" id="page-calendar">
   <div class="card">
-    <div class="cal-controls">
-      <div class="row" style="gap:4px;">
-        <button class="btn small" data-view="day" onclick="setCalView('day')">Gün</button>
-        <button class="btn small" data-view="week" onclick="setCalView('week')">Hafta</button>
-        <button class="btn small" data-view="month" onclick="setCalView('month')">Ay</button>
-        <button class="btn small" data-view="year" onclick="setCalView('year')">Yıl</button>
-      </div>
-      <div class="row">
-        <button class="btn secondary small" onclick="shiftCal(-1)">←</button>
-        <button class="btn secondary small" onclick="shiftCal(0)">Bugün</button>
-        <button class="btn secondary small" onclick="shiftCal(1)">→</button>
-      </div>
+    <div class="cal-controls gcal-topbar">
+      <button class="btn small secondary" onclick="shiftCal(0)">Bugün</button>
+      <button class="gcal-nav" onclick="shiftCal(-1)" aria-label="Önceki" title="Önceki">‹</button>
+      <button class="gcal-nav" onclick="shiftCal(1)" aria-label="Sonraki" title="Sonraki">›</button>
       <div class="cal-week-label" id="week-label"></div>
-      <button class="btn small ok" onclick="openDayReport()" title="Seçili günün derslerini hoca hoca, kopyala-gönder mesajı olarak göster">📋 Gün Raporu</button>
-      <button class="btn small" onclick="openFreeReport('week')" title="Hafta veya ay bazında, saat saat kaç makinenin boş olduğunu göster">🪑 Boş Makine</button>
-      <button class="btn" onclick="openLessonModal()">+ Ders Ekle</button>
+      <div class="gcal-right">
+        <div class="gcal-viewseg" role="tablist">
+          <button data-view="day" onclick="setCalView('day')">Gün</button>
+          <button data-view="week" onclick="setCalView('week')">Hafta</button>
+          <button data-view="month" onclick="setCalView('month')">Ay</button>
+          <button data-view="year" onclick="setCalView('year')">Yıl</button>
+        </div>
+        <button class="btn small secondary" onclick="openDayReport()" title="Seçili günün derslerini hoca hoca, kopyala-gönder mesajı olarak göster">Gün Raporu</button>
+        <button class="btn small secondary" onclick="openFreeReport('week')" title="Hafta veya ay bazında, saat saat kaç makinenin boş olduğunu göster">Boş Makine</button>
+        <button class="btn" onclick="openLessonModal()">+ Ders Ekle</button>
+      </div>
     </div>
     <div class="calendar-wrap" style="display:flex;gap:12px;align-items:flex-start;">
       <div class="calendar" id="calendar" style="flex:1;min-width:0;"></div>
@@ -1691,9 +1783,9 @@
       </div>
     </div>
     <div id="mp-discount-info" style="font-size:12px;color:var(--ok);margin-bottom:8px;font-weight:500;"></div>
-    <div style="background:#F6E8D5;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:13px;">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;">
-        <input type="checkbox" id="mp-prorate" style="width:auto" onchange="onProrateToggle()"> 🧩 Üye gruba sonradan katıldı (orantılı ödeme)
+    <div style="background:var(--bg);border:1px solid var(--border);padding:9px 12px;border-radius:10px;margin-bottom:10px;font-size:13px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--text);">
+        <input type="checkbox" id="mp-prorate" style="width:auto" onchange="onProrateToggle()"> Üye gruba sonradan katıldı (orantılı ödeme)
       </label>
       <div id="mp-prorate-fields" style="display:none;margin-top:8px;">
         <div class="row" style="gap:8px;align-items:end;flex-wrap:wrap;">
@@ -1794,7 +1886,7 @@
     <div id="mg-price-preview" style="background:#F6E8D5;padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:13px;display:none;"></div>
     <div id="mg-warning" style="color:var(--bad);font-size:12px;margin-bottom:8px;"></div>
     <div class="row end">
-      <button class="btn danger" id="mg-delete-btn" style="margin-right:auto;display:none;" onclick="deleteGroup()" title="Aktif grupta: bu aydan itibaren pasife alır (geçmiş korunur). Pasif grupta: kalıcı siler.">🗑 Pasife Al / Sil</button>
+      <button class="btn danger" id="mg-delete-btn" style="margin-right:auto;display:none;" onclick="deleteGroup()" title="Aktif grupta: bu aydan itibaren pasife alır (geçmiş korunur). Pasif grupta: kalıcı siler.">Pasife Al / Sil</button>
       <button class="btn secondary" onclick="closeModal('modal-group')">İptal</button>
       <button class="btn" onclick="saveGroup()">Kaydet</button>
     </div>
@@ -1853,8 +1945,8 @@
     <div id="bd-rows" style="max-height:50vh;overflow:auto;"></div>
     <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap;">
       <button class="btn small secondary" onclick="batchDatesAddRow()">+ Satır Ekle</button>
-      <button class="btn small secondary" onclick="batchDatesAutoFill()">⚡ Varsayılan Gün/Saatten Doldur</button>
-      <button class="btn ok" onclick="saveBatchDates()" style="margin-left:auto;">💾 Kaydet</button>
+      <button class="btn small secondary" onclick="batchDatesAutoFill()">Varsayılan Gün/Saatten Doldur</button>
+      <button class="btn ok" onclick="saveBatchDates()" style="margin-left:auto;">Kaydet</button>
     </div>
   </div>
 </div>
@@ -3305,25 +3397,142 @@ function miniCalGoToWeek(dISO) {
   __miniCalAnchor = null; // ana takvime dön
   renderCalendar();
 }
+const GCAL_HOUR_PX = 64;
+let __gcalNowTimer = null;
+function __gcalNowTop(openMin, endMin) {
+  const n = new Date();
+  const nowMin = n.getHours()*60 + n.getMinutes();
+  if (nowMin < openMin || nowMin > endMin) return null;
+  return (nowMin - openMin) * (GCAL_HOUR_PX/60);
+}
+function __gcalTickNow() {
+  const lines = document.querySelectorAll('.gcal-now');
+  if (!lines.length) return;
+  lines.forEach(el => {
+    const openMin = +el.dataset.open, endMin = +el.dataset.end;
+    const top = __gcalNowTop(openMin, endMin);
+    if (top === null) { el.style.display = 'none'; return; }
+    el.style.display = ''; el.style.top = top + 'px';
+  });
+}
+// Çakışan dersleri Google gibi yan yana bölen yerleşim
+function gcalLayout(dayLessons) {
+  const evs = dayLessons.map(l => {
+    const s = timeToMinutes(l.time || '00:00');
+    return { l, s, e: s + lessonDuration(l) };
+  }).sort((a,b) => a.s - b.s || a.e - b.e);
+  const out = [];
+  let cluster = [], clusterEnd = -1;
+  const flush = () => {
+    if (!cluster.length) return;
+    const colEnd = [];
+    cluster.forEach(ev => {
+      let c = colEnd.findIndex(t => t <= ev.s);
+      if (c === -1) { c = colEnd.length; colEnd.push(0); }
+      colEnd[c] = ev.e; ev.col = c;
+    });
+    cluster.forEach(ev => { ev.cols = colEnd.length; out.push(ev); });
+    cluster = [];
+  };
+  evs.forEach(ev => {
+    if (cluster.length && ev.s >= clusterEnd) { flush(); clusterEnd = -1; }
+    cluster.push(ev);
+    clusterEnd = Math.max(clusterEnd, ev.e);
+  });
+  flush();
+  return out;
+}
+function __gcalEventHtml(ev, dISO) {
+  const l = ev.l;
+  const st = l.status || 'planned';
+  const openMin = timeToMinutes(calendarHourSlots()[0]);
+  const top = (ev.s - openMin) * (GCAL_HOUR_PX/60);
+  const hRaw = (ev.e - ev.s) * (GCAL_HOUR_PX/60);
+  const hPx = Math.max(24, hRaw - 2);
+  const w = 100 / ev.cols;
+  const label = l.groupId ? groupName(l.groupId) : ((l.memberIds||[]).map(memberName).join(', ') || '(boş)');
+  const pm = l.packageMonth || String(l.date||'').slice(0,7);
+  const pmBadge = pm !== dISO.slice(0,7) ? ` <span class="gev-pm">📦${pkgMonthLabel(pm)}</span>` : '';
+  const star = isLastLessonOfPackage(l) ? ' <span class="gev-star" title="Paketin son dersi">⭐</span>' : '';
+  const cnt = `${(l.memberIds||[]).length}/${l.size || (l.memberIds||[]).length || 1}`;
+  const inst = l.instructorId ? instructorName(l.instructorId) : '';
+  const compact = hPx < 40;
+  const line2 = compact ? '' : `<div class="gev-l2">${escapeHtml(inst)}${inst?' · ':''}${cnt}${pmBadge}</div>`;
+  const title = `${l.time} ${label}${inst ? ' — ' + inst : ''} (${cnt})`;
+  return `<div class="gcal-ev gst-${st}" style="top:${top}px;height:${hPx}px;left:calc(${ev.col*w}% + 2px);width:calc(${w}% - 4px);" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${escapeHtml(title)}">
+    <div class="gev-l1"><span class="gev-time">${l.time}</span> ${escapeHtml(label)}${star}${compact ? ` <span class="gev-cnt">${cnt}</span>` : ''}</div>
+    ${line2}
+  </div>`;
+}
+function renderGcalRange(startDate, nDays) {
+  const cal = document.getElementById('calendar');
+  cal.className = 'calendar gcal-host' + (nDays === 1 ? ' gcal-one' : '');
+  const hours = calendarHourSlots();
+  const openMin = timeToMinutes(hours[0]);
+  const endMin = timeToMinutes(hours[hours.length-1]) + 60;
+  const bodyH = (endMin - openMin) * (GCAL_HOUR_PX/60);
+  const R = getReformers();
+  const todayIso = todayISO();
+  // === Başlık satırı ===
+  let head = '<div class="gcal-head"><div class="gcal-gutterhead"></div>';
+  for (let i = 0; i < nDays; i++) {
+    const d = addDays(startDate, i);
+    const dISO = isoDate(d);
+    const dow = d.getDay();
+    const closed = !state.settings.workDays.includes(dow);
+    const isToday = dISO === todayIso;
+    const cnt = state.lessons.filter(l => l.date === dISO && l.status !== 'cancelled' && l.status !== 'missed').length;
+    const clk = nDays > 1 ? ` onclick="calAnchor=parseISO('${dISO}');setCalView('day')" style="cursor:pointer;"` : '';
+    head += `<div class="gcal-dayhead${isToday?' today':''}${closed?' closed':''}"${clk}>
+      <span class="gdh-name">${nDays===1 ? DAYS_LONG[dow] : DAYS[dow]}</span>
+      <span class="gdh-num">${d.getDate()}</span>
+      <span class="gdh-cnt${cnt?'':' none'}">${cnt ? cnt + ' ders' : (closed ? 'kapalı' : 'boş')}</span>
+    </div>`;
+  }
+  head += '</div>';
+  // === Saat sütunu ===
+  let gutter = '';
+  hours.forEach((h, i) => { if (i > 0) gutter += `<div class="gcal-hlabel" style="top:${i*GCAL_HOUR_PX}px">${h}</div>`; });
+  // === Gün kolonları ===
+  let cols = '';
+  for (let i = 0; i < nDays; i++) {
+    const d = addDays(startDate, i);
+    const dISO = isoDate(d);
+    const dow = d.getDay();
+    const closed = !state.settings.workDays.includes(dow);
+    const isToday = dISO === todayIso;
+    let inner = '';
+    hours.forEach((h, hi) => {
+      inner += `<div class="gcal-hline" style="top:${hi*GCAL_HOUR_PX}px"></div>`;
+      if (closed) return;
+      const wS = timeToMinutes(h), wE = wS + 60;
+      const hLessons = state.lessons.filter(l => l.date === dISO && lessonHourKey(l.time) === h);
+      const avail = R - peakUsage(dISO, wS, wE, null);
+      const availClass = avail <= 0 ? 'full' : (avail < R ? 'some' : 'empty');
+      const click = hLessons.length === 0 ? `openLessonModal(null,'${dISO}','${h}')` : `openLessonPicker('${dISO}','${h}')`;
+      inner += `<div class="gcal-hcell" style="top:${hi*GCAL_HOUR_PX}px;height:${GCAL_HOUR_PX}px" onclick="${click}" title="${h} — ${avail} makine boş">
+        <span class="cal-avail ${availClass}">${avail}/${R}</span>
+      </div>`;
+    });
+    if (!closed) {
+      const dayLessons = state.lessons.filter(l => l.date === dISO && l.time);
+      inner += gcalLayout(dayLessons).map(ev => __gcalEventHtml(ev, dISO)).join('');
+    }
+    if (isToday && !closed) {
+      const top = __gcalNowTop(openMin, endMin);
+      inner += `<div class="gcal-now" data-open="${openMin}" data-end="${endMin}" style="${top===null?'display:none;':'top:'+top+'px;'}"><span class="gcal-now-dot"></span></div>`;
+    }
+    cols += `<div class="gcal-col${closed?' closed':''}${isToday?' today':''}" style="height:${bodyH}px">${inner}</div>`;
+  }
+  cal.innerHTML = `<div class="gcal">${head}<div class="gcal-body"><div class="gcal-gutter" style="height:${bodyH}px">${gutter}</div><div class="gcal-cols">${cols}</div></div></div>`;
+  if (!__gcalNowTimer) __gcalNowTimer = setInterval(__gcalTickNow, 60000);
+}
 function renderCalendarDay() {
   const d = new Date(calAnchor);
-  const dISO = isoDate(d);
-  const dow = d.getDay();
-  const closed = !state.settings.workDays.includes(dow);
-  document.getElementById('week-label').textContent = `${DAYS_LONG[dow]}, ${fmtDate(d)}`;
-  const cal = document.getElementById('calendar');
-  cal.className = 'calendar view-day';
-  const hours = calendarHourSlots();
-  let html = '<div class="cal-hdr"></div>';
-  html += `<div class="cal-hdr ${dISO===todayISO()?'today':''}">${DAYS_LONG[dow]}<br><small>${fmtShort(d)}</small></div>`;
-  for (const h of hours) {
-    html += `<div class="cal-time">${h}</div>`;
-    html += renderSlot(dISO, h, closed);
-  }
-  cal.innerHTML = html;
+  document.getElementById('week-label').textContent = `${DAYS_LONG[d.getDay()]}, ${fmtDate(d)}`;
+  renderGcalRange(d, 1);
 }
 function renderCalendarWeek() {
-  // Compute Monday of the week containing calAnchor
   const ws = (() => {
     const d = new Date(calAnchor);
     const day = d.getDay();
@@ -3332,32 +3541,9 @@ function renderCalendarWeek() {
     d.setHours(0,0,0,0);
     return d;
   })();
-  const we = addDays(ws,6);
+  const we = addDays(ws, 6);
   document.getElementById('week-label').textContent = `${fmtShort(ws)} – ${fmtShort(we)}`;
-  const cal = document.getElementById('calendar');
-  cal.className = 'calendar';
-  const hours = calendarHourSlots();
-  let html = '<div class="cal-hdr"></div>';
-  for (let i=0;i<7;i++){
-    const d = addDays(ws,i);
-    const isToday = isoDate(d)===todayISO();
-    const __dLessons = state.lessons.filter(l=>l.date===isoDate(d) && l.status!=='cancelled' && l.status!=='missed').sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-    const __dCnt = __dLessons.length;
-    // v20: mobil hafta kartinda gunun ders listesi (ilk 5) — PC'de CSS gizler
-    const __dListHtml = __dCnt ? `<span class="cal-hdr-list">${__dLessons.slice(0,5).map(l=>`<span class="chl"><b>${l.time}</b> ${escapeHtml((l.groupId?groupName(l.groupId):(l.memberIds||[]).map(memberName).join(', ')).slice(0,20))}</span>`).join('')}${__dCnt>5?`<span class="chl">+${__dCnt-5} ders daha…</span>`:''}</span>` : '';
-    html += `<div class="cal-hdr ${isToday?'today':''}" style="cursor:pointer;" onclick="calAnchor=parseISO('${isoDate(d)}');setCalView('day')">${DAYS[d.getDay()]}<br><small>${fmtShort(d)}</small>${__dCnt?`<span class="cal-hdr-cnt">${__dCnt} ders</span>`:'<span class="cal-hdr-cnt cal-hdr-cnt-none">boş</span>'}${__dListHtml}</div>`;
-  }
-  for (const h of hours) {
-    html += `<div class="cal-time">${h}</div>`;
-    for (let i=0;i<7;i++){
-      const d = addDays(ws,i);
-      const dISO = isoDate(d);
-      const dow = d.getDay();
-      const closed = !state.settings.workDays.includes(dow);
-      html += renderSlot(dISO, h, closed);
-    }
-  }
-  cal.innerHTML = html;
+  renderGcalRange(ws, 7);
 }
 function renderSlot(dISO, h, closed) {
   // v18: tam saat kutusu — 19:15 gibi ara saatli dersler de 19:00 kutusunda
@@ -3557,36 +3743,36 @@ function openLessonPicker(dISO, h) {
 function renderCalendarMonth() {
   const d = new Date(calAnchor);
   const y = d.getFullYear(), m = d.getMonth();
-  const monthName = d.toLocaleDateString('tr-TR', { month:'long', year:'numeric' });
-  document.getElementById('week-label').textContent = monthName;
+  document.getElementById('week-label').textContent = d.toLocaleDateString('tr-TR', { month:'long', year:'numeric' });
   const first = new Date(y, m, 1);
-  const firstDow = first.getDay()===0 ? 6 : first.getDay()-1; // Monday-first
+  const firstDow = first.getDay()===0 ? 6 : first.getDay()-1; // Pazartesi-ilk
   const daysInMonth = new Date(y, m+1, 0).getDate();
   const cal = document.getElementById('calendar');
-  cal.className = 'calendar view-month';
-  let html = '';
-  const dayLabels = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
-  dayLabels.forEach(l => html += `<div class="cal-hdr">${l}</div>`);
-  // empty cells before
-  for (let i=0;i<firstDow;i++) html += '<div class="mcell empty-cell"></div>';
-  for (let dn=1; dn<=daysInMonth; dn++) {
-    const dd = new Date(y,m,dn);
+  cal.className = 'calendar gmonth-host';
+  const todayIso = todayISO();
+  const dayLabels = ['PZT','SAL','ÇAR','PER','CUM','CMT','PAZ'];
+  let html2 = '<div class="gmonth"><div class="gm-dowrow">' + dayLabels.map(l=>`<div class="gm-dow">${l}</div>`).join('') + '</div><div class="gm-grid">';
+  const totalCells = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+  for (let c = 0; c < totalCells; c++) {
+    const dn = c - firstDow + 1;
+    const dd = new Date(y, m, dn); // taşan günler otomatik önceki/sonraki aya düşer
     const dISO = isoDate(dd);
-    const isToday = dISO===todayISO();
-    const dayLessons = state.lessons.filter(l=>l.date===dISO);
-    const nonCancel = dayLessons.filter(l=>l.status!=='cancelled').length;
-    html += `<div class="mcell ${isToday?'today':''}" onclick="calAnchor=parseISO('${dISO}');setCalView('day')">
-      <div class="mcell-num">${dn}</div>
-      ${nonCancel? `<div class="mcell-badge">${nonCancel} ders</div>`:''}
-      ${dayLessons.slice(0,3).map(l => {
-        const label = l.groupId ? groupName(l.groupId) : (l.memberIds.map(memberName)[0]||'');
-        const st = LESSON_STATUS[l.status||'planned'] || LESSON_STATUS.planned;
-        return `<div class="mcell-l" style="border-left:3px solid ${st.color}">${l.time} ${label}</div>`;
-      }).join('')}
-      ${dayLessons.length>3?`<div class="mcell-more">+${dayLessons.length-3} daha</div>`:''}
+    const inMonth = dn >= 1 && dn <= daysInMonth;
+    const isToday = dISO === todayIso;
+    const dayLessons = state.lessons.filter(l=>l.date===dISO).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+    const chips = dayLessons.slice(0,3).map(l => {
+      const label = l.groupId ? groupName(l.groupId) : ((l.memberIds||[]).map(memberName)[0]||'');
+      const st = l.status || 'planned';
+      return `<div class="gm-chip gst-${st}" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${l.time} ${escapeHtml(label)}"><span class="gmc-time">${l.time}</span> ${escapeHtml(label)}</div>`;
+    }).join('');
+    const more = dayLessons.length > 3 ? `<div class="gm-more">+${dayLessons.length-3} daha</div>` : '';
+    html2 += `<div class="gm-cell${inMonth?'':' out'}${isToday?' today':''}" onclick="calAnchor=parseISO('${dISO}');setCalView('day')">
+      <div class="gm-num"><span>${dd.getDate()}</span></div>
+      ${chips}${more}
     </div>`;
   }
-  cal.innerHTML = html;
+  html2 += '</div></div>';
+  cal.innerHTML = html2;
 }
 function renderCalendarYear() {
   const y = calAnchor.getFullYear();
@@ -4373,7 +4559,7 @@ function renderMembersCardsMobile(rows, monthISO) {
       </div>
       <div class="mc-actions" onclick="event.stopPropagation()">
         <button class="btn small" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')">+ ₺ Ödeme</button>
-        <button class="btn small secondary" onclick="openMemberModal('${r.memberId}')">✏️ Düzenle</button>
+        <button class="btn small secondary" onclick="openMemberModal('${r.memberId}')">Düzenle</button>
         <button class="btn small" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)">${paid>0?'✅':'⬜'} Tik</button>
         ${monthISO ? `<button class="btn small" style="flex:0 0 auto;background:#fff3e0;color:#e65100;border:1px solid #ffb74d;" onclick="removeMemberFromMonth('${r.memberId}','${monthISO}')" title="Sadece bu ayın listesinden çıkar — diğer aylar etkilenmez">🗓️✕</button>` : ''}
       </div>
@@ -4770,12 +4956,12 @@ function openMemberDetail(id) {
     ${(() => { const __n = memberNoteForMonth(m, thisMonth); return __n ? `<div class="note-block" style="background:#e3f2fd;border-left-color:var(--blue);color:#0d47a1;">📝 <b>${thisMonth}:</b> ${escapeHtml(__n)}</div>` : ''; })()}
     <div class="row" style="margin:12px 0;flex-wrap:wrap;gap:6px;">
       <button class="btn" onclick="openPaymentModal('${id}');" title="Ödeme penceresi üstte açılır — üye detayı arkada açık kalır">+ Paket/Ödeme</button>
-      <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">✏️ Düzenle</button>
-      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">📋 Toplu Ders Gir</button>` : ''}
-      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Paket erken bittiyse: bu üye için aynı ay içinde BAĞIMSIZ yeni paket kaydı">➕ 2. Paket Oluştur</button>` : ''}
+      <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">Düzenle</button>
+      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">Toplu Ders Gir</button>` : ''}
+      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Paket erken bittiyse: bu üye için aynı ay içinde BAĞIMSIZ yeni paket kaydı">+ 2. Paket</button>` : ''}
       ${m.archived
         ? `<button class="btn ok" onclick="reactivateMember('${id}');">↩️ Aktive Et</button>`
-        : `<button class="btn secondary" onclick="markMemberPackageExtended('${id}','${thisMonth}', true);" title="Bu ay ödeme alınmadan paket devam ediyor (0 ₺)">📌 Bu Ay Paket Uzadı</button>`
+        : `<button class="btn secondary" onclick="markMemberPackageExtended('${id}','${thisMonth}', true);" title="Bu ay ödeme alınmadan paket devam ediyor (0 ₺)">Bu Ay Paket Uzadı</button>`
       }
       <button class="btn danger" onclick="deleteMember('${id}')" style="margin-left:auto;">🗑 ${m.archived ? 'Kalıcı Sil' : 'Pasife Al'}</button>
     </div>
@@ -5087,7 +5273,7 @@ function renderInstructors() {
           <div style="font-weight:700;font-size:17px;color:var(--p2)">${escapeHtml(inst.name||'')}</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px;">📞 ${escapeHtml(inst.phone||'—')} · Varsayılan oran: <b style="color:var(--p2)">%${ratePref}</b>${inst.note?' · '+escapeHtml(inst.note):''}</div>
         </div>
-        <button class="btn small secondary" onclick="openInstructorModal('${inst.id}')">✏️ Düzenle</button>
+        <button class="btn small secondary" onclick="openInstructorModal('${inst.id}')">Düzenle</button>
       </div>
       <div class="grid-stats" style="margin:12px 0 4px;">
         <div class="stat blue"><div class="label">${monthISO?monthLabel+' Üye':'Toplam Üye'}</div><div class="value">${totalMembersMonth}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">${totalIndividualMonth} bireysel + ${totalGroupsMonth} grup</div></div>
@@ -5275,6 +5461,7 @@ function deleteInstructor() {
 
 // ========== LESSONS ==========
 function openLessonModal(id, date, time, groupId) {
+  __lessonMemberSearch = ''; // v29: arama her açılışta sıfırlanır
   const isEdit = !!id;
   let l;
   if (isEdit) {
@@ -5398,21 +5585,36 @@ function onLessonMemberToggle(cb) {
     }
   } catch(e) {}
 }
+let __lessonMemberSearch = '';
+function onLessonMemberSearch(inp) {
+  __lessonMemberSearch = (inp.value || '').trim();
+  renderLessonMembersCheckboxes();
+}
 function renderLessonMembersCheckboxes(preselect) {
   const mEl = document.getElementById('ml-members');
   const currentlyChecked = preselect || [...document.querySelectorAll('#ml-members input:checked')].map(x=>x.value);
-  // v18: Grup baglantili derste SADECE grup uyeleri listelenir; grupsuz derste pasifler gizlenir
+  // v18: Grup baglantili derste SADECE grup uyeleri listelenir
+  // v29: Grupsuz derste kalabalik liste YOK — secili uyeler + arama ile ekleme
   const __lgid = (document.getElementById('ml-group')||{}).value || '';
   const __lg = __lgid ? state.groups.find(g=>g.id===__lgid) : null;
   let sortedMembers = state.members.slice();
+  let searchBar = '';
   if (__lg) {
     const __gset = new Set(((__lg.memberIds||[]).filter(Boolean)).concat(currentlyChecked));
     sortedMembers = sortedMembers.filter(m => __gset.has(m.id));
   } else {
-    sortedMembers = sortedMembers.filter(m => !m.archived || currentlyChecked.includes(m.id));
+    const q = __lessonMemberSearch.toLocaleLowerCase('tr');
+    sortedMembers = sortedMembers.filter(m =>
+      currentlyChecked.includes(m.id) ||
+      (!m.archived && q.length >= 2 && m.name.toLocaleLowerCase('tr').includes(q))
+    );
+    searchBar = `<input type="text" id="ml-member-search" value="${escapeHtml(__lessonMemberSearch)}" oninput="onLessonMemberSearch(this)" placeholder="🔍 Üye ara ve ekle (en az 2 harf)..." style="margin-bottom:8px;" autocomplete="off">`;
   }
   sortedMembers.sort((a,b)=>a.name.localeCompare(b.name,'tr'));
-  mEl.innerHTML = sortedMembers.length ? sortedMembers.map(m => {
+  const emptyMsg = __lg
+    ? '<div class="empty">Grupta üye yok.</div>'
+    : '<div class="empty" style="padding:10px;font-size:12.5px;">Üye seçmek için yukarıya ismin ilk harflerini yaz.</div>';
+  mEl.innerHTML = searchBar + (sortedMembers.length ? sortedMembers.map(m => {
     const r = memberRemaining(m.id);
     const checked = currentlyChecked.includes(m.id);
     const paid = memberHasPayment(m.id);
@@ -5425,7 +5627,7 @@ function renderLessonMembersCheckboxes(preselect) {
       <input type="checkbox" value="${m.id}" ${checked?'checked':''} style="width:auto" onchange="onLessonMemberToggle(this)">
       <span>${m.name}</span> ${badge} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
     </label>`;
-  }).join('') : '<div class="empty">Önce üye ekleyin.</div>';
+  }).join('') : emptyMsg);
 }
 function saveLesson() {
   clearModalErrors('modal-lesson');
@@ -6488,8 +6690,8 @@ function openGroupDetail(id, monthISO) {
     <div class="row" style="margin:12px 0;flex-wrap:wrap;">
       <button class="btn" onclick="openGroupPaymentModal('${id}')">💳 Gruba Ödeme Al</button>
       <button class="btn" onclick="openLessonModalForGroup('${id}')">📅 Ders Ekle</button>
-      <button class="btn secondary" onclick="openGroupModal('${id}')" title="Grubu düzenle — grup detayı arka planda açık kalır">✏️ Düzenle</button>
-      <button class="btn secondary" onclick="createSecondPackage('group','${id}','${monthISO||''}')" title="Paket erken bittiyse: aynı üyelerle BAĞIMSIZ yeni paket kaydı (ayrı ödeme/ders; üye sayısı değişmez)">➕ 2. Paket Oluştur</button>
+      <button class="btn secondary" onclick="openGroupModal('${id}')" title="Grubu düzenle — grup detayı arka planda açık kalır">Düzenle</button>
+      <button class="btn secondary" onclick="createSecondPackage('group','${id}','${monthISO||''}')" title="Paket erken bittiyse: aynı üyelerle BAĞIMSIZ yeni paket kaydı (ayrı ödeme/ders; üye sayısı değişmez)">+ 2. Paket</button>
       ${monthISO ? `<button class="btn secondary" onclick="markGroupPackageExtended('${id}','${monthISO}', true)" title="Bu ay ödeme alınmadan paket devam ediyor (0 TL)">📌 Paket Uzadı (0 TL)</button>` : ''}
     </div>
     <h3>Üyeler <small style="font-weight:normal;color:var(--muted);font-size:12px;">— "Fiyat" sütununda her üyenin ücreti. Boşsa <b>➕ Fiyat</b> ile tanımla. Toplam, üyelerin tanımlı fiyatlarının toplamıdır.</small></h3>
@@ -6521,7 +6723,7 @@ function openGroupDetail(id, monthISO) {
             <td>${l.memberIds.length}/${l.size||g.size}</td>
             <td>${lessonStatusBadge(l.status||'planned')}</td>
             <td>
-              <button class="btn small secondary" onclick="openGroupLessonModal('${l.id}')">✏️ Düzenle</button>
+              <button class="btn small secondary" onclick="openGroupLessonModal('${l.id}')">Düzenle</button>
             </td>
           </tr>`;
         }).join('') + '</tbody></table></div>' : '<div class="empty">Ders kaydı yok.</div>'}
