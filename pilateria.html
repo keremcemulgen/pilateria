@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.14.04">
+<meta name="app-version" content="2026.07.14.05">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -8652,9 +8652,8 @@ async function pullFromCloud(silent) {
     renderSyncStatus();
     // Bulutta PIN varsa ve kilit açık değilse → kilitle
     lockIfNeeded();
-    // re-render current page
-    const active = document.querySelector('.tab.active')?.dataset.page || 'dashboard';
-    switchPage(active);
+    // v31: sayfayı YERİNDE tazele — scroll korunur, başa dönmez
+    __refreshUIInPlace();
     return true;
   } catch(e) {
     renderSyncStatus('Çekme hatası: ' + e.message, 'err');
@@ -8668,6 +8667,41 @@ async function pullFromCloud(silent) {
 // Çakışma (iki cihaz aynı anda yazarsa): son yazan kazanır; ezilen bulut hali
 // 'pilateria_conflict_backup'a yedeklenir (Ayarlar → Gelişmiş → geri yükle).
 const DIRTY_KEY = 'pilateria_dirty';
+// v31: SENKRON-UX — otomatik yenileme kullanıcıyı RAHATSIZ ETMEZ:
+// (a) sayfa başa dönmez (scroll korunur), (b) modal/yazma sırasında pull ertelenir,
+// (c) switchPage yerine aktif sayfa YERİNDE tazelenir (geçiş animasyonu/nav zıplaması yok).
+function __uiBusyForPull() {
+  try {
+    if (document.body.classList.contains('pl-modal-open')) return true;
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.type !== 'checkbox' && ae.type !== 'radio') return true;
+  } catch(e){}
+  return false;
+}
+function __refreshUIInPlace() {
+  const sy = window.scrollY;
+  const scrolled = [...document.querySelectorAll('.table-wrap, .gcal-body, #members-cards, .modal')].map(el => [el, el.scrollTop, el.scrollLeft]);
+  const active = (document.querySelector('.tab.active') || {}).dataset ? document.querySelector('.tab.active').dataset.page : 'dashboard';
+  const map = {
+    dashboard: () => renderDashboard(),
+    calendar:  () => renderCalendar(),
+    members:   () => renderMembers(),
+    groups:    () => renderGroups(),
+    payments:  () => renderPayments(),
+    reports:   () => renderReports(),
+    instructors: () => { renderInstructors(); if (typeof renderSalaries === 'function') renderSalaries(); },
+    archive:   () => renderArchive(),
+    settings:  () => renderSettings(),
+  };
+  try { (map[active] || (() => switchPage(active)))(); }
+  catch(e) { try { switchPage(active); } catch(e2){} }
+  try { if (typeof refreshGroupDetailIfOpen === 'function') refreshGroupDetailIfOpen(); } catch(e){}
+  try { if (typeof refreshMemberDetailIfOpen === 'function') refreshMemberDetailIfOpen(); } catch(e){}
+  requestAnimationFrame(() => {
+    try { window.scrollTo(0, sy); } catch(e){}
+    scrolled.forEach(([el, t, l]) => { try { el.scrollTop = t; el.scrollLeft = l; } catch(e){} });
+  });
+}
 const CONFLICT_BACKUP_KEY = 'pilateria_conflict_backup';
 let lastAutoPullTs = 0;
 const AUTO_PULL_MIN_GAP_MS = 10000;
@@ -8732,6 +8766,7 @@ async function autoPullIfNeeded(reason) {
   if (!syncConfigured()) return;
   if (isDirty()) { schedulePush(600); return; }
   if (isSyncing) return;
+  if (__uiBusyForPull()) return; // v31: kullanıcı yazıyor / modal açık — karışma, sonraki tetikte
   const now = Date.now();
   if (now - lastAutoPullTs < AUTO_PULL_MIN_GAP_MS) return;
   lastAutoPullTs = now;
@@ -8743,9 +8778,11 @@ async function autoPullIfNeeded(reason) {
     const cloudRev = Number(record._rev) || 0;
     const base = Number(syncCfg.baseRev) || 0;
     if (cloudRev <= base && base > 0) { setCloudDot('ok'); return; }
+    if (cloudRev === 0 && window.__legacyPulledOnce) { setCloudDot('ok'); return; } // v31: eski format tekrar döngüsü kesildi
     const changed = await pullFromCloud(true);
     if (!changed) return;
     if (cloudRev === 0) {
+      window.__legacyPulledOnce = true;
       // Eski (_rev'siz) bulut verisi: bir kez damgala ki her açılışta yeniden çekilmesin
       try { localStorage.setItem(DIRTY_KEY, '1'); } catch(e){}
       schedulePush(1000);
@@ -9090,7 +9127,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.14.04';
+const APP_VERSION = '2026.07.14.05';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
