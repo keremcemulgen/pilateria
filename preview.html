@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.14.06-onizleme">
+<meta name="app-version" content="2026.07.14.07-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -8642,7 +8642,10 @@ async function sbForgotPassword() {
   const email = (document.getElementById('sb-email').value || '').trim();
   if (!email) { sbAuthMsg('sb-login-msg', 'Önce e-posta adresini yaz, sonra tekrar bas.'); return; }
   const { error } = await sbClient.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-  sbAuthMsg('sb-login-msg', error ? ('Gönderilemedi: ' + error.message) : '✓ Şifre yenileme bağlantısı e-postana gönderildi.', !error);
+  if (!error) { sbAuthMsg('sb-login-msg', '✓ Şifre yenileme bağlantısı e-postana gönderildi — gelen kutunu (ve spam klasörünü) kontrol et.', true); return; }
+  const m = String(error.message || '');
+  if (/rate limit/i.test(m)) sbAuthMsg('sb-login-msg', 'E-posta gönderim limiti doldu (ücretsiz planda saatlik sınır var). ~1 saat sonra tekrar dene.');
+  else sbAuthMsg('sb-login-msg', 'Gönderilemedi: ' + m);
 }
 async function sbSetPassword() {
   const p1 = document.getElementById('sb-newpass').value || '';
@@ -8925,6 +8928,9 @@ async function sbLoadAll() {
     } catch(e) { console.error('[sb] select', t, e); }
   }
   const total = SB_TABLES.reduce((a, t) => a + Object.keys(all[t]).length, 0);
+  if (total === 0 && __sbRole === 'owner') {
+    await __sbFreshenFromJsonbin(); // GÜVENCE: eski sistemin bulutundaki (JSONBin) EN GÜNCEL hali çek — hangi cihazdan geçilirse geçilsin veri kaybolmaz
+  }
   if (total === 0 && __sbRole === 'owner' && (state.members || []).length) {
     // İlk kurulum: bulut boş, cihazda veri var → taşımayı öner
     const ok = await plConfirm('Bulut veritabanı boş. Bu cihazdaki TÜM veriler (üye, ders, ödeme...) buluta taşınsın mı?\n\nBu tek seferlik kurulum adımıdır.', 'Evet, taşı');
@@ -8946,6 +8952,30 @@ async function sbForceMigrate() {
   if (__sbRole !== 'owner') { alert('Bu işlem yalnız sahip hesabıyla yapılır.'); return; }
   if (!(await plConfirm('Bu cihazdaki yerel veri, bulut veritabanındaki TÜM kayıtların üzerine yazılacak.\n\nGeçiş gününde canlı veriyi taşımak için kullanılır. Devam edeyim mi?', 'Evet, üzerine yaz'))) return;
   await sbMigrateLocal();
+}
+// Geçiş öncesi: JSONBin'de bizden yeni veri varsa onu al (SUPABASE modunda JSONBin senkronu kapalı olduğundan tek seferlik bilinçli çekim)
+async function __sbFreshenFromJsonbin() {
+  try {
+    if (!syncCfg || !syncCfg.key || !syncCfg.bin) return;
+    const r = await fetch('https://api.jsonbin.io/v3/b/' + syncCfg.bin + '/latest', { headers: { 'X-Master-Key': syncCfg.key } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const rec = (j && j.record) || null;
+    if (!rec || (!rec.settings && !rec.members)) return;
+    const cloudTs = Date.parse(rec._updatedAt || 0) || 0;
+    const localN = (state.members || []).length;
+    // Bulut kaydı varsa ve yerel boşsa YA DA bulut daha yeni görünüyorsa: bulut halini esas al
+    if (!localN || cloudTs) {
+      window.__pilSuppressDirty = true;
+      state = { ...structuredClone(DEFAULT_STATE), ...rec };
+      delete state._updatedAt; delete state._rev;
+      applyV10MigrationToState(state);
+      sanitizeStateText(state);
+      save();
+      window.__pilSuppressDirty = false;
+      if (window.plToast) plToast('Eski sistemdeki en güncel veriler alındı — taşımaya hazır');
+    }
+  } catch(e) { console.error('[sb] freshen', e); }
 }
 async function sbMigrateLocal() {
   const rows = sbStateToRows();
@@ -9517,7 +9547,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.14.06-onizleme';
+const APP_VERSION = '2026.07.14.07-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
