@@ -7,12 +7,12 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.14.05-onizleme">
+<meta name="app-version" content="2026.07.14.06-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
       girişte+yüklemede metin temizliği katmanıdır.) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.jsonbin.io; worker-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.jsonbin.io https://nvbnmhaxumrfsxdzrzzj.supabase.co wss://nvbnmhaxumrfsxdzrzzj.supabase.co; worker-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
@@ -1160,11 +1160,35 @@
 .bd-row:nth-child(even), .batch-row:nth-child(even) { background:color-mix(in srgb, var(--muted) 5%, transparent); border-radius:8px; }
 .note-block { border-radius:10px; }
 </style>
+<script src="supabase-vendor.js"></script>
 </head>
 <body>
-<div id="preview-band" style="position:sticky;top:0;z-index:1000000;background:#6d28d9;color:#fff;padding:8px 12px;text-align:center;font-size:12.5px;font-weight:600;">🧪 ÖNİZLEME SÜRÜMÜ — serbestçe dene: değişiklikler buluta ve gerçek uygulamaya YAZILMAZ. Verini görmek için normal uygulamayı bu cihazda en az bir kez açmış olmalısın. <a href="pilateria.html" style="color:#fde68a;">Gerçek uygulama →</a></div>
+<div id="preview-band" style="position:sticky;top:0;z-index:1000000;background:#6d28d9;color:#fff;padding:8px 12px;text-align:center;font-size:12.5px;font-weight:600;">🧪 ÖNİZLEME — YENİ SİSTEM TESTİ (e-posta girişli, anlık senkron). Bu kopya yeni bulut veritabanına bağlanır; eski uygulama ve verisi etkilenmez. <a href="pilateria.html" style="color:#fde68a;">Gerçek uygulama →</a></div>
 
 <!-- PIN LOCK SCREEN -->
+<div id="sb-auth-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#f7e9dc,#e8f0e0);align-items:center;justify-content:center;flex-direction:column;">
+  <div id="sb-login-box" style="background:#fff;padding:30px 36px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);max-width:380px;width:92%;">
+    <img src="pilateria-logo-full.png" alt="Pilateria" style="width:220px;max-width:80%;margin:0 auto 10px;display:block;">
+    <div style="color:#666;font-size:13px;margin-bottom:16px;text-align:center;">Devam etmek için giriş yap</div>
+    <label style="font-size:12px;font-weight:600;color:#888;">E-posta</label>
+    <input id="sb-email" type="email" autocomplete="username" style="width:100%;margin:4px 0 10px;" onkeydown="if(event.key==='Enter')document.getElementById('sb-pass').focus()">
+    <label style="font-size:12px;font-weight:600;color:#888;">Şifre</label>
+    <input id="sb-pass" type="password" autocomplete="current-password" style="width:100%;margin:4px 0 4px;" onkeydown="if(event.key==='Enter')sbLogin()">
+    <div id="sb-login-msg" style="min-height:18px;margin:8px 0 4px;color:#c62828;font-size:13px;font-weight:500;"></div>
+    <button class="btn" onclick="sbLogin()" style="width:100%;padding:12px;font-size:16px;">Giriş Yap</button>
+    <button class="btn secondary" onclick="sbForgotPassword()" style="width:100%;padding:9px;font-size:13px;margin-top:8px;">Şifremi unuttum</button>
+  </div>
+  <div id="sb-setpass-box" style="display:none;background:#fff;padding:30px 36px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);max-width:380px;width:92%;">
+    <img src="pilateria-logo-full.png" alt="Pilateria" style="width:220px;max-width:80%;margin:0 auto 10px;display:block;">
+    <div style="color:#666;font-size:13px;margin-bottom:16px;text-align:center;">Hesabın için yeni bir şifre belirle</div>
+    <label style="font-size:12px;font-weight:600;color:#888;">Yeni şifre (en az 8 karakter)</label>
+    <input id="sb-newpass" type="password" autocomplete="new-password" style="width:100%;margin:4px 0 10px;">
+    <label style="font-size:12px;font-weight:600;color:#888;">Yeni şifre (tekrar)</label>
+    <input id="sb-newpass2" type="password" autocomplete="new-password" style="width:100%;margin:4px 0 4px;" onkeydown="if(event.key==='Enter')sbSetPassword()">
+    <div id="sb-setpass-msg" style="min-height:18px;margin:8px 0 4px;color:#c62828;font-size:13px;font-weight:500;"></div>
+    <button class="btn" onclick="sbSetPassword()" style="width:100%;padding:12px;font-size:16px;">Şifreyi Kaydet ve Gir</button>
+  </div>
+</div>
 <div id="pin-lock-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#f7e9dc,#e8f0e0);align-items:center;justify-content:center;flex-direction:column;">
   <div style="background:#fff;padding:30px 40px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);max-width:360px;width:90%;text-align:center;">
     <img src="pilateria-logo-full.png" alt="Pilateria" style="width:220px;max-width:80%;margin:0 auto 12px;display:block;">
@@ -1585,7 +1609,15 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sb-session-card" style="display:none;">
+    <h2>👤 Oturum</h2>
+    <div id="sb-session-info" style="font-size:13.5px;margin-bottom:10px;color:var(--muted);"></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Giriş e-posta + şifre iledir; PIN kullanılmaz. Personel hesapları para bilgilerini göremez (sunucu kuralı).</div>
+    <button class="btn secondary" onclick="sbSignOut()">Oturumu Kapat</button>
+    <button class="btn small secondary" id="sb-force-migrate" style="margin-left:8px;" onclick="sbForceMigrate()" title="Bu cihazdaki yerel veriyi bulut veritabanının ÜZERİNE yazar (tek seferlik geçiş aracı)">Yerel Veriyi Buluta Taşı</button>
+  </div>
+
+  <div class="card" id="pin-card">
     <h2>🔒 PIN Koruma</h2>
     <div id="pin-status" style="padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:13px;font-weight:500;background:#fff3e0;color:#e65100;">
       PIN ayarlanmamış. Uygulamayı her açtığında doğrudan girilir.
@@ -2179,6 +2211,7 @@ function save() {
     sanitizeStateText(state); // v21 GÜVENLİK: her kalici yazimdan once metinleri temizle
     localStorage.setItem('pilateria_preview', JSON.stringify(state));
     markDirtyAndSchedulePush(); // v27 OTOMATİK SENKRON
+    if (SUPABASE_MODE) sbSchedulePush(); // v33: Supabase anlık senkron
   } catch(e) {
     // BUG FIX (v9): QuotaExceededError ve diğer save hatalarına net uyarı
     console.error('[save] localStorage error:', e);
@@ -8541,6 +8574,109 @@ async function resetAllData() {
   location.reload();
 }
 
+// ===== FAZ 2: SUPABASE (v32 iskelet) =====
+// SUPABASE_MODE=false iken uygulama ESKİSİ GİBİ JSONBin ile çalışır (canlı güvende).
+// true olduğunda: e-posta girişi + tablo senkronu + realtime (kod: auth/veri katmanı adımlarında).
+const SUPABASE_MODE = true;
+const SUPABASE_URL = 'https://nvbnmhaxumrfsxdzrzzj.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_OdVQd9vKYQF1HZLZT_Ewkg_L-6qqVHL'; // publishable — tarayıcıda güvenli (RLS korur)
+let sbClient = null;
+function sbInit() {
+  if (!SUPABASE_MODE || sbClient) return sbClient;
+  try {
+    if (typeof supabase === 'undefined' || !supabase.createClient) { console.error('[sb] vendor yüklü değil'); return null; }
+    sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+  } catch(e) { console.error('[sb] init hatası', e); }
+  return sbClient;
+}
+
+
+// ===== SUPABASE AUTH (v32) =====
+let __sbSession = null;
+let __sbRole = null;
+let __sbUserEmail = '';
+function sbShowAuth(mode) {
+  const ov = document.getElementById('sb-auth-overlay');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  document.getElementById('sb-login-box').style.display = (mode === 'login') ? 'block' : 'none';
+  document.getElementById('sb-setpass-box').style.display = (mode === 'setpass') ? 'block' : 'none';
+  setTimeout(() => { const f = document.getElementById(mode === 'login' ? 'sb-email' : 'sb-newpass'); if (f) f.focus(); }, 80);
+}
+function sbHideAuth() { const ov = document.getElementById('sb-auth-overlay'); if (ov) ov.style.display = 'none'; }
+function sbAuthMsg(id, m, ok) { const el = document.getElementById(id); if (el) { el.textContent = m || ''; el.style.color = ok ? '#2e7d32' : '#c62828'; } }
+function sbTrError(error) {
+  const m = String((error && error.message) || '');
+  if (/invalid login credentials/i.test(m)) return 'E-posta veya şifre hatalı.';
+  if (/rate limit/i.test(m)) return 'Çok fazla deneme — biraz bekleyip tekrar dene.';
+  if (/email not confirmed/i.test(m)) return 'E-posta doğrulanmamış — davet mailindeki bağlantıyı kullan.';
+  return 'Giriş başarısız: ' + m;
+}
+async function sbAuthGate() {
+  const c = sbInit();
+  if (!c) { console.error('[sb] istemci yok'); return; }
+  c.auth.onAuthStateChange((event, session) => {
+    __sbSession = session || null;
+    if (event === 'PASSWORD_RECOVERY') { sbShowAuth('setpass'); return; }
+    if (event === 'SIGNED_OUT') { __sbRole = null; sbShowAuth('login'); }
+  });
+  const { data } = await c.auth.getSession();
+  __sbSession = (data && data.session) || null;
+  const h = String(location.hash || '');
+  if (__sbSession && /type=invite|type=recovery|type=signup/.test(h)) { sbShowAuth('setpass'); return; }
+  if (!__sbSession) { sbShowAuth('login'); return; }
+  await sbAfterLogin();
+}
+async function sbLogin() {
+  const email = (document.getElementById('sb-email').value || '').trim();
+  const pass = document.getElementById('sb-pass').value || '';
+  if (!email || !pass) { sbAuthMsg('sb-login-msg', 'E-posta ve şifreni gir.'); return; }
+  sbAuthMsg('sb-login-msg', 'Giriş yapılıyor...', true);
+  const { error } = await sbClient.auth.signInWithPassword({ email: email, password: pass });
+  if (error) { sbAuthMsg('sb-login-msg', sbTrError(error)); return; }
+  const { data } = await sbClient.auth.getSession();
+  __sbSession = (data && data.session) || null;
+  await sbAfterLogin();
+}
+async function sbForgotPassword() {
+  const email = (document.getElementById('sb-email').value || '').trim();
+  if (!email) { sbAuthMsg('sb-login-msg', 'Önce e-posta adresini yaz, sonra tekrar bas.'); return; }
+  const { error } = await sbClient.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  sbAuthMsg('sb-login-msg', error ? ('Gönderilemedi: ' + error.message) : '✓ Şifre yenileme bağlantısı e-postana gönderildi.', !error);
+}
+async function sbSetPassword() {
+  const p1 = document.getElementById('sb-newpass').value || '';
+  const p2 = document.getElementById('sb-newpass2').value || '';
+  if (p1.length < 8) { sbAuthMsg('sb-setpass-msg', 'Şifre en az 8 karakter olmalı.'); return; }
+  if (p1 !== p2) { sbAuthMsg('sb-setpass-msg', 'Şifreler aynı değil.'); return; }
+  sbAuthMsg('sb-setpass-msg', 'Kaydediliyor...', true);
+  const { error } = await sbClient.auth.updateUser({ password: p1 });
+  if (error) { sbAuthMsg('sb-setpass-msg', 'Olmadı: ' + error.message); return; }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+  if (window.plToast) plToast('✓ Şifren kaydedildi');
+  await sbAfterLogin();
+}
+async function sbSignOut() {
+  if (!(await plConfirm('Oturumu kapatmak istiyor musun?', 'Çıkış Yap'))) return;
+  try { await sbClient.auth.signOut(); } catch(e){}
+  location.reload();
+}
+async function sbAfterLogin() {
+  sbHideAuth();
+  try {
+    const uid = __sbSession && __sbSession.user && __sbSession.user.id;
+    __sbUserEmail = (__sbSession && __sbSession.user && __sbSession.user.email) || '';
+    const r = await sbClient.from('profiles').select('role,name').eq('id', uid).single();
+    __sbRole = (r && r.data && r.data.role) || 'staff';
+  } catch(e) { __sbRole = 'staff'; }
+  const el = document.getElementById('sb-session-info');
+  if (el) el.textContent = __sbUserEmail + ' — ' + (__sbRole === 'owner' ? 'Sahip (tam yetki)' : 'Personel (para bilgileri kapalı)');
+  const sc = document.getElementById('sb-session-card'); if (sc) sc.style.display = '';
+  const pc = document.getElementById('pin-card'); if (pc) pc.style.display = 'none';
+  if (typeof sbLoadAll === 'function') { try { await sbLoadAll(); } catch(e) { console.error('[sb] veri yükleme', e); } }
+  if (typeof sbApplyRoleUI === 'function') { try { sbApplyRoleUI(); } catch(e){} }
+}
+
 const SYNC_CFG_KEY = 'pilateria_sync';
 function loadSyncCfg() {
   try { return JSON.parse(localStorage.getItem(SYNC_CFG_KEY)) || { key:'', bin:'', enabled:false, lastSync:null }; }
@@ -8673,6 +8809,248 @@ async function pullFromCloud(silent) {
   } finally { isSyncing = false; }
 }
 
+
+// ===== SUPABASE VERİ KATMANI (v33) =====
+// Bölme kuralı: PARA alanları finance tablolarına gider (RLS: yalnız owner görür).
+function sbSplitMember(m) {
+  const base = JSON.parse(JSON.stringify(m || {}));
+  const fin = { totalPrice: base.totalPrice, packages: base.packages || [], monthly: {} };
+  delete base.totalPrice; delete base.packages;
+  base.monthly = base.monthly || {};
+  for (const ay in base.monthly) {
+    const mm = base.monthly[ay] || {};
+    const fm = {};
+    if ('totalPrice' in mm) { fm.totalPrice = mm.totalPrice; delete mm.totalPrice; }
+    if ('extendedNote' in mm) { fm.extendedNote = mm.extendedNote; delete mm.extendedNote; }
+    if (Object.keys(fm).length) fin.monthly[ay] = fm;
+  }
+  return { base: base, fin: fin };
+}
+function sbMergeMember(base, fin) {
+  const m = JSON.parse(JSON.stringify(base || {}));
+  if (fin) {
+    if (fin.totalPrice !== undefined) m.totalPrice = fin.totalPrice;
+    m.packages = fin.packages || [];
+    m.monthly = m.monthly || {};
+    for (const ay in (fin.monthly || {})) m.monthly[ay] = Object.assign({}, m.monthly[ay] || {}, fin.monthly[ay]);
+  } else { m.packages = m.packages || []; }
+  return m;
+}
+function sbSplitGroup(g) {
+  const base = JSON.parse(JSON.stringify(g || {}));
+  const fin = { customTotalPrice: base.customTotalPrice, packages: base.packages || [] };
+  delete base.customTotalPrice; delete base.packages;
+  return { base: base, fin: fin };
+}
+function sbMergeGroup(base, fin) {
+  const g = JSON.parse(JSON.stringify(base || {}));
+  if (fin) {
+    if (fin.customTotalPrice !== undefined) g.customTotalPrice = fin.customTotalPrice;
+    g.packages = fin.packages || [];
+  } else { g.packages = g.packages || []; }
+  return g;
+}
+function sbSplitInstructor(i) {
+  const base = JSON.parse(JSON.stringify(i || {}));
+  const fin = {};
+  if ('rate' in base) { fin.rate = base.rate; delete base.rate; }
+  if ('shareRate' in base) { fin.shareRate = base.shareRate; delete base.shareRate; }
+  return { base: base, fin: fin };
+}
+function sbMergeInstructor(base, fin) {
+  const i = JSON.parse(JSON.stringify(base || {}));
+  if (fin) { if (fin.rate !== undefined) i.rate = fin.rate; if (fin.shareRate !== undefined) i.shareRate = fin.shareRate; }
+  return i;
+}
+
+let __sbShadow = {};   // tablo → { id → JSON.stringify(data) }  (diff + echo-önleme)
+let __sbPushTimer = null;
+let __sbApplying = false; // realtime uygularken save-döngüsünü önle
+const SB_TABLES = ['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
+
+// state → tablo satırları
+function sbStateToRows() {
+  const rows = {}; SB_TABLES.forEach(t => rows[t] = {});
+  (state.members || []).forEach(m => { const s = sbSplitMember(m); rows.members[m.id] = s.base; rows.member_finance[m.id] = s.fin; });
+  (state.groups || []).forEach(g => { const s = sbSplitGroup(g); rows.groups[g.id] = s.base; rows.group_finance[g.id] = s.fin; });
+  (state.lessons || []).forEach(l => { rows.lessons[l.id] = l; });
+  (state.instructors || []).forEach(i => { const s = sbSplitInstructor(i); rows.instructors[i.id] = s.base; rows.instructor_finance[i.id] = s.fin; });
+  (state.payments || []).forEach(pm => { rows.payments[pm.id] = pm; });
+  (state.instructorPayouts || []).forEach((po, ix) => { const id = po.id || ('po-' + ix + '-' + (po.month || '')); rows.instructor_payouts[id] = po; });
+  (state.packageTypes || []).forEach(pt => { rows.package_types[pt.id] = pt; });
+  (state.campaigns || []).forEach(c => { rows.campaigns[c.id] = c; });
+  (state.waTemplates || []).forEach((w, ix) => { const id = w.id || ('wt-' + ix); rows.wa_templates[id] = w; });
+  const st = JSON.parse(JSON.stringify(state.settings || {}));
+  st._pinHash = state._pinHash; st.monthInit = state.monthInit || {};
+  rows.settings['singleton'] = st;
+  return rows;
+}
+// tablo satırları → state
+function sbRowsToState(all) {
+  const by = t => all[t] || {};
+  const fresh = structuredClone(DEFAULT_STATE);
+  fresh.members = Object.keys(by('members')).map(id => sbMergeMember(by('members')[id], by('member_finance')[id]));
+  fresh.groups = Object.keys(by('groups')).map(id => sbMergeGroup(by('groups')[id], by('group_finance')[id]));
+  fresh.lessons = Object.values(by('lessons'));
+  fresh.instructors = Object.keys(by('instructors')).map(id => sbMergeInstructor(by('instructors')[id], by('instructor_finance')[id]));
+  fresh.payments = Object.values(by('payments'));
+  fresh.instructorPayouts = Object.values(by('instructor_payouts'));
+  fresh.packageTypes = Object.values(by('package_types'));
+  fresh.campaigns = Object.values(by('campaigns'));
+  fresh.waTemplates = Object.values(by('wa_templates'));
+  const st = by('settings')['singleton'];
+  if (st) {
+    const s2 = JSON.parse(JSON.stringify(st));
+    if (s2._pinHash) fresh._pinHash = s2._pinHash;
+    fresh.monthInit = s2.monthInit || {};
+    delete s2._pinHash; delete s2.monthInit;
+    fresh.settings = Object.assign({}, fresh.settings, s2);
+  }
+  return fresh;
+}
+function sbSnapshotShadow(rows) {
+  __sbShadow = {};
+  SB_TABLES.forEach(t => { __sbShadow[t] = {}; for (const id in rows[t]) __sbShadow[t][id] = JSON.stringify(rows[t][id]); });
+}
+
+async function sbLoadAll() {
+  if (!sbClient) return;
+  setCloudDot && setCloudDot('syncing');
+  const all = {};
+  for (const t of SB_TABLES) {
+    all[t] = {};
+    try {
+      const r = await sbClient.from(t).select('id,data');
+      (r.data || []).forEach(row => { all[t][row.id] = row.data; });
+    } catch(e) { console.error('[sb] select', t, e); }
+  }
+  const total = SB_TABLES.reduce((a, t) => a + Object.keys(all[t]).length, 0);
+  if (total === 0 && __sbRole === 'owner' && (state.members || []).length) {
+    // İlk kurulum: bulut boş, cihazda veri var → taşımayı öner
+    const ok = await plConfirm('Bulut veritabanı boş. Bu cihazdaki TÜM veriler (üye, ders, ödeme...) buluta taşınsın mı?\n\nBu tek seferlik kurulum adımıdır.', 'Evet, taşı');
+    if (ok) { await sbMigrateLocal(); return; }
+  }
+  window.__pilSuppressDirty = true;
+  state = sbRowsToState(all);
+  applyV10MigrationToState(state);
+  sanitizeStateText(state);
+  save();
+  window.__pilSuppressDirty = false;
+  sbSnapshotShadow(sbStateToRows());
+  __refreshUIInPlace();
+  sbSubscribeAll();
+  setCloudDot && setCloudDot('ok');
+}
+
+async function sbForceMigrate() {
+  if (__sbRole !== 'owner') { alert('Bu işlem yalnız sahip hesabıyla yapılır.'); return; }
+  if (!(await plConfirm('Bu cihazdaki yerel veri, bulut veritabanındaki TÜM kayıtların üzerine yazılacak.\n\nGeçiş gününde canlı veriyi taşımak için kullanılır. Devam edeyim mi?', 'Evet, üzerine yaz'))) return;
+  await sbMigrateLocal();
+}
+async function sbMigrateLocal() {
+  const rows = sbStateToRows();
+  let n = 0;
+  for (const t of SB_TABLES) {
+    const arr = Object.keys(rows[t]).map(id => ({ id: id, data: rows[t][id] }));
+    if (!arr.length) continue;
+    for (let i = 0; i < arr.length; i += 100) {
+      const part = arr.slice(i, i + 100);
+      const r = await sbClient.from(t).upsert(part);
+      if (r.error) { alert('Taşıma hatası (' + t + '): ' + r.error.message); return; }
+      n += part.length;
+    }
+  }
+  sbSnapshotShadow(rows);
+  if (window.plToast) plToast('✓ ' + n + ' kayıt buluta taşındı');
+  sbSubscribeAll();
+  setCloudDot && setCloudDot('ok');
+}
+
+function sbSchedulePush() {
+  if (!SUPABASE_MODE || !sbClient || __sbApplying) return;
+  clearTimeout(__sbPushTimer);
+  setCloudDot && setCloudDot('pending');
+  __sbPushTimer = setTimeout(sbDiffPush, 800);
+}
+async function sbDiffPush() {
+  if (!sbClient) return;
+  if (navigator.onLine === false) { setCloudDot && setCloudDot('offline'); return; }
+  setCloudDot && setCloudDot('syncing');
+  const rows = sbStateToRows();
+  let okAll = true;
+  for (const t of SB_TABLES) {
+    const ups = [], dels = [];
+    for (const id in rows[t]) {
+      const j = JSON.stringify(rows[t][id]);
+      if (__sbShadow[t] && __sbShadow[t][id] === j) continue;
+      ups.push({ id: id, data: rows[t][id] });
+    }
+    for (const id in (__sbShadow[t] || {})) if (!(id in rows[t])) dels.push(id);
+    try {
+      if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; console.error('[sb] upsert', t, r.error.message); continue; } }
+      if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; console.error('[sb] delete', t, r2.error.message); continue; } }
+      ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = JSON.stringify(u.data); });
+      dels.forEach(id => { delete __sbShadow[t][id]; });
+    } catch(e) { okAll = false; console.error('[sb] push', t, e); }
+  }
+  if (okAll) { try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
+  else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbDiffPush, 15000); }
+  setCloudDot && setCloudDot(okAll ? 'ok' : 'offline');
+}
+
+let __sbChannel = null, __sbRtTimer = null;
+function sbSubscribeAll() {
+  if (!sbClient || __sbChannel) return;
+  try {
+    __sbChannel = sbClient.channel('pilateria-rt');
+    __sbChannel.on('postgres_changes', { event: '*', schema: 'public' }, payload => {
+      try {
+        const t = payload.table;
+        if (SB_TABLES.indexOf(t) === -1) return;
+        const row = payload.new && payload.new.id ? payload.new : null;
+        const oldId = payload.old && payload.old.id;
+        __sbShadow[t] = __sbShadow[t] || {};
+        if (payload.eventType === 'DELETE') {
+          if (oldId) delete __sbShadow[t][oldId];
+        } else if (row) {
+          const j = JSON.stringify(row.data);
+          if (__sbShadow[t][row.id] === j) return; // kendi yazımımız — yansıma
+          __sbShadow[t][row.id] = j;
+        }
+        // state'i topluca yeniden kur (basit ve güvenli): shadow'dan
+        clearTimeout(__sbRtTimer);
+        __sbRtTimer = setTimeout(() => {
+          const all = {};
+          SB_TABLES.forEach(tt => { all[tt] = {}; for (const id in (__sbShadow[tt] || {})) all[tt][id] = JSON.parse(__sbShadow[tt][id]); });
+          __sbApplying = true;
+          window.__pilSuppressDirty = true;
+          state = sbRowsToState(all);
+          applyV10MigrationToState(state);
+          sanitizeStateText(state);
+          save();
+          window.__pilSuppressDirty = false;
+          __sbApplying = false;
+          if (!__uiBusyForPull()) __refreshUIInPlace();
+          if (window.plToast) plToast('☁️ Güncellendi');
+        }, 250);
+      } catch(e) { console.error('[sb] rt', e); }
+    });
+    __sbChannel.subscribe();
+  } catch(e) { console.error('[sb] subscribe', e); }
+}
+
+// Personel görünümü: para UI ögeleri gizli (gerçek koruma RLS'te)
+function sbApplyRoleUI() {
+  if (!SUPABASE_MODE || __sbRole !== 'staff') return;
+  const hide = sel => document.querySelectorAll(sel).forEach(el => { el.style.display = 'none'; });
+  hide('[data-page="payments"], [data-bnav="payments"], [data-page="reports"]');
+  const more = document.getElementById('more-sheet-bg');
+  if (more) more.querySelectorAll('button').forEach(b => { if (/Rapor|Maaş/i.test(b.textContent || '')) b.style.display = 'none'; });
+  try { if (localStorage.getItem('pilateria_mask_amounts') !== '1') { localStorage.setItem('pilateria_mask_amounts', '1'); } } catch(e){}
+  document.querySelectorAll('.mask-amounts-btn').forEach(b => { b.style.display = 'none'; });
+  if (typeof renderDashboard === 'function') try { renderDashboard(); } catch(e){}
+}
+
 // ===== OTOMATİK SENKRON (v27 / 2026.07.14.03) =====
 // save() → dirty işareti + debounce'lu otomatik push (2.5 sn).
 // Açılış / öne gelme / online → dirty değilse otomatik pull (bulut daha yeniyse).
@@ -8718,7 +9096,7 @@ const CONFLICT_BACKUP_KEY = 'pilateria_preview_conflict';
 let lastAutoPullTs = 0;
 const AUTO_PULL_MIN_GAP_MS = 10000;
 
-function syncConfigured() { return false; /* ÖNİZLEME: bulut kapalı */ }
+function syncConfigured() { return false; /* ÖNİZLEME: JSONBin kapalı (Supabase moduna geçildi) */ }
 function isDirty() { try { return localStorage.getItem(DIRTY_KEY) === '1'; } catch(e){ return false; } }
 
 function markDirtyAndSchedulePush() {
@@ -9139,7 +9517,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.14.05-onizleme';
+const APP_VERSION = '2026.07.14.06-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
@@ -9203,8 +9581,8 @@ function init() {
     }
   } catch(e){}
 
-  // PIN ayarlanmışsa önce kilit ekranını göster
-  lockIfNeeded();
+  // Giriş: Supabase modunda e-posta+şifre; değilse eski PIN akışı
+  if (SUPABASE_MODE) { sbAuthGate(); } else { lockIfNeeded(); }
 
   // defaults for first run: add 4 instructors if none
   if (!state.instructors.length) {
