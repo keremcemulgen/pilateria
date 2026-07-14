@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.14.03-onizleme">
+<meta name="app-version" content="2026.07.14.04-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1102,8 +1102,10 @@
 .gcal-ev .gev-cnt { float:right; font-size:10px; opacity:.85; }
 .gcal-ev .gev-pm { font-size:9.5px; }
 .gst-planned   { background:var(--acc); color:#fff; }
-.gst-completed { background:color-mix(in srgb, var(--ok) 22%, var(--card)); color:var(--text); border-left:3px solid var(--ok); }
-.gst-missed    { background:color-mix(in srgb, var(--bad) 18%, var(--card)); color:var(--text); border-left:3px solid var(--bad); }
+.gst-completed { background:#dcebd8; color:#1c2b18; border-left:3px solid var(--ok); }
+.gst-completed { background:color-mix(in srgb, var(--ok) 22%, var(--card)); color:var(--text); }
+.gst-missed { background:#f6ddd8; color:#3a1710; border-left:3px solid var(--bad); }
+.gst-missed { background:color-mix(in srgb, var(--bad) 18%, var(--card)); color:var(--text); }
 .gst-cancelled { background:transparent; color:var(--muted); border:1px dashed var(--border); text-decoration:line-through; box-shadow:none; }
 .gcal-now { position:absolute; left:0; right:0; height:0; border-top:2px solid #ea4335; z-index:4; pointer-events:none; }
 .gcal-now-dot { position:absolute; left:-5px; top:-6px; width:10px; height:10px; border-radius:50%; background:#ea4335; }
@@ -1572,7 +1574,8 @@
         <button class="btn small" onclick="pullFromCloud()">⬇️ Buluttan Çek</button>
         <button class="btn small ok" onclick="pushToCloud()">⬆️ Buluta Yolla</button>
         <button class="btn small" onclick="syncNow()">🔄 Şimdi Senkronize Et</button>
-        <button class="btn small secondary" onclick="restoreConflictBackup()" title="Çakışmada yedeklenen diğer cihaz halini geri yükle">🧯 Çakışma Yedeğini Geri Yükle</button>
+        <button class="btn small secondary" onclick="restoreConflictBackup()" title="Çakışmada yedeklenen diğer cihaz halini geri yükle">Çakışma Yedeğini Geri Yükle</button>
+        <button class="btn small secondary" onclick="restorePrePullBackup()" title="Buluttan çekme işlemi cihazdaki veriyi ezdiyse, çekmeden önceki yerel hali geri getirir">Çekme Öncesine Dön</button>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:6px;">Bu butonlara normalde gerek yok — senkron otomatiktir. Çakışma yedeği: iki cihaz aynı anda değişiklik yaptıysa, ezilen tarafın hali buraya kaydedilir.</div>
     </details>
@@ -8633,6 +8636,11 @@ async function pullFromCloud(silent) {
       const ts = record._updatedAt ? ' (Bulut tarihi: '+new Date(record._updatedAt).toLocaleString('tr-TR')+')' : '';
       if (!confirm('Buluttaki veri şu anki cihaz verisinin üstüne yazılacak.'+ts+' Devam?')) return false;
     }
+    // v30 GÜVENLİK: buluttaki hali yazmadan önce CİHAZDAKİ hali yedekle (tek slot)
+    try {
+      const __cur = localStorage.getItem('pilateria_preview');
+      if (__cur) localStorage.setItem('pilateria_pre_pull_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur }));
+    } catch(e){}
     state = { ...structuredClone(DEFAULT_STATE), ...record };
     delete state._updatedAt;
     syncCfg.baseRev = Number(record._rev) || 0;
@@ -8771,6 +8779,20 @@ function setupAutoPullListeners() {
   setCloudDot(isDirty() ? 'pending' : 'ok');
 }
 
+async function restorePrePullBackup() {
+  let raw = null;
+  try { raw = localStorage.getItem('pilateria_pre_pull_backup'); } catch(e){}
+  if (!raw) { alert('Kayıtlı "çekme öncesi" yedeği yok.'); return; }
+  try {
+    const b = JSON.parse(raw);
+    const when = b.at ? new Date(b.at).toLocaleString('tr-TR') : '?';
+    if (!(await plConfirm(`Buluttan çekmeden ÖNCE bu cihazda duran veri (${when}) geri yüklenecek ve buluta bu hali yazılacak.\n\nDevam edeyim mi?`, 'Geri Yükle'))) return;
+    localStorage.setItem('pilateria_preview', b.state);
+    localStorage.setItem(DIRTY_KEY, '1'); // geri yüklenen hal buluta da gitsin
+    if (window.plToast) plToast('✓ Çekme öncesi veri geri yüklendi — yenileniyor');
+    setTimeout(() => location.reload(), 900);
+  } catch(e) { alert('Yedek okunamadı: ' + e.message); }
+}
 function restoreConflictBackup() {
   let raw = null;
   try { raw = localStorage.getItem(CONFLICT_BACKUP_KEY); } catch(e){}
@@ -9080,7 +9102,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.14.03-onizleme';
+const APP_VERSION = '2026.07.14.04-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
