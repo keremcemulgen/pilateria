@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.35">
+<meta name="app-version" content="2026.07.15.37">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1056,6 +1056,21 @@
     .table-wrap { -webkit-overflow-scrolling:touch; }
     .toolbar input, .toolbar select { min-width:0; flex:1; }
   }
+  /* v.36 MOBIL KART DUZENI: genis tablolar telefonda yatay tasmasin — satirlar karta donsun,
+     son kolondaki butonlar (or. Pasif "Aktive Et") HER ZAMAN gorunur olsun (yatay kaydirma gerekmez). */
+  @media (max-width:560px){
+    table.resp-cards, table.resp-cards tbody, table.resp-cards tr, table.resp-cards td { display:block; width:100%; }
+    table.resp-cards thead { position:absolute; left:-9999px; top:-9999px; }
+    table.resp-cards tr { margin:0 0 10px; border:1px solid var(--border); border-radius:12px; padding:10px 12px; background:var(--card); box-shadow:0 1px 3px rgba(0,0,0,.05); }
+    table.resp-cards td { border:none !important; padding:4px 0 !important; display:block; font-size:13.5px; text-align:left; min-height:0; overflow-wrap:anywhere; word-break:break-word; }
+    table.resp-cards td::before { content:attr(data-label); display:block; font-weight:600; color:var(--muted); font-size:11px; margin-bottom:1px; }
+    table.resp-cards td.card-actions { display:flex; flex-wrap:wrap; gap:6px; padding-top:9px !important; margin-top:5px; border-top:1px solid var(--border) !important; }
+    table.resp-cards td.card-actions::before { display:none; }
+    table.resp-cards td.card-actions .btn { flex:1 1 100%; min-width:0; margin:0; box-sizing:border-box; }
+    table.resp-cards tr.archived-row { border-left:4px solid #d7c8a3; background:var(--card); }
+    table.resp-cards td[data-hide-mobile] { display:none; }
+    .table-wrap:has(table.resp-cards) { overflow-x:hidden; }
+  }
 /* ===== ŞIK DİYALOGLAR (Faz 1b) ===== */
 #pl-dlg-bg{position:fixed;inset:0;background:rgba(10,12,14,.45);z-index:999999;display:none;align-items:center;justify-content:center;padding:20px;}
 #pl-dlg-bg.on{display:flex;}
@@ -1415,7 +1430,7 @@
     </div>
     <div id="archive-stats" class="grid-stats" style="margin-bottom:12px;"></div>
     <div class="table-wrap">
-      <table class="sticky-head">
+      <table class="sticky-head resp-cards">
         <thead class="sticky-thead"><tr>
           <th>Üye İsmi</th>
           <th>Telefon</th>
@@ -1467,7 +1482,7 @@
     </div>
     <div id="pay-summary" class="grid-stats"></div>
     <div class="table-wrap">
-      <table>
+      <table class="resp-cards">
         <thead><tr>
           <th>Tarih</th><th>Üye</th><th>Paket</th><th>Kampanya</th><th>Tutar</th><th>Yöntem</th><th>Not</th><th>İşlem</th>
         </tr></thead>
@@ -1591,42 +1606,6 @@
     </div>
   </div>
 
-  <div class="card" style="display:none;"> <!-- v51: ESKI JSONBin senkron (BinID/xmasterkey) kaldirildi — Supabase kullaniliyor, gerek yok -->
-    <h2>☁️ Bulut Senkron (Tüm Cihazlar)</h2>
-    <div id="sync-status" style="padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:13px;font-weight:500;"></div>
-    <div class="fields-grid">
-      <div class="field">
-        <label>JSONBin.io — Master Key</label>
-        <input id="sync-key" type="password" placeholder="$2a$10$... (X-Master-Key)">
-      </div>
-      <div class="field">
-        <label>Bin ID</label>
-        <input id="sync-bin" placeholder="örn. 65abc123def456...">
-      </div>
-    </div>
-    <div class="row" style="gap:8px;margin-top:8px;">
-      <label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#fafafa;border-radius:6px;cursor:pointer;">
-        <input type="checkbox" id="sync-enabled" style="width:auto"> Senkronizasyonu etkinleştir
-      </label>
-      <button class="btn secondary small" onclick="saveSyncConfig()">Senkron Ayarlarını Kaydet</button>
-    </div>
-    <details style="margin-top:8px;">
-      <summary style="cursor:pointer;font-size:13px;color:var(--muted);">🔧 Gelişmiş — elle senkron ve çakışma yedeği</summary>
-      <div class="row" style="gap:8px;margin-top:8px;">
-        <button class="btn small" onclick="pullFromCloud()">⬇️ Buluttan Çek</button>
-        <button class="btn small ok" onclick="pushToCloud()">⬆️ Buluta Yolla</button>
-        <button class="btn small" onclick="syncNow()">🔄 Şimdi Senkronize Et</button>
-        <button class="btn small secondary" onclick="restoreConflictBackup()" title="Çakışmada yedeklenen diğer cihaz halini geri yükle">Çakışma Yedeğini Geri Yükle</button>
-        <button class="btn small secondary" onclick="restorePrePullBackup()" title="Buluttan çekme işlemi cihazdaki veriyi ezdiyse, çekmeden önceki yerel hali geri getirir">Çekme Öncesine Dön</button>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:6px;">Bu butonlara normalde gerek yok — senkron otomatiktir. Çakışma yedeği: iki cihaz aynı anda değişiklik yaptıysa, ezilen tarafın hali buraya kaydedilir.</div>
-    </details>
-    <div class="note-block" style="margin-top:10px;background:#fff8e1;border-left:3px solid #f9a825;">
-      <b>☁️ Otomatik Senkron:</b> Her değişiklik <u>kendiliğinden</u> hem cihaza hem buluta kaydedilir (2-3 sn içinde). Uygulama açılınca ve öne gelince buluttaki yenilikler kendiliğinden alınır. İnternet yokken değişiklikler bekletilir, bağlantı gelince otomatik gönderilir. İki cihazdan aynı anda değişiklik olursa son yazan geçerli olur; ezilen tarafın hali <b>Çakışma Yedeği</b>'nde saklanır.<br><br>
-      <b>Nasıl kurarım?</b> JSONBin.io'da ücretsiz hesap aç → <i>API Keys</i> sayfasından <b>X-Master-Key</b>'i kopyala → bir <b>Bin</b> oluşturup Bin ID'yi kopyala → yukarıya yapıştır ve "Senkronizasyonu etkinleştir"i işaretle. Bu ayarları <u>her cihazda</u> bir kez yap (aynı anahtar, aynı bin).
-    </div>
-  </div>
-
   <div class="card" id="sb-session-card" style="display:none;">
     <h2>👤 Oturum</h2>
     <div id="sb-session-info" style="font-size:13.5px;margin-bottom:10px;color:var(--muted);"></div>
@@ -1682,7 +1661,7 @@
     </div>
     <div id="pin-diag" style="margin-top:10px;font-size:12px;"></div>
     <div class="note-block" style="margin-top:10px;">
-      PIN <b>bulut senkronuyla tüm cihazlarda aktif</b> olur — PC'de koyduğunda telefonda da otomatik gelir (SHA-256 özeti olarak yüklenir, ham PIN kaydedilmez). Her açılışta verilerin <u>önüne</u> kilit ekranı koyar. 5 yanlış denemede 30 sn cezalı kilitlenir. PIN'i unutursan <i>herhangi bir cihazda</i> "PIN'i Kaldır" ile sıfırlayabilirsin (önce o cihazda mevcut PIN'i girmen gerekir). Hepsini unutursan: JSONBin.io panelinde Bin içindeki <code>_pinHash</code> alanını silip tekrar sync al.
+      PIN <b>bulut senkronuyla tüm cihazlarda aktif</b> olur — PC'de koyduğunda telefonda da otomatik gelir (SHA-256 özeti olarak yüklenir, ham PIN kaydedilmez). Her açılışta verilerin <u>önüne</u> kilit ekranı koyar. 5 yanlış denemede 30 sn cezalı kilitlenir. PIN'i unutursan <i>herhangi bir cihazda</i> "PIN'i Kaldır" ile sıfırlayabilirsin (önce o cihazda mevcut PIN'i girmen gerekir). Hepsini unutursan: yönetici e-posta/şifrenle girip yeni bir PIN belirle (PIN e-posta hesabınla bulutta senkronlanır).
     </div>
   </div>
 
@@ -2395,11 +2374,22 @@ function autoGroupName(memberIds) {
     .filter(id => id)
     .map(id => {
       const m = state.members.find(x => x.id === id);
-      // v18: SADECE ilk isim (soyisim yok) — Kerem istegi
-      return m ? (((m.name || '').trim().split(/\s+/)[0]) || '') : '';
+      // v.36: TAM isim (Kerem: uye adlari grup adi olsun; onceki v18 ilk-isim tercihi degisti)
+      return m ? ((m.name || '').trim()) : '';
     })
     .filter(n => n);
-  return names.length ? names.join('/') : '';
+  return names.length ? names.join(' - ') : '';
+}
+// v.36: grup adi OTOMATIK uretilmis mi? Hem yeni (tam isim ' - ') hem eski (ilk isim '/') formatini tanir
+// => uye degisince ad guncellenir; yalniz GERCEK elle yazilmis adlar korunur.
+function __isAutoGroupName(name, memberIds) {
+  const nm = (name || '').trim();
+  if (!nm) return true;
+  if (nm === autoGroupName(memberIds)) return true;
+  const oldFmt = (Array.isArray(memberIds) ? memberIds : []).filter(id => id)
+    .map(id => { const m = state.members.find(x => x.id === id); return m ? (((m.name || '').trim().split(/\s+/)[0]) || '') : ''; })
+    .filter(n => n).join('/');
+  return !!oldFmt && nm === oldFmt;
 }
 // Belirli ay ve grup için aktif paketi bul (status='active', month eşleşmesi)
 // (v10) Bug fix için: bir grup birden çok pakete sahip olabilir (Mayıs paketi + Haziran paketi)
@@ -4421,16 +4411,16 @@ function renderArchive() {
     const how = __sinceLabel + " ayından beri pasif";
     const reason = m.archivedReason ? (String(m.archivedReason).startsWith('group-deleted:') ? 'Grup silindi: '+escapeHtml(String(m.archivedReason).slice(14)) : escapeHtml(m.archivedReason)) : '—';
     return `<tr class="archived-row">
-      <td><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">${how}</span></td>
-      <td>${escapeHtml(m.phone||'—')}</td>
-      <td>${__since}</td>
-      <td>${reason}</td>
-      <td>${pCnt}</td>
-      <td>${lCnt}</td>
-      <td>
-        <button class="btn small ok" onclick="reactivateMemberForMonth('${m.id}','${ay}')" title="${monthLabel} ayinda aktif uyelere geri getir">↩️ ${ay} Aktive Et</button>
+      <td data-label="Üye"><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">${how}</span></td>
+      <td data-label="Telefon">${escapeHtml(m.phone||'—')}</td>
+      <td data-label="Pasif tarihi">${__since}</td>
+      <td data-label="Sebep">${reason}</td>
+      <td data-label="Geçmiş ödeme">${pCnt}</td>
+      <td data-label="Geçmiş ders">${lCnt}</td>
+      <td class="card-actions">
+        <button class="btn small ok" onclick="reactivateMemberForMonth('${m.id}','${ay}')" title="${monthLabel} ayinda aktif uyelere geri getir">↩️ Aktive Et</button>
         <button class="btn small secondary" onclick="openMemberDetail('${m.id}')" title="Detay">Detay</button>
-        ${isArch ? `<button class="btn small danger" onclick="permanentDeleteMember('${m.id}')" title="Kalici sil">🗑️ Kalici Sil</button>` : ''}
+        ${isArch ? `<button class="btn small danger" onclick="permanentDeleteMember('${m.id}')" title="Kalici sil">🗑️ Kalıcı Sil</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -4771,11 +4761,11 @@ function fillEmptySlot(groupId, slotIndex) {
   // Henüz hiçbir gruba dahil olmayan üyeler
   const __ctxAy = __groupOpsCtxMonth(); // v35: ay bazli — bu ay bir grupta AKTIF (enrolled) olmayan uye eklenebilir
   const available = state.members
-    .filter(m => !m.archived && !state.groups.some(gr => resolveGroupMembersForMonth(gr, __ctxAy).includes(m.id) && isMemberEnrolledInMonth(m.id, __ctxAy)))
+    .filter(m => !state.groups.some(gr => resolveGroupMembersForMonth(gr, __ctxAy).includes(m.id) && isMemberEnrolledInMonth(m.id, __ctxAy))) // v.36: pasif/arsivli de gosterilir (eklenince otomatik aktive olur)
     .slice()
     .sort((a,b)=>a.name.localeCompare(b.name,'tr'));
   const listHtml = available.length
-    ? available.map(m => `<button class="btn secondary" style="display:block;width:100%;text-align:left;margin-bottom:4px;" onclick="assignMemberToSlot('${m.id}','${groupId}',${slotIndex})">👤 ${m.name}${m.phone?` <small style="color:var(--muted)">${m.phone}</small>`:''}</button>`).join('')
+    ? available.map(m => { const __pasif = !!m.archived; return `<button class="btn secondary" style="display:block;width:100%;text-align:left;margin-bottom:4px;" onclick="assignMemberToSlot('${m.id}','${groupId}',${slotIndex})">👤 ${m.name}${__pasif?' <span class="archived-badge">Pasif</span>':''}${m.phone?` <small style="color:var(--muted)">${m.phone}</small>`:''}</button>`; }).join('')
     : '<div style="color:var(--muted);text-align:center;padding:10px;font-size:13px;">Gruba eklenecek uygun üye yok.<br>Aşağıdan yeni üye oluşturabilirsin.</div>';
   const modalHtml = `
     <div class="modal-bg open" id="modal-fill-slot" style="z-index:${200 + (__modalStack.length + 1) * 10};" onclick="if(event.target===this)closeFillSlotModal()">
@@ -4815,7 +4805,7 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
     if (__keep && (g.secondOf === keepGroupId || __keep.secondOf === g.id || (__keep.secondOf && __keep.secondOf === g.secondOf))) return;
     const __has = (g.memberIds||[]).includes(memberId) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ay && (g.monthlyMembers[k]||[]).includes(memberId));
     if (__has) {
-      const __wasAuto = (g.name||'') === autoGroupName(g.memberIds||[]); // v28
+      const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
       applyRosterChange(g, __ay, mids => {
         const out = mids.map(x => x === memberId ? '' : x);
         while (out.length > 0 && out[out.length-1] === '') out.pop();
@@ -4868,7 +4858,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
   if (!g) return;
   const __ctxAy = __groupOpsCtxMonth(); // v34: ekleme, ISLEM YAPILAN SAYFANIN AYINA yapilir
   if (resolveGroupMembersForMonth(g, __ctxAy).includes(memberId) && isMemberEnrolledInMonth(memberId, __ctxAy)) { alert('Bu üye zaten bu grupta.'); return; }
-  const __wasAutoName = (g.name||'') === autoGroupName(g.memberIds||[]);
+  const __wasAutoName = __isAutoGroupName(g.name, g.memberIds);
   const removed = removeMemberFromOtherContexts(memberId, groupId, __ctxAy);
   applyRosterChange(g, __ctxAy, mids => {
     const out = mids.slice();
@@ -5166,7 +5156,7 @@ function deleteMember(id) {
     if (!g.memberIds) return;
     const __inRoster = (g.memberIds||[]).includes(id) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ctxAy && (g.monthlyMembers[k]||[]).includes(id));
     if (!__inRoster) return;
-    const __wasAuto = (g.name||'') === autoGroupName(g.memberIds||[]); // v28
+    const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
     applyRosterChange(g, __ctxAy, mids => {
       const out = mids.map(mid => mid === id ? '' : mid);
       while (out.length > 0 && out[out.length-1] === '') out.pop();
@@ -5778,7 +5768,7 @@ function renderLessonMembersCheckboxes(preselect) {
     const q = __lessonMemberSearch.toLocaleLowerCase('tr');
     sortedMembers = sortedMembers.filter(m =>
       currentlyChecked.includes(m.id) ||
-      (!m.archived && q.length >= 2 && m.name.toLocaleLowerCase('tr').includes(q))
+      (q.length >= 2 && m.name.toLocaleLowerCase('tr').includes(q)) /* v.36: pasif uyeler de aramada cikar (eklenince aktive olur) */
     );
     searchBar = `<input type="text" id="ml-member-search" value="${escapeHtml(__lessonMemberSearch)}" oninput="onLessonMemberSearch(this)" placeholder="🔍 Üye ara ve ekle (en az 2 harf)..." style="margin-bottom:8px;" autocomplete="off">`;
   }
@@ -5797,7 +5787,7 @@ function renderLessonMembersCheckboxes(preselect) {
       : `<span class="badge ok">${r}</span>`;
     return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;">
       <input type="checkbox" value="${m.id}" ${checked?'checked':''} style="width:auto" onchange="onLessonMemberToggle(this)">
-      <span>${m.name}</span> ${badge} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
+      <span>${m.name}</span> ${badge} ${m.archived?'<span class="archived-badge">Pasif</span>':''} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
     </label>`;
   }).join('') : emptyMsg);
 }
@@ -6207,7 +6197,7 @@ function memberIsEngaged(memberId, excludeGroupId) {
 function updateGroupPricePreview() {
   const pkgId = document.getElementById('mg-package').value;
   const size = +document.getElementById('mg-size').value || 1;
-  const checked = [...document.querySelectorAll('#mg-members input:checked')];
+  const checked = [...document.querySelectorAll('#mg-members input.gm-mc:checked')];
   const selectedCount = checked.length;
   const pkg = state.packageTypes.find(x=>x.id===pkgId);
   const el = document.getElementById('mg-price-preview');
@@ -6257,7 +6247,7 @@ function renderGroupMembersCheckboxes(selected, currentGroupId) {
   // v10: pasif üyeleri de göster (gruba eklenince otomatik aktive olur)
   const sortedMembers = state.members.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
   const showAll = document.getElementById('mg-show-all')?.checked || false;
-  const showArchived = document.getElementById('mg-show-archived')?.checked || false;
+  const __saEl = document.getElementById('mg-show-archived'); const showArchived = __saEl ? __saEl.checked : true; /* v.36: pasifler VARSAYILAN gorunur (eklenince otomatik aktive olur) */
   // v10: grup özelindeki üye-bazlı oran haritası
   const currentGroup = currentGroupId ? state.groups.find(g => g.id === currentGroupId) : null;
   const memberRates = (currentGroup && currentGroup.memberInstructorRates) || {};
@@ -6273,20 +6263,20 @@ function renderGroupMembersCheckboxes(selected, currentGroupId) {
     const rateInputVisible = checked;
     return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;${eng||m.archived?'opacity:.85;':''}">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
-        <input type="checkbox" value="${m.id}" ${checked?'checked':''} style="width:auto" onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input[type=checkbox]:checked')].map(x=>x.value), '${currentGroupId||''}')">
+        <input type="checkbox" class="gm-mc" value="${m.id}" ${checked?'checked':''} style="width:auto" onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')">
         <span>${escapeHtml(m.name||'')}</span> ${m.phone?`<small style="color:var(--muted)">${escapeHtml(m.phone)}</small>`:''} ${engBadge} ${archBadge}
       </label>
     </div>`;
   }).filter(Boolean).join('');
   const filterBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;padding:6px 8px;background:#fafafa;border-radius:6px;flex-wrap:wrap;">
-    <input type="search" id="mg-member-search" placeholder="🔍 Üye ara..." value="${escapeHtml(q)}" oninput="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input[type=checkbox]:checked')].map(x=>x.value), '${currentGroupId||''}')" style="flex:1;min-width:160px;font-size:13px;padding:6px 10px;">
+    <input type="search" id="mg-member-search" placeholder="🔍 Üye ara..." value="${escapeHtml(q)}" oninput="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')" style="flex:1;min-width:160px;font-size:13px;padding:6px 10px;">
     <label style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
-      <input type="checkbox" id="mg-show-all" ${showAll?'checked':''} onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input[type=checkbox]:checked')].map(x=>x.value), '${currentGroupId||''}')" style="width:auto">
+      <input type="checkbox" id="mg-show-all" ${showAll?'checked':''} onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')" style="width:auto">
       Başka grupta olanlar
     </label>
     <label style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
-      <input type="checkbox" id="mg-show-archived" ${showArchived?'checked':''} onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input[type=checkbox]:checked')].map(x=>x.value), '${currentGroupId||''}')" style="width:auto">
-      Pasif üyeler
+      <input type="checkbox" id="mg-show-archived" ${showArchived?'checked':''} onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')" style="width:auto">
+      Pasif üyeleri göster
     </label>
     <button type="button" class="btn small" onclick="quickAddMemberFromGroup('${currentGroupId||''}')">+ Yeni Üye</button>
   </div>
@@ -6313,7 +6303,7 @@ async function quickAddMemberFromGroup(groupId) {
   state.members.push(newMember);
   save();
   // Re-render checkboxes; otomatik seç
-  const currentChecked = [...document.querySelectorAll('#mg-members input[type=checkbox]:checked')].map(x => x.value);
+  const currentChecked = [...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x => x.value);
   currentChecked.push(newMember.id);
   renderGroupMembersCheckboxes(currentChecked, groupId);
 }
@@ -6336,7 +6326,7 @@ function saveGroup() {
   if (!size || size < 1 || size > 5) { markInvalid('mg-size', 'Grup boyutu 1–5 arası olmalı'); errs++; }
   if (customTotalRaw !== '' && (isNaN(customTotalPrice) || customTotalPrice < 0)) { markInvalid('mg-custom-total', 'Geçerli bir fiyat girin (₺)'); errs++; }
   if (groupRateRaw !== '' && (isNaN(groupRate) || groupRate < 0 || groupRate > 100)) { markInvalid('mg-instructor-rate', 'Yüzdelik 0–100 arası olmalı'); errs++; }
-  const memberIds = [...document.querySelectorAll('#mg-members input:checked')].map(x=>x.value);
+  const memberIds = [...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value);
   if (memberIds.length > size) { w.textContent=`En fazla ${size} üye seçebilirsiniz.`; errs++; }
   const defaultDays = [...document.querySelectorAll('#mg-days input:checked')].map(x=>+x.dataset.gday);
   // v10: Üye bazlı hoca yüzdelik override (her checked üye için input)
@@ -6354,7 +6344,7 @@ function saveGroup() {
   else if (id) {
     // v18: isim daha once OTOMATIK uretilmis ve elle degistirilmemisse uye degisiminde yeniden uret
     const __pg = state.groups.find(x=>x.id===id);
-    if (__pg && (__pg.name||'') === autoGroupName(__pg.memberIds||[]) && name === (__pg.name||'')) {
+    if (__pg && __isAutoGroupName(__pg.name, __pg.memberIds) && name === (__pg.name||'')) {
       name = autoGroupName(memberIds) || name;
     }
   }
@@ -7862,14 +7852,14 @@ function renderPayments() {
     const methodBadge = p.method==='IBAN' ? '<span class="badge blue">IBAN</span>' : (p.method||'—');
     const groupCell = p.groupId ? `<br><small style="color:var(--p2)">👯 ${groupName(p.groupId)}</small>` : '';
     return `<tr>
-      <td>${fmtDate(p.date)}</td>
-      <td>${memberName(p.memberId)}${groupCell}</td>
-      <td>${p.pkgName}<br><small style="color:var(--muted)">${p.sessions} ders · ${p.size} kişilik</small></td>
-      <td>${campCell}</td>
-      <td>${amtCell}</td>
-      <td>${methodBadge}</td>
-      <td>${p.note||''}</td>
-      <td><button class="btn small secondary" onclick="openPaymentModal('${p.memberId}','${p.id}')">Düzenle</button></td>
+      <td data-label="Tarih">${fmtDate(p.date)}</td>
+      <td data-label="Üye">${memberName(p.memberId)}${groupCell}</td>
+      <td data-label="Paket">${p.pkgName}<br><small style="color:var(--muted)">${p.sessions} ders · ${p.size} kişilik</small></td>
+      <td data-label="Kampanya">${campCell}</td>
+      <td data-label="Tutar">${amtCell}</td>
+      <td data-label="Yöntem">${methodBadge}</td>
+      <td data-label="Not">${p.note||''}</td>
+      <td class="card-actions"><button class="btn small secondary" onclick="openPaymentModal('${p.memberId}','${p.id}')">Düzenle</button></td>
     </tr>`;
   }).join('');
 }
@@ -8059,9 +8049,7 @@ function renderSettings() {
   renderPackageTypesSettings();
   renderWaTemplatesSettings();
   // sync fields
-  document.getElementById('sync-key').value = syncCfg.key || '';
-  document.getElementById('sync-bin').value = syncCfg.bin || '';
-  document.getElementById('sync-enabled').checked = !!syncCfg.enabled;
+  const __sk = document.getElementById('sync-key'); if (__sk) { __sk.value = syncCfg.key || ''; const __sbn = document.getElementById('sync-bin'); if (__sbn) __sbn.value = syncCfg.bin || ''; const __sen = document.getElementById('sync-enabled'); if (__sen) __sen.checked = !!syncCfg.enabled; } /* v.36: JSONBin karti kaldirildi — null guard */
   const autoPullEl = document.getElementById('sync-auto-pull');
   if (autoPullEl) autoPullEl.checked = syncCfg.autoPull !== false; // default true
   renderSyncStatus();
@@ -8844,6 +8832,7 @@ function renderSyncStatus(msg, cls) {
 }
 
 function saveSyncConfig() {
+  if (!document.getElementById('sync-key')) return; /* v.36: JSONBin karti kaldirildi */
   syncCfg.key = document.getElementById('sync-key').value.trim();
   syncCfg.bin = document.getElementById('sync-bin').value.trim();
   syncCfg.enabled = document.getElementById('sync-enabled').checked;
@@ -9890,7 +9879,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.35';
+const APP_VERSION = '2026.07.15.37';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

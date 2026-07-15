@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.36-onizleme">
+<meta name="app-version" content="2026.07.15.37-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1062,16 +1062,14 @@
     table.resp-cards, table.resp-cards tbody, table.resp-cards tr, table.resp-cards td { display:block; width:100%; }
     table.resp-cards thead { position:absolute; left:-9999px; top:-9999px; }
     table.resp-cards tr { margin:0 0 10px; border:1px solid var(--border); border-radius:12px; padding:10px 12px; background:var(--card); box-shadow:0 1px 3px rgba(0,0,0,.05); }
-    table.resp-cards td { border:none !important; padding:5px 0 !important; display:flex; justify-content:space-between; align-items:baseline; gap:12px; font-size:13.5px; text-align:right; min-height:0; }
-    table.resp-cards td::before { content:attr(data-label); font-weight:600; color:var(--muted); font-size:12px; text-align:left; flex:0 0 42%; white-space:nowrap; }
-    table.resp-cards td.card-actions { display:flex; flex-wrap:wrap; gap:6px; padding-top:9px !important; margin-top:5px; border-top:1px solid var(--border) !important; text-align:left; }
+    table.resp-cards td { border:none !important; padding:4px 0 !important; display:block; font-size:13.5px; text-align:left; min-height:0; overflow-wrap:anywhere; word-break:break-word; }
+    table.resp-cards td::before { content:attr(data-label); display:block; font-weight:600; color:var(--muted); font-size:11px; margin-bottom:1px; }
+    table.resp-cards td.card-actions { display:flex; flex-wrap:wrap; gap:6px; padding-top:9px !important; margin-top:5px; border-top:1px solid var(--border) !important; }
     table.resp-cards td.card-actions::before { display:none; }
-    table.resp-cards td.card-actions .btn { flex:1 1 auto; min-width:44%; margin:0; }
-    table.resp-cards .archived-row td, table.resp-cards tr.archived-row { background:var(--card); }
-    table.resp-cards tr.archived-row { border-left:4px solid #d7c8a3; }
+    table.resp-cards td.card-actions .btn { flex:1 1 100%; min-width:0; margin:0; box-sizing:border-box; }
+    table.resp-cards tr.archived-row { border-left:4px solid #d7c8a3; background:var(--card); }
     table.resp-cards td[data-hide-mobile] { display:none; }
-    /* tablo-sarmalayici artik kaydirma gostermesin (kart modunda) */
-    .table-wrap:has(table.resp-cards) { overflow-x:visible; }
+    .table-wrap:has(table.resp-cards) { overflow-x:hidden; }
   }
 /* ===== ŞIK DİYALOGLAR (Faz 1b) ===== */
 #pl-dlg-bg{position:fixed;inset:0;background:rgba(10,12,14,.45);z-index:999999;display:none;align-items:center;justify-content:center;padding:20px;}
@@ -2384,11 +2382,22 @@ function autoGroupName(memberIds) {
     .filter(id => id)
     .map(id => {
       const m = state.members.find(x => x.id === id);
-      // v18: SADECE ilk isim (soyisim yok) — Kerem istegi
-      return m ? (((m.name || '').trim().split(/\s+/)[0]) || '') : '';
+      // v.36: TAM isim (Kerem: uye adlari grup adi olsun; onceki v18 ilk-isim tercihi degisti)
+      return m ? ((m.name || '').trim()) : '';
     })
     .filter(n => n);
-  return names.length ? names.join('/') : '';
+  return names.length ? names.join(' - ') : '';
+}
+// v.36: grup adi OTOMATIK uretilmis mi? Hem yeni (tam isim ' - ') hem eski (ilk isim '/') formatini tanir
+// => uye degisince ad guncellenir; yalniz GERCEK elle yazilmis adlar korunur.
+function __isAutoGroupName(name, memberIds) {
+  const nm = (name || '').trim();
+  if (!nm) return true;
+  if (nm === autoGroupName(memberIds)) return true;
+  const oldFmt = (Array.isArray(memberIds) ? memberIds : []).filter(id => id)
+    .map(id => { const m = state.members.find(x => x.id === id); return m ? (((m.name || '').trim().split(/\s+/)[0]) || '') : ''; })
+    .filter(n => n).join('/');
+  return !!oldFmt && nm === oldFmt;
 }
 // Belirli ay ve grup için aktif paketi bul (status='active', month eşleşmesi)
 // (v10) Bug fix için: bir grup birden çok pakete sahip olabilir (Mayıs paketi + Haziran paketi)
@@ -4760,11 +4769,11 @@ function fillEmptySlot(groupId, slotIndex) {
   // Henüz hiçbir gruba dahil olmayan üyeler
   const __ctxAy = __groupOpsCtxMonth(); // v35: ay bazli — bu ay bir grupta AKTIF (enrolled) olmayan uye eklenebilir
   const available = state.members
-    .filter(m => !m.archived && !state.groups.some(gr => resolveGroupMembersForMonth(gr, __ctxAy).includes(m.id) && isMemberEnrolledInMonth(m.id, __ctxAy)))
+    .filter(m => !state.groups.some(gr => resolveGroupMembersForMonth(gr, __ctxAy).includes(m.id) && isMemberEnrolledInMonth(m.id, __ctxAy))) // v.36: pasif/arsivli de gosterilir (eklenince otomatik aktive olur)
     .slice()
     .sort((a,b)=>a.name.localeCompare(b.name,'tr'));
   const listHtml = available.length
-    ? available.map(m => `<button class="btn secondary" style="display:block;width:100%;text-align:left;margin-bottom:4px;" onclick="assignMemberToSlot('${m.id}','${groupId}',${slotIndex})">👤 ${m.name}${m.phone?` <small style="color:var(--muted)">${m.phone}</small>`:''}</button>`).join('')
+    ? available.map(m => { const __pasif = !!m.archived; return `<button class="btn secondary" style="display:block;width:100%;text-align:left;margin-bottom:4px;" onclick="assignMemberToSlot('${m.id}','${groupId}',${slotIndex})">👤 ${m.name}${__pasif?' <span class="archived-badge">Pasif</span>':''}${m.phone?` <small style="color:var(--muted)">${m.phone}</small>`:''}</button>`; }).join('')
     : '<div style="color:var(--muted);text-align:center;padding:10px;font-size:13px;">Gruba eklenecek uygun üye yok.<br>Aşağıdan yeni üye oluşturabilirsin.</div>';
   const modalHtml = `
     <div class="modal-bg open" id="modal-fill-slot" style="z-index:${200 + (__modalStack.length + 1) * 10};" onclick="if(event.target===this)closeFillSlotModal()">
@@ -4804,7 +4813,7 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
     if (__keep && (g.secondOf === keepGroupId || __keep.secondOf === g.id || (__keep.secondOf && __keep.secondOf === g.secondOf))) return;
     const __has = (g.memberIds||[]).includes(memberId) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ay && (g.monthlyMembers[k]||[]).includes(memberId));
     if (__has) {
-      const __wasAuto = (g.name||'') === autoGroupName(g.memberIds||[]); // v28
+      const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
       applyRosterChange(g, __ay, mids => {
         const out = mids.map(x => x === memberId ? '' : x);
         while (out.length > 0 && out[out.length-1] === '') out.pop();
@@ -4857,7 +4866,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
   if (!g) return;
   const __ctxAy = __groupOpsCtxMonth(); // v34: ekleme, ISLEM YAPILAN SAYFANIN AYINA yapilir
   if (resolveGroupMembersForMonth(g, __ctxAy).includes(memberId) && isMemberEnrolledInMonth(memberId, __ctxAy)) { alert('Bu üye zaten bu grupta.'); return; }
-  const __wasAutoName = (g.name||'') === autoGroupName(g.memberIds||[]);
+  const __wasAutoName = __isAutoGroupName(g.name, g.memberIds);
   const removed = removeMemberFromOtherContexts(memberId, groupId, __ctxAy);
   applyRosterChange(g, __ctxAy, mids => {
     const out = mids.slice();
@@ -5155,7 +5164,7 @@ function deleteMember(id) {
     if (!g.memberIds) return;
     const __inRoster = (g.memberIds||[]).includes(id) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ctxAy && (g.monthlyMembers[k]||[]).includes(id));
     if (!__inRoster) return;
-    const __wasAuto = (g.name||'') === autoGroupName(g.memberIds||[]); // v28
+    const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
     applyRosterChange(g, __ctxAy, mids => {
       const out = mids.map(mid => mid === id ? '' : mid);
       while (out.length > 0 && out[out.length-1] === '') out.pop();
@@ -6343,7 +6352,7 @@ function saveGroup() {
   else if (id) {
     // v18: isim daha once OTOMATIK uretilmis ve elle degistirilmemisse uye degisiminde yeniden uret
     const __pg = state.groups.find(x=>x.id===id);
-    if (__pg && (__pg.name||'') === autoGroupName(__pg.memberIds||[]) && name === (__pg.name||'')) {
+    if (__pg && __isAutoGroupName(__pg.name, __pg.memberIds) && name === (__pg.name||'')) {
       name = autoGroupName(memberIds) || name;
     }
   }
@@ -9882,7 +9891,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.36-onizleme';
+const APP_VERSION = '2026.07.15.37-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
