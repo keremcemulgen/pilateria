@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.29-onizleme">
+<meta name="app-version" content="2026.07.15.30-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -240,6 +240,7 @@
   /* Pasif (arşiv) üye listesi stilleri (v10) */
   .archived-row td { background: #f5efe2; color: #7c6b4d; }
   .archived-row:hover td { background: #ece2c8; }
+  body.pl-staff-view .pl-owner-only { display:none !important; }
   .archived-badge {
     display: inline-block; padding: 2px 8px; border-radius: 10px;
     font-size: 10px; background: #d7c8a3; color: #5a4a26; font-weight:600;
@@ -4671,8 +4672,8 @@ function renderMembers() {
       <td>${r.method?`<span class="badge ${r.method==='IBAN'?'blue':''}">${r.method}</span>`:'—'}</td>
       <td onclick="event.stopPropagation()">
         <button class="btn small secondary" onclick="openMemberModal('${r.memberId}')" title="Üyeyi düzenle">✏️</button>
-        <button class="btn small" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)" title="${(+r.paid||0)>0?'Ödemeyi kaldır':'Varsayılan paket fiyatıyla hızlı ödeme kaydı yarat'}" style="${(+r.paid||0)>0?'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;':'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;'}font-weight:600;">${(+r.paid||0)>0?'✅':'⬜'}</button>
-        <button class="btn small" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')" title="Hızlı ödeme al (manuel)">+ ₺</button>
+        <button class="btn small pl-owner-only" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)" title="${(+r.paid||0)>0?'Ödemeyi kaldır':'Varsayılan paket fiyatıyla hızlı ödeme kaydı yarat'}" style="${(+r.paid||0)>0?'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;':'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;'}font-weight:600;">${(+r.paid||0)>0?'✅':'⬜'}</button>
+        <button class="btn small pl-owner-only" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')" title="Hızlı ödeme al (manuel)">+ ₺</button>
         ${monthISO ? `<button class="btn small" onclick="removeMemberFromMonth('${r.memberId}','${monthISO}')" title="Sadece bu aydan çıkar (geçmiş aylar etkilenmez)" style="background:#fff3e0;color:#e65100;border:1px solid #ffb74d;">🗓️✕</button>` : ''}
       </td>
     </tr>`;
@@ -4712,9 +4713,9 @@ function renderMembersCardsMobile(rows, monthISO) {
         ${r.type!=='group' ? `<span>Kalan <b class="${(+r.remaining||0)>0?'mc-due':''}">${money(+r.remaining||0)} ₺</b></span>` : ''}
       </div>
       <div class="mc-actions" onclick="event.stopPropagation()">
-        <button class="btn small" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')">+ ₺ Ödeme</button>
+        <button class="btn small pl-owner-only" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')">+ ₺ Ödeme</button>
         <button class="btn small secondary" onclick="openMemberModal('${r.memberId}')">Düzenle</button>
-        <button class="btn small" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)">${paid>0?'✅':'⬜'} Tik</button>
+        <button class="btn small pl-owner-only" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)">${paid>0?'✅':'⬜'} Tik</button>
         ${monthISO ? `<button class="btn small" style="flex:0 0 auto;background:#fff3e0;color:#e65100;border:1px solid #ffb74d;" onclick="removeMemberFromMonth('${r.memberId}','${monthISO}')" title="Sadece bu ayın listesinden çıkar — diğer aylar etkilenmez">🗓️✕</button>` : ''}
       </div>
     </div>`;
@@ -5113,10 +5114,10 @@ function openMemberDetail(id) {
     ${m.health?`<div class="note-block">🩺 <b>Sağlık notu:</b> ${escapeHtml(m.health)}</div>`:''}
     ${(() => { const __n = memberNoteForMonth(m, thisMonth); return __n ? `<div class="note-block" style="background:#e3f2fd;border-left-color:var(--blue);color:#0d47a1;">📝 <b>${thisMonth}:</b> ${escapeHtml(__n)}</div>` : ''; })()}
     <div class="row" style="margin:12px 0;flex-wrap:wrap;gap:6px;">
-      <button class="btn" onclick="openPaymentModal('${id}');" title="Ödeme penceresi üstte açılır — üye detayı arkada açık kalır">+ Paket/Ödeme</button>
+      <button class="btn pl-owner-only" onclick="openPaymentModal('${id}');" title="Ödeme penceresi üstte açılır — üye detayı arkada açık kalır">+ Paket/Ödeme</button>
       <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">Düzenle</button>
       ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">Toplu Ders Gir</button>` : ''}
-      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Paket erken bittiyse: bu üye için aynı ay içinde BAĞIMSIZ yeni paket kaydı">+ 2. Paket</button>` : ''}
+      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Paket erken bittiyse: bu üye için aynı ay içinde BAĞIMSIZ yeni paket kaydı">+ 2. Paket</button>` : ''}
       ${m.archived
         ? `<button class="btn ok" onclick="reactivateMember('${id}');">↩️ Aktive Et</button>`
         : `<button class="btn secondary" onclick="markMemberPackageExtended('${id}','${thisMonth}', true);" title="Bu ay ödeme alınmadan paket devam ediyor (0 ₺)">Bu Ay Paket Uzadı</button>`
@@ -5205,6 +5206,7 @@ function permanentDeleteMember(id) {
 // kaldırınca otomatik oluşturulmuş kaydı siler. Fiyat grup/üye bazında belirlenir.
 async function togglePaidTick(memberId, groupId, ev, monthAy) {
   if (ev) ev.stopPropagation();
+  if (SUPABASE_MODE && __sbRole === 'staff') { if (window.plToast) plToast('Ödeme işlemleri yalnızca yönetici hesabında açıktır'); return; }
   const m = state.members.find(x=>x.id===memberId);
   if (!m) return;
   const isGroup = !!groupId;
@@ -7416,6 +7418,7 @@ function applyProrate() {
   renderTaxBreakdown();
 }
 function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
+  if (SUPABASE_MODE && __sbRole === 'staff') { if (window.plToast) plToast('Ödeme / paket tahsilatı yalnızca yönetici hesabında açıktır'); return; }
   document.getElementById('mp-id').value = editId||'';
   document.getElementById('mp-group').value = groupId||'';
   const mSel = document.getElementById('mp-member');
@@ -9333,6 +9336,10 @@ function toggleStaffPerm(key) {
 function sbApplyRoleUI() {
   if (!SUPABASE_MODE || __sbRole !== 'staff') return;
   const perms = getStaffPerms();
+  // v50 PERSONEL: yoneticiye-ozel ogeleri gizle (CSS), Ayarlar'da YALNIZ Oturum karti, vadesi gecen odemeler (para) gizli
+  document.body.classList.add('pl-staff-view');
+  document.querySelectorAll('#page-settings > .card').forEach(c => { if (c.id !== 'sb-session-card') c.style.display = 'none'; });
+  { const oc = document.getElementById('overdue-card'); if (oc) oc.style.display = 'none'; }
   STAFF_SECTIONS.forEach(s => {
     const vis = !!perms[s.key];
     document.querySelectorAll('[data-page="' + s.key + '"], [data-bnav="' + s.key + '"]').forEach(el => { el.style.display = vis ? '' : 'none'; });
@@ -9822,7 +9829,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.29-onizleme';
+const APP_VERSION = '2026.07.15.30-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
