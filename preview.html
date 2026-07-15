@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.28-onizleme">
+<meta name="app-version" content="2026.07.15.29-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9026,7 +9026,7 @@ async function sbResync(reason) {
   __sbResyncBusy = true; __sbLastResync = now;
   try {
     // v46 VERI GUVENLIGI: pending yerel degisiklik varsa SADECE gonder, state'i EZME (yaz-sonra-oku gecikmesi eski veriyi geri getirmesin)
-    if (typeof isDirty === 'function' && isDirty()) { try { await sbDiffPush(); } catch(e){} return; }
+    if (typeof isDirty === 'function' && isDirty()) { try { await sbFlushPush(); } catch(e){} return; }
     // yakinda push olduysa tazeleme (replica gecikmesi) yapma
     if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) return;
     const all = {};
@@ -9180,11 +9180,27 @@ async function sbMigrateLocal() {
   setCloudDot && setCloudDot('ok');
 }
 
+// v49 ANLIK SENKRON: sabit gecikme YOK. Her degisiklik mikrotask sonunda HEMEN gonderilir;
+// ayni tick'teki mutasyonlar TEK push'ta toplanir; devam eden push varken yeni degisiklik kuyruga alinir.
+let __sbPushQueued = false, __sbPushInFlight = false, __sbPushAgain = false;
 function sbSchedulePush() {
   if (!SUPABASE_MODE || !sbClient || __sbApplying) return;
-  clearTimeout(__sbPushTimer);
   setCloudDot && setCloudDot('pending');
-  __sbPushTimer = setTimeout(sbDiffPush, 500); // v47: daha hizli senkron (yenileme veri kaybi penceresi kucult)
+  if (__sbPushInFlight) { __sbPushAgain = true; return; }  // suren push var → bitince tekrar gonder
+  if (__sbPushQueued) return;                               // ayni tick'te birden fazla mutasyon → tek push
+  __sbPushQueued = true;
+  Promise.resolve().then(() => { __sbPushQueued = false; sbFlushPush(); });
+}
+async function sbFlushPush() {
+  if (!SUPABASE_MODE || !sbClient) return;
+  if (__sbPushInFlight) { __sbPushAgain = true; return; }
+  __sbPushInFlight = true;
+  try { await sbDiffPush(); }
+  catch(e) { console.error('[sb] flush', e); }
+  finally {
+    __sbPushInFlight = false;
+    if (__sbPushAgain) { __sbPushAgain = false; Promise.resolve().then(sbFlushPush); } // push sirasinda gelen degisiklikleri gonder
+  }
 }
 async function sbDiffPush() {
   if (!sbClient) return;
@@ -9211,7 +9227,7 @@ async function sbDiffPush() {
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
   if (okAll) { __sbLastPushAt = Date.now(); try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
-  else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbDiffPush, 15000); }
+  else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbFlushPush, 15000); }
   setCloudDot && setCloudDot(okAll ? 'ok' : 'offline');
 }
 
@@ -9241,7 +9257,7 @@ function sbSubscribeAll() {
         // state'i topluca yeniden kur (basit ve güvenli): shadow'dan
         clearTimeout(__sbRtTimer);
         __sbRtTimer = setTimeout(async () => {
-          if (typeof isDirty === 'function' && isDirty()) { try { await sbDiffPush(); } catch(e){} } // v46: pending yerel degisiklikleri once gonder — rebuild ezmesin
+          if (typeof isDirty === 'function' && isDirty()) { try { await sbFlushPush(); } catch(e){} } // v46: pending yerel degisiklikleri once gonder — rebuild ezmesin
           const all = {};
           SB_TABLES.forEach(tt => { all[tt] = {}; for (const id in (__sbShadow[tt] || {})) all[tt][id] = JSON.parse(__sbShadow[tt][id]); });
           __sbApplying = true;
@@ -9254,7 +9270,7 @@ function sbSubscribeAll() {
           __sbApplying = false;
           if (!__uiBusyForPull()) __refreshUIInPlace();
           if (window.plToast) plToast('☁️ Güncellendi');
-        }, 250);
+        }, 60); // v49: ANLIK uygulama (60ms)
       } catch(e) { console.error('[sb] rt', e); }
     });
     __sbChannel.subscribe((status) => {
@@ -9267,8 +9283,8 @@ function sbSubscribeAll() {
         window.addEventListener('online', () => sbResync('online'));
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sbResync('visible'); });
         // v47: sayfa GIZLENINCE/KAPANIRKEN pending yerel degisiklikleri HEMEN gonder (yenileme/kapatma veri kaybini onler)
-        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && typeof isDirty === 'function' && isDirty()) { clearTimeout(__sbPushTimer); sbDiffPush(); } });
-        window.addEventListener('pagehide', () => { if (typeof isDirty === 'function' && isDirty()) { clearTimeout(__sbPushTimer); sbDiffPush(); } });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && typeof isDirty === 'function' && isDirty()) { clearTimeout(__sbPushTimer); sbFlushPush(); } });
+        window.addEventListener('pagehide', () => { if (typeof isDirty === 'function' && isDirty()) { clearTimeout(__sbPushTimer); sbFlushPush(); } });
         // v46: 'focus' tetikleyicisi KALDIRILDI — her confirm()/alert() sonrasi ateslenip pending yerel degisiklikleri eziyordu
       } catch(e){}
     }
@@ -9806,7 +9822,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.28-onizleme';
+const APP_VERSION = '2026.07.15.29-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
