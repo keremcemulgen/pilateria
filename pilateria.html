@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.34">
+<meta name="app-version" content="2026.07.15.35">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9231,14 +9231,14 @@ async function sbDiffPush() {
   const rows = sbStateToRows();
   let okAll = true; const __pushedSummary = []; const __pushErrors = [];
   for (const t of SB_TABLES) {
-    const ups = [], dels = [];
+    const ups = [], dels = [], upJson = {};
     for (const id in rows[t]) {
       const j = JSON.stringify(rows[t][id]);
       if (__sbShadow[t] && __sbShadow[t][id] === j) continue;
       __sbVer[t] = __sbVer[t] || {};
       const __vv = Math.max(Date.now(), (__sbVer[t][id] || 0) + 1);
       __sbVer[t][id] = __vv;
-      ups.push({ id: id, data: Object.assign({}, rows[t][id], { _v: __vv }), meta: j });
+      ups.push({ id: id, data: Object.assign({}, rows[t][id], { _v: __vv }) }); upJson[id] = j;
     }
     for (const id in (__sbShadow[t] || {})) if (!(id in rows[t])) dels.push(id);
     if (ups.length) __pushedSummary.push(t+'['+ups.map(u=>u.id).slice(0,5).join(',')+(ups.length>5?'+':'')+']');
@@ -9246,7 +9246,7 @@ async function sbDiffPush() {
     try {
       if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; __pushErrors.push(t+': '+(r.error.message||r.error.code||JSON.stringify(r.error))); console.error('[sb] upsert', t, r.error); continue; } }
       if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; __pushErrors.push('SİL '+t+': '+(r2.error.message||r2.error.code||'?')); console.error('[sb] delete', t, r2.error); continue; } }
-      ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = u.meta; });
+      ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = upJson[u.id]; });
       dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
@@ -9890,7 +9890,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.34';
+const APP_VERSION = '2026.07.15.35';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
