@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.32">
+<meta name="app-version" content="2026.07.15.33">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1642,6 +1642,16 @@
     <div style="font-size:11.5px;color:var(--muted);margin-top:10px;">Değişiklik anında tüm personel cihazlarına yansır (bir sonraki senkronda).</div>
   </div>
 
+  <div class="card" id="sync-trace-card" style="display:none;">
+    <h2>🔎 Senkron İzleme (sorun teşhisi)</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Bir değişiklik yap; veri geri sarınca hangi işlemin sardığını burada gör. <b>En üstte en yeni.</b> ✎=senin değişikliğin, ▶=buluta gitti, ◀=uzaktan geldi (başka cihaz), RESYNC/AÇILIŞ=tazeleme.</div>
+    <div class="row" style="gap:6px;margin-bottom:8px;">
+      <button class="btn small secondary" onclick="(function(){var el=document.getElementById('sync-trace-box'); if(el&&navigator.clipboard){navigator.clipboard.writeText(el.textContent); if(window.plToast)plToast('Kopyalandı');}})()">📋 Kopyala</button>
+      <button class="btn small secondary" onclick="__syncTrace=[]; var el=document.getElementById('sync-trace-box'); if(el)el.textContent='';">Temizle</button>
+    </div>
+    <pre id="sync-trace-box" style="max-height:320px;overflow:auto;background:#0d1117;color:#c9d1d9;padding:10px;border-radius:6px;font-size:11px;line-height:1.5;white-space:pre-wrap;margin:0;"></pre>
+  </div>
+
   <div class="card" id="pin-card">
     <h2>🔒 PIN Koruma</h2>
     <div id="pin-status" style="padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:13px;font-weight:500;background:#fff3e0;color:#e65100;">
@@ -2231,6 +2241,7 @@ function save() {
     localStorage.setItem('pilateria', JSON.stringify(state));
     markDirtyAndSchedulePush(); // v27 OTOMATİK SENKRON
     if (SUPABASE_MODE) sbSchedulePush(); // v33: Supabase anlık senkron
+    if (SUPABASE_MODE && !window.__pilSuppressDirty && !__sbApplying) __trace('✎ YEREL değişiklik kaydedildi');
   } catch(e) {
     // BUG FIX (v9): QuotaExceededError ve diğer save hatalarına net uyarı
     console.error('[save] localStorage error:', e);
@@ -8800,6 +8811,7 @@ async function sbAfterLogin() {
   } catch(e){}
   const sc = document.getElementById('sb-session-card'); if (sc) sc.style.display = '';
   try { const spc = document.getElementById('staff-perms-card'); if (spc) spc.style.display = (__sbRole === 'owner') ? '' : 'none'; if (__sbRole === 'owner' && typeof renderStaffPerms === 'function') renderStaffPerms(); } catch(e){}
+  try { const stc = document.getElementById('sync-trace-card'); if (stc) stc.style.display = (__sbRole === 'owner') ? '' : 'none'; const __te = document.getElementById('sync-trace-box'); if (__te && typeof __syncTrace !== 'undefined') __te.textContent = __syncTrace.slice(-80).reverse().join('\n'); } catch(e){}
   const pc = document.getElementById('pin-card'); if (pc) pc.style.display = 'none';
   if (typeof sbLoadAll === 'function') { try { await sbLoadAll(); } catch(e) { console.error('[sb] veri yükleme', e); } }
   if (typeof sbApplyRoleUI === 'function') { try { sbApplyRoleUI(); } catch(e){} }
@@ -8987,6 +8999,16 @@ function sbMergeInstructor(base, fin) {
   return i;
 }
 
+let __syncTrace = [];
+function __trace(s) {
+  try {
+    const e = new Date().toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' · ' + s;
+    __syncTrace.push(e); if (__syncTrace.length > 400) __syncTrace.shift();
+    try { console.log('[İZ]', e); } catch(_){}
+    const el = document.getElementById('sync-trace-box');
+    if (el) el.textContent = __syncTrace.slice(-80).reverse().join('\n');
+  } catch(_){}
+}
 let __sbShadow = {};   // tablo → { id → JSON.stringify(data) }  (diff + echo-önleme)
 let __sbPushTimer = null;
 let __sbApplying = false; // realtime uygularken save-döngüsünü önle
@@ -9017,9 +9039,9 @@ async function sbResync(reason) {
   __sbResyncBusy = true; __sbLastResync = now;
   try {
     // v46 VERI GUVENLIGI: pending yerel degisiklik varsa SADECE gonder, state'i EZME (yaz-sonra-oku gecikmesi eski veriyi geri getirmesin)
-    if (typeof isDirty === 'function' && isDirty()) { try { await sbFlushPush(); } catch(e){} return; }
+    if (typeof isDirty === 'function' && isDirty()) { __trace('RESYNC('+reason+'): kirli → sadece gönder, tazeleme YOK'); try { await sbFlushPush(); } catch(e){} return; }
     // yakinda push olduysa tazeleme (replica gecikmesi) yapma
-    if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) return;
+    if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) { __trace('RESYNC('+reason+'): yakın push → tazeleme atlandı'); return; }
     const all = {};
     let __resyncOk = true;
     for (const t of SB_TABLES) {
@@ -9027,7 +9049,8 @@ async function sbResync(reason) {
       try { const r = await sbClient.from(t).select('id,data').order('id'); if (r && r.error) __resyncOk = false; (r.data || []).forEach(row => { all[t][row.id] = row.data; }); }
       catch(e) { __resyncOk = false; console.error('[sb] resync select', t, e); }
     }
-    if (!__resyncOk) return; // v51 VERI GUVENLIGI: eksik cekimde state'i EZME (geri-sarma yok)
+    if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); return; }
+    __trace('RESYNC('+reason+'): TAM TAZELE (sunucudan tüm veri)');
     __sbHarvestVer(all);
     __sbApplying = true; window.__pilSuppressDirty = true;
     state = sbRowsToState(all); applyV10MigrationToState(state); sanitizeStateText(state); save();
@@ -9097,7 +9120,7 @@ async function sbLoadAll() {
     } catch(e) { __loadOk = false; console.error('[sb] select', t, e); }
   }
   // v51 VERI GUVENLIGI: bir tablo bile CEKILEMEDIYSE state'i EZME — yerel (localStorage) korunur, subscribe + 8sn sonra tekrar dene
-  if (!__loadOk) { setCloudDot && setCloudDot('offline'); try { sbSubscribeAll(); } catch(e){} clearTimeout(sbLoadAll._t); sbLoadAll._t = setTimeout(() => { try { sbLoadAll(); } catch(e){} }, 8000); return; }
+  if (!__loadOk) { __trace('AÇILIŞ: eksik çekim → yerel korundu, 8sn sonra tekrar'); setCloudDot && setCloudDot('offline'); try { sbSubscribeAll(); } catch(e){} clearTimeout(sbLoadAll._t); sbLoadAll._t = setTimeout(() => { try { sbLoadAll(); } catch(e){} }, 8000); return; }
   const total = SB_TABLES.reduce((a, t) => a + Object.keys(all[t]).length, 0);
   if (total === 0 && __sbRole === 'owner') {
     await __sbFreshenFromJsonbin(); // GÜVENCE: eski sistemin bulutundaki (JSONBin) EN GÜNCEL hali çek — hangi cihazdan geçilirse geçilsin veri kaybolmaz
@@ -9108,6 +9131,7 @@ async function sbLoadAll() {
     if (ok) { await sbMigrateLocal(); return; }
   }
   // v47 VERI GUVENLIGI: yenilemeden once gonderilememis (dirty) yerel degisiklikler VARSA koru + gonder
+  __trace('AÇILIŞ: sunucudan yükleme'+(( (typeof isDirty==='function') && isDirty())?' (yerel gönderilmemiş var)':''));
   const __wasDirty = (typeof isDirty === 'function') && isDirty();
   const __localState = __wasDirty ? state : null;
   window.__pilSuppressDirty = true;
@@ -9204,7 +9228,7 @@ async function sbDiffPush() {
   if (navigator.onLine === false) { setCloudDot && setCloudDot('offline'); return; }
   setCloudDot && setCloudDot('syncing');
   const rows = sbStateToRows();
-  let okAll = true;
+  let okAll = true; const __pushedSummary = [];
   for (const t of SB_TABLES) {
     const ups = [], dels = [];
     for (const id in rows[t]) {
@@ -9216,6 +9240,8 @@ async function sbDiffPush() {
       ups.push({ id: id, data: Object.assign({}, rows[t][id], { _v: __vv }), meta: j });
     }
     for (const id in (__sbShadow[t] || {})) if (!(id in rows[t])) dels.push(id);
+    if (ups.length) __pushedSummary.push(t+'['+ups.map(u=>u.id).slice(0,5).join(',')+(ups.length>5?'+':'')+']');
+    if (dels.length) __pushedSummary.push('SİL '+t+'['+dels.slice(0,5).join(',')+']');
     try {
       if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; console.error('[sb] upsert', t, r.error.message); continue; } }
       if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; console.error('[sb] delete', t, r2.error.message); continue; } }
@@ -9223,6 +9249,7 @@ async function sbDiffPush() {
       dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
+  if (__pushedSummary.length) __trace((okAll?'▶ BULUTA gönderildi: ':'⚠ BULUTA gönderilemedi: ')+__pushedSummary.join(' | '));
   if (okAll) { __sbLastPushAt = Date.now(); try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
   else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbFlushPush, 15000); }
   setCloudDot && setCloudDot(okAll ? 'ok' : 'offline');
@@ -9239,7 +9266,14 @@ function sbApplyOne(t, id) {
     if (obj == null) { if (i >= 0) arr.splice(i, 1); }
     else if (i >= 0) arr[i] = obj; else arr.push(obj);
   };
-  if (t === 'members' || t === 'member_finance') { state.members = state.members || []; const b = S('members'); upsert(state.members, b ? sbMergeMember(b, S('member_finance')) : null); }
+  if (t === 'members' || t === 'member_finance') {
+    state.members = state.members || [];
+    const b = S('members'); const nu = b ? sbMergeMember(b, S('member_finance')) : null;
+    const prev = state.members.find(x=>String(x.id)===String(id));
+    if (prev && nu && (String(prev.totalPrice)!==String(nu.totalPrice) || prev.name!==nu.name)) __trace('◀ UZAKTAN geldi '+(nu.name||id)+': fiyat '+prev.totalPrice+'→'+nu.totalPrice);
+    else if (prev && !nu) __trace('◀ UZAKTAN SİL '+(prev.name||id));
+    upsert(state.members, nu);
+  }
   else if (t === 'groups' || t === 'group_finance') { state.groups = state.groups || []; const b = S('groups'); upsert(state.groups, b ? sbMergeGroup(b, S('group_finance')) : null); }
   else if (t === 'instructors' || t === 'instructor_finance') { state.instructors = state.instructors || []; const b = S('instructors'); upsert(state.instructors, b ? sbMergeInstructor(b, S('instructor_finance')) : null); }
   else if (t === 'lessons') { state.lessons = state.lessons || []; upsert(state.lessons, S('lessons')); }
@@ -9837,7 +9871,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.32';
+const APP_VERSION = '2026.07.15.33';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
