@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.13">
+<meta name="app-version" content="2026.07.15.14">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -5534,7 +5534,8 @@ function deleteInstructor() {
 }
 
 // ========== LESSONS ==========
-function openLessonModal(id, date, time, groupId) {
+function openLessonModal(id, date, time, groupId, ctxMonth) {
+  window.__lessonCtxMonth = ctxMonth || ''; // v38: grup detay ayindan acildiysa o ay (yoksa tarih bazli)
   __lessonMemberSearch = ''; // v29: arama her açılışta sıfırlanır
   const isEdit = !!id;
   let l;
@@ -5546,7 +5547,7 @@ function openLessonModal(id, date, time, groupId) {
       id:'', date: date||todayISO(), time: time||g.defaultTime||hourSlots()[0],
       instructorId: g.defaultInstructorId||'', size: g.size||1,
       memberIds: (g.memberIds||[]).filter(x => x && state.members.find(m=>m.id===x)), groupId: groupId, note:'',
-      packageOwnerType:'group', packageOwnerId: groupId, packageMonth: String(date||todayISO()).slice(0,7)
+      packageOwnerType:'group', packageOwnerId: groupId, packageMonth: (ctxMonth || String(date||todayISO()).slice(0,7))
     };
   } else {
     l = { id:'', date: date||todayISO(), time: time||hourSlots()[0], instructorId:'', size:1, memberIds:[], groupId:'', note:'' };
@@ -5758,7 +5759,7 @@ function saveLesson() {
   const __exForPkg = id ? state.lessons.find(x => x.id === id) : null;
   let packageMonth;
   if (__exForPkg && __exForPkg.packageMonth) packageMonth = __exForPkg.packageMonth;
-  else if (groupId) packageMonth = resolvePackageMonthForDate('group', groupId, date);
+  else if (groupId) packageMonth = (window.__lessonCtxMonth || resolvePackageMonthForDate('group', groupId, date)); // v38: grup detay ayi varsa o
   else if (checked.length === 1) packageMonth = resolvePackageMonthForDate('member', checked[0], date);
   else packageMonth = String(date).slice(0,7);
   let packageOwnerType = '';
@@ -6764,7 +6765,7 @@ function openGroupDetail(id, monthISO) {
     ${(() => { const __gn = groupNoteForMonth(g, monthISO); return __gn ? `<div class="note-block">📝 <b>${monthISO||''}:</b> ${escapeHtml(__gn)}</div>` : ''; })()}
     <div class="row" style="margin:12px 0;flex-wrap:wrap;">
       <button class="btn" onclick="openGroupPaymentModal('${id}')">💳 Gruba Ödeme Al</button>
-      <button class="btn" onclick="openLessonModalForGroup('${id}')">📅 Ders Ekle</button>
+      <button class="btn" onclick="openLessonModalForGroup('${id}', '${monthISO}')">📅 Ders Ekle</button>
       <button class="btn secondary" onclick="openGroupModal('${id}')" title="Grubu düzenle — grup detayı arka planda açık kalır">Düzenle</button>
       <button class="btn secondary" onclick="createSecondPackage('group','${id}','${monthISO||''}')" title="Paket erken bittiyse: aynı üyelerle BAĞIMSIZ yeni paket kaydı (ayrı ödeme/ders; üye sayısı değişmez)">+ 2. Paket</button>
       ${monthISO ? `<button class="btn secondary" onclick="markGroupPackageExtended('${id}','${monthISO}', true)" title="Bu ay ödeme alınmadan paket devam ediyor (0 TL)">📌 Paket Uzadı (0 TL)</button>` : ''}
@@ -6783,8 +6784,8 @@ function openGroupDetail(id, monthISO) {
     </details>
     <details open style="margin-top:8px;"><summary>📅 Grup Dersleri (${groupLessons.length}) — tıklayarak düzenle</summary>
       <div class="row" style="margin:8px 0;gap:6px;flex-wrap:wrap;">
-        <button class="btn small" onclick="addGroupLesson('${id}')">+ Ders Ekle</button>
-        <button class="btn small ok" onclick="openBatchDates('${id}')" title="8 dersin tarih/saatini tek seferde gir">📋 Toplu Tarih Gir (8 Ders)</button>
+        <button class="btn small" onclick="addGroupLesson('${id}', '${monthISO}')">+ Ders Ekle</button>
+        <button class="btn small ok" onclick="openBatchDates('${id}', '${monthISO}')" title="8 dersin tarih/saatini tek seferde gir">📋 Toplu Tarih Gir (8 Ders)</button>
         <span style="font-size:12px;color:var(--muted);margin-left:auto;">Takvimde yapılan değişiklikler burada da anlık görünür.</span>
       </div>
       ${groupLessons.length ? '<div class="table-wrap"><table><thead><tr><th>#</th><th>Tarih</th><th>Saat</th><th>Hoca</th><th>Katılım</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>' +
@@ -6857,7 +6858,7 @@ function deleteGroupLesson() {
   renderCalendar(); renderDashboard();
 }
 // Add a lesson directly to a group (quick: today / group default time)
-function addGroupLesson(groupId) {
+function addGroupLesson(groupId, ctxMonth) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
   const dISO = todayISO();
   const time = g.defaultTime || hourSlots()[0];
@@ -6875,7 +6876,7 @@ function addGroupLesson(groupId) {
     alert(`⛔ ${instructorName(g.defaultInstructorId)} bugün ${time} aralığında başka derste. Takvimden farklı saate ekle.`);
     return;
   }
-  const __pm = resolvePackageMonthForDate('group', groupId, dISO);
+  const __pm = ctxMonth || resolvePackageMonthForDate('group', groupId, dISO); // v38: grup detay ayina
   state.lessons.push({
     id: uid(), date: dISO, time, durationMin: dur, instructorId: g.defaultInstructorId||'',
     size, memberIds: mids, groupId, status:'planned', note:'',
@@ -6953,18 +6954,18 @@ function scheduleGroupMonth(groupId) {
   openGroupDetail(groupId);
   renderCalendar(); renderDashboard();
 }
-function openLessonModalForGroup(groupId) {
+function openLessonModalForGroup(groupId, ctxMonth) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
   // v12: Grup detayı açık kalsın (closeModal kaldırıldı)
-  openLessonModal(null, todayISO(), g.defaultTime || hourSlots()[0], groupId);
+  openLessonModal(null, todayISO(), g.defaultTime || hourSlots()[0], groupId, ctxMonth);
 }
 
 // ========== BATCH LESSON DATES (v11: hem GRUP hem BİREYSEL ÜYE) ==========
 // 8 dersin tarih/saatini toplu girme — kullanıcı isteği
 let __batchDatesTarget = null; // {type:'group'|'member', id, packageMonth}
 let __batchDatesRows = []; // {lessonId|null, date, time}
-function openBatchDates(groupId) {
-  return openBatchDatesGroup(groupId);
+function openBatchDates(groupId, monthISO) {
+  return openBatchDatesGroup(groupId, monthISO); // v38: grup detay ayina kilitle
 }
 function openBatchDatesGroup(groupId, monthISO) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
@@ -9570,7 +9571,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.13';
+const APP_VERSION = '2026.07.15.14';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
