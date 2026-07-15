@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.33">
+<meta name="app-version" content="2026.07.15.34">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1648,6 +1648,7 @@
     <div class="row" style="gap:6px;margin-bottom:8px;">
       <button class="btn small secondary" onclick="(function(){var el=document.getElementById('sync-trace-box'); if(el&&navigator.clipboard){navigator.clipboard.writeText(el.textContent); if(window.plToast)plToast('Kopyalandı');}})()">📋 Kopyala</button>
       <button class="btn small secondary" onclick="__syncTrace=[]; var el=document.getElementById('sync-trace-box'); if(el)el.textContent='';">Temizle</button>
+      <button class="btn small" onclick="sbTestWrite()">🔬 Yazma Testi</button>
     </div>
     <pre id="sync-trace-box" style="max-height:320px;overflow:auto;background:#0d1117;color:#c9d1d9;padding:10px;border-radius:6px;font-size:11px;line-height:1.5;white-space:pre-wrap;margin:0;"></pre>
   </div>
@@ -9228,7 +9229,7 @@ async function sbDiffPush() {
   if (navigator.onLine === false) { setCloudDot && setCloudDot('offline'); return; }
   setCloudDot && setCloudDot('syncing');
   const rows = sbStateToRows();
-  let okAll = true; const __pushedSummary = [];
+  let okAll = true; const __pushedSummary = []; const __pushErrors = [];
   for (const t of SB_TABLES) {
     const ups = [], dels = [];
     for (const id in rows[t]) {
@@ -9243,13 +9244,13 @@ async function sbDiffPush() {
     if (ups.length) __pushedSummary.push(t+'['+ups.map(u=>u.id).slice(0,5).join(',')+(ups.length>5?'+':'')+']');
     if (dels.length) __pushedSummary.push('SİL '+t+'['+dels.slice(0,5).join(',')+']');
     try {
-      if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; console.error('[sb] upsert', t, r.error.message); continue; } }
-      if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; console.error('[sb] delete', t, r2.error.message); continue; } }
+      if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; __pushErrors.push(t+': '+(r.error.message||r.error.code||JSON.stringify(r.error))); console.error('[sb] upsert', t, r.error); continue; } }
+      if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; __pushErrors.push('SİL '+t+': '+(r2.error.message||r2.error.code||'?')); console.error('[sb] delete', t, r2.error); continue; } }
       ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = u.meta; });
       dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
-  if (__pushedSummary.length) __trace((okAll?'▶ BULUTA gönderildi: ':'⚠ BULUTA gönderilemedi: ')+__pushedSummary.join(' | '));
+  if (__pushedSummary.length) __trace((okAll?'▶ BULUTA gönderildi: ':'⚠ BULUTA gönderilemedi: ')+__pushedSummary.join(' | ')+(__pushErrors.length?('  ‹HATA› '+__pushErrors.join(' ; ')):''));
   if (okAll) { __sbLastPushAt = Date.now(); try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
   else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbFlushPush, 15000); }
   setCloudDot && setCloudDot(okAll ? 'ok' : 'offline');
@@ -9258,6 +9259,24 @@ async function sbDiffPush() {
 let __sbChannel = null, __sbRtTimer = null;
 // v52 PER-RECORD APPLY: realtime'da gelen TEK kaydi state'e uygula (tum state'i YENIDEN KURMADAN).
 // Boylece uzaktan gelen bir degisiklik, o an gonderilmekte olan/yerel BASKA bir kaydi ASLA ezmez (revert kok fix).
+async function sbTestWrite() {
+  if (!sbClient) { alert('Bulut bağlantısı yok (sbClient boş).'); return; }
+  __trace('🔬 Yazma testi başladı…');
+  try {
+    const { data: sess } = await sbClient.auth.getSession();
+    const uid = sess && sess.session && sess.session.user && sess.session.user.id;
+    let role = '?'; try { const pr = await sbClient.from('profiles').select('role').eq('id', uid).single(); role = (pr && pr.data && pr.data.role) || (pr && pr.error ? ('HATA:'+pr.error.message) : '?'); } catch(e){ role = 'profiles-hata:'+(e.message||e); }
+    __trace('🔬 oturum uid='+(uid||'YOK')+' rol='+role);
+    const rows = sbStateToRows();
+    const cur = rows.settings && rows.settings['singleton'] ? rows.settings['singleton'] : { _t: 1 };
+    const testRow = { id: 'singleton', data: Object.assign({}, cur, { _v: Date.now() }) };
+    const r = await sbClient.from('settings').upsert([testRow]);
+    if (r.error) {
+      const m = 'YAZMA HATASI » ' + (r.error.message||'') + ' | code=' + (r.error.code||'') + ' | details=' + (r.error.details||'') + ' | hint=' + (r.error.hint||'');
+      __trace('🔬 ' + m); alert('❌ ' + m);
+    } else { __trace('🔬 ✅ YAZMA BAŞARILI (settings) — sorun yazmada DEĞİL.'); alert('✅ Yazma başarılı. Sorun yazmada değil; başka nedene bakalım.'); }
+  } catch(e) { const m = 'YAZMA İSTİSNA » ' + (e && (e.message||e.toString())); __trace('🔬 '+m); alert('❌ '+m); }
+}
 function sbApplyOne(t, id) {
   if (!state || id == null) return;
   const S = (tab) => (__sbShadow[tab] && __sbShadow[tab][id] != null) ? JSON.parse(__sbShadow[tab][id]) : null;
@@ -9871,7 +9890,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.33';
+const APP_VERSION = '2026.07.15.34';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
