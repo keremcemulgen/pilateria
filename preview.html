@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.12-onizleme">
+<meta name="app-version" content="2026.07.15.13-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -7536,7 +7536,7 @@ function applyLockedShare() {
   const mid = document.getElementById('mp-member').value;
   const gid = document.getElementById('mp-group').value;
   if (!mid || !gid) return;
-  const month = String(document.getElementById('mp-date').value || todayISO()).slice(0,7);
+  const month = ((document.getElementById('mp-pkg-month')||{}).value) || String(document.getElementById('mp-date').value || todayISO()).slice(0,7); // v37: PAKET AYI (odeme tarihi degil) — ay bazli fiyat
   const share = memberGroupShare(mid, gid, month);
   const amountEl = document.getElementById('mp-amount');
   const listEl = document.getElementById('mp-list');
@@ -7593,7 +7593,7 @@ function onPayMemberChange() {
       __ps.value = __m2.defaultPackageId;
       onPkgChange();
     }
-    const month = String(document.getElementById('mp-date').value || todayISO()).slice(0,7);
+    const month = ((document.getElementById('mp-pkg-month')||{}).value) || String(document.getElementById('mp-date').value || todayISO()).slice(0,7); // v37: paket ayi
     const own = memberMonthlyTotalPrice(mid, month) || ((state.members.find(x=>x.id===mid)||{}).totalPrice);
     if (own) { document.getElementById('mp-list').value = own; document.getElementById('mp-amount').value = own; }
   }
@@ -9582,7 +9582,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.12-onizleme';
+const APP_VERSION = '2026.07.15.13-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
