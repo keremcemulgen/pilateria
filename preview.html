@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.24-onizleme">
+<meta name="app-version" content="2026.07.15.25-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -3985,6 +3985,7 @@ function closeMonthAddPicker() {
 }
 function addMemberToMonth(memberId, monthISO) {
   setMemberMonthly(memberId, monthISO, { enrolled: true });
+  { const __rm = state.members.find(x=>x.id===memberId); if (__rm) __closeArchivePeriodAt(__rm, monthISO); } // v45: carry-forward pasif donemi kapanir
   if (monthISO >= ROSTER_START_MONTH) { if (!state.monthInit) state.monthInit = {}; state.monthInit[monthISO] = true; }
   save();
   closeMonthAddPicker();
@@ -4051,13 +4052,22 @@ function setMemberMonthly(memberId, monthISO, data) {
 function removeMemberFromMonth(memberId, monthISO) {
   const m = state.members.find(x=>x.id===memberId);
   if (!m || !monthISO) return false;
-  if (!confirm(`"${m.name}" üyesi yalnızca ${monthISO} ayının listesinden gizlenecek. Geçmiş aylar (önceki paket, dersler, ödemeler) korunur. Devam?`)) return false;
+  if (!confirm(`"${m.name}" üyesi ${monthISO} ayından itibaren pasife alınacak.\n\n• Geri alana kadar sonraki aylarda da pasif kalır (Pasif Üyeler listesinde birikir).\n• Geçmiş aylar (önceki paket, ders, ödeme) korunur.\n\nDevam?`)) return false;
+  // v45 CARRY-FORWARD: monthISO'dan itibaren ACIK arsiv donemi — geri alana kadar sonraki aylarda da pasif
+  if (!Array.isArray(m.archivePeriods)) m.archivePeriods = [];
+  // monthISO ve sonrasini etkileyen donemleri temizle; yalniz tamamen ONCE biten kapali donemler kalir
+  m.archivePeriods = m.archivePeriods.filter(per => {
+    const f = String((per&&per.from)||'').slice(0,7);
+    const t = (per && per.to) ? String(per.to).slice(0,7) : null;
+    return f && t && t <= monthISO;
+  });
+  m.archivePeriods.push({ from: monthISO, to: null });
   setMemberMonthly(memberId, monthISO, { enrolled: false });
-  // v42: o ayda pasif olan uye o ayin PLANLI grup derslerinden de cikar (yapilmis/iptal dersler TARIHSEL — dokunulmaz)
+  // monthISO ve SONRASININ planli grup derslerinden cikar (yapilmis/iptal dersler TARIHSEL — dokunulmaz)
   state.lessons.forEach(l => {
     if (!l.groupId || l.status !== 'planned') return;
     const __pm = l.packageMonth || (l.date||'').slice(0,7);
-    if (__pm === monthISO && (l.memberIds||[]).includes(memberId)) l.memberIds = (l.memberIds||[]).filter(x => x !== memberId);
+    if (__pm >= monthISO && (l.memberIds||[]).includes(memberId)) l.memberIds = (l.memberIds||[]).filter(x => x !== memberId);
   });
   save();
   if (typeof renderMembers === 'function') renderMembers();
@@ -4397,12 +4407,16 @@ function renderArchive() {
     const pCnt = state.payments.filter(p => p.memberId === m.id).length;
     const lCnt = state.lessons.filter(l => (l.memberIds||[]).includes(m.id)).length;
     const isArch = !!m.archived;
-    const how = isArch ? ('Arsivli' + (m.archivedAt?(' · '+String(m.archivedAt).slice(0,7)+"'dan beri"):'')) : (ay + ' ayindan cikarildi');
+    let __since = ay; // v45: carry-forward pasif baslangic ayi
+    if (Array.isArray(m.archivePeriods)) { for (const per of m.archivePeriods) { const __f=String((per&&per.from)||'').slice(0,7), __t=(per&&per.to)?String(per.to).slice(0,7):null; if (__f && ay>=__f && (!__t||ay<__t)) { __since=__f; break; } } }
+    if (isArch && m.archivedAt) __since = String(m.archivedAt).slice(0,7);
+    const __sinceLabel = (function(){ try { return parseISO(__since+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return __since; } })();
+    const how = __sinceLabel + " ayından beri pasif";
     const reason = m.archivedReason ? (String(m.archivedReason).startsWith('group-deleted:') ? 'Grup silindi: '+escapeHtml(String(m.archivedReason).slice(14)) : escapeHtml(m.archivedReason)) : '—';
     return `<tr class="archived-row">
       <td><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">${how}</span></td>
       <td>${escapeHtml(m.phone||'—')}</td>
-      <td>${m.archivedAt ? fmtDate(m.archivedAt) : ay}</td>
+      <td>${__since}</td>
       <td>${reason}</td>
       <td>${pCnt}</td>
       <td>${lCnt}</td>
@@ -4414,18 +4428,27 @@ function renderArchive() {
     </tr>`;
   }).join('');
 }
+// v45: uyenin carry-forward pasif donemini 'month' ayinda KAPAT — [from,month) pasif kalir, month'tan itibaren aktif; month donem basinda ise donem tamamen kalkar
+function __closeArchivePeriodAt(m, month) {
+  if (!m || !month || !Array.isArray(m.archivePeriods)) return;
+  const next = [];
+  m.archivePeriods.forEach(per => {
+    const f = String((per&&per.from)||'').slice(0,7);
+    const t = (per && per.to) ? String(per.to).slice(0,7) : null;
+    if (!f) return;
+    if (t && t <= month) { next.push(per); return; }
+    if (f >= month) { return; }
+    next.push({ from: f, to: month, reason: (per&&per.reason)||'' });
+  });
+  m.archivePeriods = next;
+}
 function reactivateMemberForMonth(id, month) {
   // v43: secili AYDA aktive et (ay-bazli pasif icin enrolled:true; legacy arsivli icin unarchive)
   const m = state.members.find(x=>x.id===id);
   if (!m || !month) return;
   if (m.archived && typeof unarchiveMember==='function') unarchiveMember(id, month);
+  __closeArchivePeriodAt(m, month); // v45: acik carry-forward pasif donemini month'ta KAPAT (gecmis korunur, month'tan itibaren aktif)
   setMemberMonthly(id, month, { enrolled: true });
-  if (Array.isArray(m.archivePeriods)) {
-    m.archivePeriods = m.archivePeriods.filter(per => {
-      const f = String((per&&per.from)||'').slice(0,7); const t = String((per&&per.to)||'').slice(0,7);
-      return !(f && month >= f && (!t || month < t)); // o ayi kapsayan pasif donemi kaldir
-    });
-  }
   // gruptaki uyeyse o ayin gruop derslerine geri kat
   state.groups.forEach(g => { if ((g.memberIds||[]).includes(id) && typeof syncGroupLessonsToRoster==='function') syncGroupLessonsToRoster(g.id, month); });
   save();
@@ -4852,6 +4875,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
   if (__wasAutoName) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; }
   { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId, __ctxAy); }
   setMemberMonthly(memberId, __ctxAy, { enrolled: true }); // v35: gruba eklenen uye o ay ENROLLED — pasiften geri ekleme slotu doldurur
+  { const __rm = state.members.find(x=>x.id===memberId); if (__rm) __closeArchivePeriodAt(__rm, __ctxAy); } // v45: carry-forward pasif donemi kapanir
   const __rsync = syncGroupLessonsToRoster(groupId, __ctxAy); // v34
   save();
   closeFillSlotModal();
@@ -9767,7 +9791,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.24-onizleme';
+const APP_VERSION = '2026.07.15.25-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
