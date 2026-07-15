@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.14.07-onizleme">
+<meta name="app-version" content="2026.07.15.08-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1797,7 +1797,7 @@
     <div class="fields-grid">
       <div class="field"><label>Üye *</label><select id="mp-member" onchange="onPayMemberChange()"></select></div>
       <div class="field"><label>Ödeme Tarihi</label><input type="date" id="mp-date"></div>
-      <div class="field"><label>Paket Ayı * <small style="color:var(--muted);font-weight:400;">— gelir bu aya yazılır</small></label><select id="mp-pkg-month"></select></div>
+      <div class="field"><label>Paket Ayı <small style="color:var(--muted);font-weight:400;">— ödeme bu ayın sayfasına yazılır</small></label><input type="text" id="mp-pkg-month-label" disabled style="font-weight:700;"><input type="hidden" id="mp-pkg-month"></div>
       <div class="field" id="mp-pkg-start-field"><label>Paket Başlangıç Tarihi <small style="color:var(--muted);font-weight:400;">— opsiyonel; boşsa ilk ders / ayın 1'i</small></label><input type="date" id="mp-pkg-start"></div>
       <div class="field">
         <label>Paket *</label>
@@ -2557,23 +2557,25 @@ function isMemberArchived(memberId) {
   const m = state.members.find(x => x.id === memberId);
   return !!(m && m.archived);
 }
-function archiveMember(memberId, reason) {
+function archiveMember(memberId, reason, ctxAy) {
   const m = state.members.find(x => x.id === memberId);
   if (!m) return;
   m.archived = true;
-  m.archivedAt = todayISO();
+  // v34: pasiflik ISLEM YAPILAN SAYFANIN AYINDAN baslar (gecmis ay sayfasinda pasife alma o aydan itibaren gizler)
+  const __ay = ctxAy || currentMonth();
+  m.archivedAt = (__ay === currentMonth()) ? todayISO() : (__ay + '-01');
   if (reason) m.archivedReason = reason;
 }
 // v24 (Kerem karari): PASIFLIK AY BAZLIDIR ve TARIHE SABITLENIR.
 // Haziran'da pasife alinan uye Haziran'dan itibaren listelerde GIZLIDIR; Temmuz'da yeniden
 // aktive edilirse Temmuz'dan itibaren gorunur AMA Haziran'daki pasifligi DEGISMEZ
 // (m.archivePeriods = [{from:'2026-06', to:'2026-07', reason}] gecmis donem kayitlari).
-function unarchiveMember(memberId) {
+function unarchiveMember(memberId, toAy) {
   const m = state.members.find(x => x.id === memberId);
   if (!m) return;
   if (m.archived) {
     const fromM = String(m.archivedAt||'').slice(0,7);
-    const toM = currentMonth(); // bu aydan itibaren yeniden aktif
+    const toM = toAy || currentMonth(); // v34: aktive edildigi SAYFANIN AYINDAN itibaren aktif
     if (fromM && fromM < toM) {
       if (!Array.isArray(m.archivePeriods)) m.archivePeriods = [];
       m.archivePeriods.push({ from: fromM, to: toM, reason: m.archivedReason || '' });
@@ -4087,6 +4089,32 @@ function resolveGroupMembersForMonth(g, monthISO) {
   if (keys.length) return (g.monthlyMembers[keys[0]] || []);
   return (g.memberIds||[]);
 }
+// v34 (Kerem kurali): HER ISLEM, YAPILDIGI SAYFANIN AYINA aittir.
+function __isGroupDetailOpen() {
+  const bg = document.getElementById('modal-group-detail');
+  return !!(bg && bg.style.display && bg.style.display !== 'none');
+}
+function __groupOpsCtxMonth() {
+  if (__isGroupDetailOpen() && typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) return currentGroupDetailMonth;
+  return ((document.getElementById('member-month')||{}).value || '') || currentMonth();
+}
+// Kadro degisikligini BAGLAM AYINDAN itibaren uygular:
+// - ctxAy'dan onceki ay (anahtar yoksa) islem-ONCESI kadroyla sabitlenir (gecmis korunur)
+// - guncel liste (g.memberIds) degisir (gelecegin temeli)
+// - ctxAy ve SONRASI mevcut anahtarlar da ayni degisiklikle guncellenir
+function applyRosterChange(g, ctxAy, mutateFn) {
+  if (!g) return;
+  const ay = ctxAy || currentMonth();
+  if (!g.monthlyMembers) g.monthlyMembers = {};
+  const pm = prevMonthISO(ay);
+  if (pm && !(pm in g.monthlyMembers)) {
+    g.monthlyMembers[pm] = resolveGroupMembersForMonth(g, pm).slice();
+  }
+  g.memberIds = mutateFn((g.memberIds||[]).slice());
+  Object.keys(g.monthlyMembers).forEach(k => {
+    if (k >= ay) g.monthlyMembers[k] = mutateFn((g.monthlyMembers[k]||[]).slice());
+  });
+}
 function snapshotGroupMembers(g) {
   try {
     if (!g) return;
@@ -4682,23 +4710,23 @@ function closeFillSlotModal() {
 // Üye taşıma: üye başka gruplardaysa veya ileri tarihli planlı bireysel dersleri varsa,
 // oralardan çıkarır. Geçmiş dersler ve ödemeler korunur (tarihsel kayıt).
 // keepGroupId verildiyse o gruptan silme (hedef grup).
-function removeMemberFromOtherContexts(memberId, keepGroupId) {
+function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
   const removed = { groups: [], individualLessons: 0 };
+  const __ay = ctxAy || __groupOpsCtxMonth(); // v34
   const __keep = state.groups.find(x => x.id === keepGroupId);
-  state.groups.forEach(g => { if (g.id !== keepGroupId && (g.memberIds||[]).includes(memberId)) snapshotGroupMembers(g); }); // v25
   state.groups.forEach(g => {
     if (g.id === keepGroupId) return;
-    // v22: 2.PAKET ailesi — ayni uyenin ayni ayda birden fazla paketi MESRU.
-    // Klon gruplar (secondOf bagi) birbirinden uye sokmez.
     if (__keep && (g.secondOf === keepGroupId || __keep.secondOf === g.id || (__keep.secondOf && __keep.secondOf === g.secondOf))) return;
-    if ((g.memberIds||[]).includes(memberId)) {
+    const __has = (g.memberIds||[]).includes(memberId) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ay && (g.monthlyMembers[k]||[]).includes(memberId));
+    if (__has) {
       const __wasAuto = (g.name||'') === autoGroupName(g.memberIds||[]); // v28
-      // Slot pozisyonunu koru: üyenin yerine '' koy (geri kalanlar yukarı kaymasın)
-      g.memberIds = g.memberIds.map(x => x === memberId ? '' : x);
-      // Sondaki '' leri kırp ama ortadakileri tut
-      while (g.memberIds.length > 0 && g.memberIds[g.memberIds.length-1] === '') g.memberIds.pop();
-      if (__wasAuto) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v28: isim guncel
-      syncGroupLessonsToRoster(g.id, currentMonth()); // v28: planli dersler guncel
+      applyRosterChange(g, __ay, mids => {
+        const out = mids.map(x => x === memberId ? '' : x);
+        while (out.length > 0 && out[out.length-1] === '') out.pop();
+        return out;
+      });
+      if (__wasAuto) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v28
+      syncGroupLessonsToRoster(g.id, __ay);
       removed.groups.push(g.name);
     }
   });
@@ -4724,12 +4752,13 @@ function syncGroupLessonsToRoster(groupId, fromMonth) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return { updated: 0, over: [] };
   const fm = fromMonth || currentMonth();
-  const mids = (g.memberIds||[]).filter(mid => mid && state.members.some(x=>x.id===mid));
   let updated = 0; const over = [];
   state.lessons.forEach(l => {
     if (l.groupId !== groupId || l.status !== 'planned') return;
     const pm = l.packageMonth || (l.date||'').slice(0,7);
     if (pm < fm) return;
+    // v34: her ders KENDI AYININ kadrosuyla guncellenir
+    const mids = resolveGroupMembersForMonth(g, pm).filter(mid => mid && state.members.some(x=>x.id===mid));
     if (JSON.stringify(l.memberIds||[]) === JSON.stringify(mids)) return;
     l.memberIds = mids.slice();
     if (+g.size) l.size = +g.size;
@@ -4741,21 +4770,22 @@ function syncGroupLessonsToRoster(groupId, fromMonth) {
 function assignMemberToSlot(memberId, groupId, slotIndex) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return;
-  snapshotGroupMembers(g); // v25: gecmis ay kadrosu sabitlenir
-  const __wasAutoName = (g.name||'') === autoGroupName(g.memberIds||[]); // isim otomatik mi uretilmisti?
-  const mids = (g.memberIds||[]).slice();
-  // Çift ekleme önlemi
-  if (mids.includes(memberId)) { alert('Bu üye zaten bu grupta.'); return; }
-  // Üyeyi diğer gruplardan/bireysel derslerden otomatik çıkar
-  const removed = removeMemberFromOtherContexts(memberId, groupId);
-  // SLOT POZİSYONUNU KORU: '' ile pad et, slotIndex'e yerleştir, sondaki '' leri kırp ama ortadakileri tut
-  while (mids.length <= slotIndex) mids.push('');
-  mids[slotIndex] = memberId;
-  while (mids.length > 0 && mids[mids.length-1] === '') mids.pop();
-  g.memberIds = mids; // '' ortada kalabilir → boş slot doğru yerde gözükür
-  if (__wasAutoName) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v18: otomatik isim guncel kalsin
-  { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId); }
-  const __rsync = syncGroupLessonsToRoster(groupId, currentMonth()); // v28: planli dersler yeni kadroya
+  const __ctxAy = __groupOpsCtxMonth(); // v34: ekleme, ISLEM YAPILAN SAYFANIN AYINA yapilir
+  if (resolveGroupMembersForMonth(g, __ctxAy).includes(memberId)) { alert('Bu üye zaten bu grupta.'); return; }
+  const __wasAutoName = (g.name||'') === autoGroupName(g.memberIds||[]);
+  const removed = removeMemberFromOtherContexts(memberId, groupId, __ctxAy);
+  applyRosterChange(g, __ctxAy, mids => {
+    const out = mids.slice();
+    if (out.includes(memberId)) return out;
+    while (out.length <= slotIndex) out.push('');
+    if (out[slotIndex] === '' || out[slotIndex] === undefined) out[slotIndex] = memberId;
+    else out.push(memberId);
+    while (out.length > 0 && out[out.length-1] === '') out.pop();
+    return out;
+  });
+  if (__wasAutoName) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; }
+  { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId, __ctxAy); }
+  const __rsync = syncGroupLessonsToRoster(groupId, __ctxAy); // v34
   save();
   closeFillSlotModal();
   renderMembers(); renderGroups(); renderDashboard(); renderCalendar();
@@ -4779,7 +4809,7 @@ function openMemberModal(id) {
   const isEdit = !!id;
   const m = isEdit ? state.members.find(x=>x.id===id) : { id:'', name:'', phone:'', tcno:'', adres:'', joinDate:todayISO(), instructorId:'', health:'', note:'', instructorShareRate: null, totalPrice: '' };
   // v22: AY BAGLAMI — Uyeler sayfasindaki secili ay. Not ve fiyat SADECE bu aya yazilir.
-  const __ctxMonth = ((document.getElementById('member-month')||{}).value || '') || currentMonth(); // v25: her duzenleme BIR AYA aittir
+  const __ctxMonth = __groupOpsCtxMonth(); // v34: grup detayi aciksa ONUN ayi; yoksa Uyeler sayfasindaki secili ay
   window.__memberEditCtxMonth = __ctxMonth;
   const __ctxLabel = __ctxMonth ? ' — ' + parseISO(__ctxMonth+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}) : '';
   document.getElementById('mm-title').textContent = (isEdit?'Üyeyi Düzenle':'Yeni Üye') + __ctxLabel;
@@ -5023,6 +5053,7 @@ function openMemberDetail(id) {
 function deleteMember(id) {
   const m = state.members.find(x => x.id === id);
   if (!m) return;
+  const __ctxAy = __groupOpsCtxMonth(); // v34: pasiflik, ISLEM YAPILAN SAYFANIN AYINDAN itibaren
   const msg = `"${m.name}" pasif üye listesine taşınacak.\n\n` +
     `• Geçmiş ödemeler, dersler ve gruplar SİLİNMEZ — geçmiş aylarda olduğu gibi gözükür.\n` +
     `• Gelecek tarihli planlı bireysel dersler iptal edilir.\n` +
@@ -5033,13 +5064,16 @@ function deleteMember(id) {
   // Aktif gruplardaki slotu boş yap (pozisyonu koru)
   state.groups.forEach(g => {
     if (!g.memberIds) return;
-    if (!g.memberIds.includes(id)) return;
-    snapshotGroupMembers(g); // v25
+    const __inRoster = (g.memberIds||[]).includes(id) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ctxAy && (g.monthlyMembers[k]||[]).includes(id));
+    if (!__inRoster) return;
     const __wasAuto = (g.name||'') === autoGroupName(g.memberIds||[]); // v28
-    g.memberIds = g.memberIds.map(mid => mid === id ? '' : mid);
-    while (g.memberIds.length > 0 && g.memberIds[g.memberIds.length-1] === '') g.memberIds.pop();
+    applyRosterChange(g, __ctxAy, mids => {
+      const out = mids.map(mid => mid === id ? '' : mid);
+      while (out.length > 0 && out[out.length-1] === '') out.pop();
+      return out;
+    });
     if (__wasAuto) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v28
-    syncGroupLessonsToRoster(g.id, currentMonth()); // v28: planli grup derslerinden de cikar
+    syncGroupLessonsToRoster(g.id, __ctxAy); // v34
   });
   // Gelecek tarihli planlı BİREYSEL derslerini iptal et
   const today = todayISO();
@@ -5049,7 +5083,7 @@ function deleteMember(id) {
       if (l.memberIds.length === 0) l.status = 'cancelled';
     }
   });
-  archiveMember(id, 'manual-delete');
+  archiveMember(id, 'manual-delete', __ctxAy); // v34
   save();
   closeModal('modal-member-detail');
   renderMembers(); renderDashboard(); renderGroups(); renderCalendar();
@@ -6265,7 +6299,11 @@ function saveGroup() {
   const existingGroup = id ? state.groups.find(x=>x.id===id) : null;
   const existingMemberIds = existingGroup ? (existingGroup.memberIds||[]) : [];
   const newlyAdded = memberIds.filter(mid => !existingMemberIds.includes(mid));
-  { const __pg0 = id ? state.groups.find(x=>x.id===id) : null; if (__pg0 && JSON.stringify(__pg0.memberIds||[]) !== JSON.stringify(memberIds||[])) snapshotGroupMembers(__pg0); } // v25
+  { const __pg0 = id ? state.groups.find(x=>x.id===id) : null;
+    if (__pg0 && JSON.stringify(__pg0.memberIds||[]) !== JSON.stringify(memberIds||[])) {
+      const __gAy = (typeof window.__groupEditCtxMonth === 'string' && window.__groupEditCtxMonth) ? window.__groupEditCtxMonth : __groupOpsCtxMonth();
+      applyRosterChange(__pg0, __gAy, () => (memberIds||[]).slice()); // v34
+    } } // v34
   const transferNotes = [];
   newlyAdded.forEach(mid => {
     const removed = removeMemberFromOtherContexts(mid, data.id);
@@ -6620,7 +6658,9 @@ function openGroupDetail(id, monthISO) {
 
   // Grup toplam fiyatını ve eksik fiyat sayısını hesapla (sadece üyelerin tanımlı totalPrice toplamı)
   const groupTotalComputed = groupExpectedTotal(g, monthISO || '');
-  const missingPriceCount = members.filter(m => m.totalPrice === undefined || m.totalPrice === null || m.totalPrice === '').length;
+  // v34: fiyatlar GORUNTULENEN AYIN fiyatidir (ay kanonu) — genel m.totalPrice DEGIL
+  const __ayPrice = (mid) => memberMonthlyTotalPrice(mid, monthISO || currentMonth());
+  const missingPriceCount = members.filter(m => !(+__ayPrice(m.id) > 0)).length;
 
   // Members table with remaining sessions + price
   const memberRows = members.map(m => {
@@ -6641,9 +6681,10 @@ function openGroupDetail(id, monthISO) {
     const tickStyle = hasGroupPay
       ? 'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;'
       : 'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;';
-    const hasPrice = m.totalPrice !== undefined && m.totalPrice !== null && m.totalPrice !== '';
+    const __rowPrice = __ayPrice(m.id);
+    const hasPrice = (+__rowPrice > 0);
     const priceLabel = hasPrice
-      ? `<b>${money(+m.totalPrice)} ₺</b>`
+      ? `<b>${money(+__rowPrice)} ₺</b>`
       : '<span style="color:#c62828;font-style:italic;">tanımsız</span>';
     const priceBtnLabel = hasPrice ? '✏️' : '➕ Fiyat';
     const priceBtnStyle = hasPrice
@@ -6682,15 +6723,8 @@ function openGroupDetail(id, monthISO) {
          ⚠️ <b>${monthISO ? monthISO + ' ayı için paket kaydı yok.' : 'Paket başlangıç tarihi yok.'}</b> ${monthISO ? 'Bu aya ödeme alındığında otomatik oluşur (başlangıç: elle girilen > ilk ders > ayın 1\'i).' : 'Gruba ilk ödeme alındığında otomatik atanır, ya da manuel başlat:'}
          ${monthISO ? '' : `<button class="btn small" style="margin-left:8px" onclick="startGroupPackage('${id}')">▶️ Paketi Bugün Başlat</button>`}
        </div>`;
-  // v10/v27: Ay seçici options (varsayılan: bu ay; "Tüm aylar" YOK — her görünüm bir aya ait)
-  const nowMo = new Date();
-  const monthOptions = [];
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date(nowMo.getFullYear(), nowMo.getMonth()+i, 1);
-    const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const lbl = d.toLocaleDateString('tr-TR', {month:'long', year:'numeric'});
-    monthOptions.push(`<option value="${v}" ${v===monthISO?'selected':''}>${lbl}</option>`);
-  }
+  // v34 (Kerem kurali): GRUP SAYFASINDA BASKA AY OPSIYONU YOK — sayfa hangi aydan acildiysa O AY.
+  const monthLabel = parseISO(monthISO + '-01').toLocaleDateString('tr-TR', {month:'long', year:'numeric'});
   // v10: Aktif paketin durumu (paket uzadı banner için)
   const monthPkg = monthISO ? (g.packages||[]).find(p => p.month === monthISO) : null;
   const pkgExtendedBanner = (monthPkg && monthPkg.status === 'extended')
@@ -6700,7 +6734,7 @@ function openGroupDetail(id, monthISO) {
   const navBar = `<div class="detail-nav">
     <button onclick="openGroupDetail('${prevG?prevG.id:''}', '${monthISO}')" ${!prevG?'disabled':''}>← Önceki Grup${prevG?': '+escapeHtml(prevG.name||''):''}</button>
     <div style="display:flex;align-items:center;gap:8px;">
-      <select onchange="openGroupDetail('${id}', this.value)" style="font-size:13px;padding:4px 8px;">${monthOptions.join('')}</select>
+      <span style="font-weight:700;font-size:14px;padding:4px 10px;background:var(--acc-soft,#e8f0e0);border-radius:14px;">📅 ${monthLabel}</span>
       <span class="pos">${idx+1}/${groupsList.length}</span>
     </div>
     <button onclick="openGroupDetail('${nextG?nextG.id:''}', '${monthISO}')" ${!nextG?'disabled':''}>Sonraki Grup${nextG?': '+escapeHtml(nextG.name||''):''} →</button>
@@ -7174,7 +7208,7 @@ function openGroupPaymentModal(groupId) {
   if (!groupActiveMemberCount(g)) { alert('Önce gruba üye ekle.'); return; }
   // v12: Grup detayı açık kalsın (closeModal kaldırıldı)
   const firstMember = g.memberIds[0];
-  openPaymentModal(firstMember, null, groupId);
+  openPaymentModal(firstMember, null, groupId, (typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) ? currentGroupDetailMonth : '');
 }
 
 // ========== PAYMENTS ==========
@@ -7284,7 +7318,7 @@ function applyProrate() {
     `🧩 <b>${remaining}/${total}</b> ders için orantılı fiyat: <b>${money(proratedList)} ₺</b> (tam paket ${money(fullList)} ₺)${discountText}`;
   renderTaxBreakdown();
 }
-function openPaymentModal(memberId, editId, groupId) {
+function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
   document.getElementById('mp-id').value = editId||'';
   document.getElementById('mp-group').value = groupId||'';
   const mSel = document.getElementById('mp-member');
@@ -7329,27 +7363,14 @@ function openPaymentModal(memberId, editId, groupId) {
     gBanner.style.display = 'none';
     saveAllBtn.style.display = 'none';
   }
-  // v22: Paket Ayi secenekleri (-4..+2 ay) — gec odeme dogru aya yazilir
+  // v34 (Kerem kurali): ODEME, ACILDIGI SAYFANIN AYINA YAZILIR — baska ay secenegi YOK.
   (function(){
-    const pmSel = document.getElementById('mp-pkg-month');
-    if (!pmSel) return;
-    const now = new Date();
-    const opts = [];
-    for (let i=-4;i<=2;i++){
-      const dd = new Date(now.getFullYear(), now.getMonth()+i, 1);
-      const v = dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0');
-      const lbl = dd.toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
-      opts.push(`<option value="${v}">${lbl}</option>`);
-    }
-    pmSel.innerHTML = opts.join('');
-    let defPM = '';
-    try {
-      const ownerType = groupId ? 'group' : 'member';
-      const ownerId = groupId || memberId;
-      if (ownerId) defPM = resolvePackageMonthForDate(ownerType, ownerId, todayISO());
-    } catch(e){}
-    if (!defPM) defPM = (document.getElementById('member-month')||{}).value || currentMonth();
-    if (pmSel.querySelector(`option[value="${defPM}"]`)) pmSel.value = defPM; else pmSel.value = currentMonth();
+    const pmHid = document.getElementById('mp-pkg-month');
+    const pmLbl = document.getElementById('mp-pkg-month-label');
+    if (!pmHid) return;
+    const defPM = pkgMonthCtx || __groupOpsCtxMonth();
+    pmHid.value = defPM;
+    if (pmLbl) pmLbl.value = parseISO(defPM + '-01').toLocaleDateString('tr-TR', {month:'long', year:'numeric'});
     const st = document.getElementById('mp-pkg-start');
     if (st) st.value = '';
     const stF = document.getElementById('mp-pkg-start-field');
@@ -7360,12 +7381,11 @@ function openPaymentModal(memberId, editId, groupId) {
     if (pay) {
       document.getElementById('mp-member').value = pay.memberId;
       document.getElementById('mp-date').value = pay.date;
-      const __pmSel = document.getElementById('mp-pkg-month');
-      if (__pmSel) {
-        const __pm = pay.packageMonth || String(pay.date||'').slice(0,7);
-        if (__pm && !__pmSel.querySelector(`option[value="${__pm}"]`)) __pmSel.insertAdjacentHTML('afterbegin', `<option value="${__pm}">${__pm}</option>`);
-        __pmSel.value = __pm;
-      }
+      const __pmHid = document.getElementById('mp-pkg-month');
+      const __pmLbl = document.getElementById('mp-pkg-month-label');
+      const __pm = pay.packageMonth || String(pay.date||'').slice(0,7);
+      if (__pmHid) __pmHid.value = __pm;
+      if (__pmLbl) __pmLbl.value = __pm ? parseISO(__pm + '-01').toLocaleDateString('tr-TR', {month:'long', year:'numeric'}) : '';
       document.getElementById('mp-sessions').value = pay.sessions;
       document.getElementById('mp-list').value = pay.listPrice || pay.amount;
       document.getElementById('mp-amount').value = pay.amount;
@@ -9547,7 +9567,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.14.07-onizleme';
+const APP_VERSION = '2026.07.15.08-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
