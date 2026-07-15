@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.30-onizleme">
+<meta name="app-version" content="2026.07.15.31-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1593,7 +1593,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" style="display:none;"> <!-- v51: ESKI JSONBin senkron (BinID/xmasterkey) kaldirildi — Supabase kullaniliyor, gerek yok -->
     <h2>☁️ Bulut Senkron (Tüm Cihazlar)</h2>
     <div id="sync-status" style="padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:13px;font-weight:500;"></div>
     <div class="fields-grid">
@@ -9033,11 +9033,13 @@ async function sbResync(reason) {
     // yakinda push olduysa tazeleme (replica gecikmesi) yapma
     if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) return;
     const all = {};
+    let __resyncOk = true;
     for (const t of SB_TABLES) {
       all[t] = {};
-      try { const r = await sbClient.from(t).select('id,data').order('id'); (r.data || []).forEach(row => { all[t][row.id] = row.data; }); }
-      catch(e) { console.error('[sb] resync select', t, e); }
+      try { const r = await sbClient.from(t).select('id,data').order('id'); if (r && r.error) __resyncOk = false; (r.data || []).forEach(row => { all[t][row.id] = row.data; }); }
+      catch(e) { __resyncOk = false; console.error('[sb] resync select', t, e); }
     }
+    if (!__resyncOk) return; // v51 VERI GUVENLIGI: eksik cekimde state'i EZME (geri-sarma yok)
     __sbHarvestVer(all);
     __sbApplying = true; window.__pilSuppressDirty = true;
     state = sbRowsToState(all); applyV10MigrationToState(state); sanitizeStateText(state); save();
@@ -9097,13 +9099,17 @@ async function sbLoadAll() {
   if (!sbClient) return;
   setCloudDot && setCloudDot('syncing');
   const all = {};
+  let __loadOk = true;
   for (const t of SB_TABLES) {
     all[t] = {};
     try {
-      const r = await sbClient.from(t).select('id,data').order('id'); // v40: deterministik yukleme sirasi (cihazlar arasi tutarli)
+      const r = await sbClient.from(t).select('id,data').order('id'); // v40: deterministik yukleme sirasi
+      if (r && r.error) __loadOk = false;
       (r.data || []).forEach(row => { all[t][row.id] = row.data; });
-    } catch(e) { console.error('[sb] select', t, e); }
+    } catch(e) { __loadOk = false; console.error('[sb] select', t, e); }
   }
+  // v51 VERI GUVENLIGI: bir tablo bile CEKILEMEDIYSE state'i EZME — yerel (localStorage) korunur, subscribe + 8sn sonra tekrar dene
+  if (!__loadOk) { setCloudDot && setCloudDot('offline'); try { sbSubscribeAll(); } catch(e){} clearTimeout(sbLoadAll._t); sbLoadAll._t = setTimeout(() => { try { sbLoadAll(); } catch(e){} }, 8000); return; }
   const total = SB_TABLES.reduce((a, t) => a + Object.keys(all[t]).length, 0);
   if (total === 0 && __sbRole === 'owner') {
     await __sbFreshenFromJsonbin(); // GÜVENCE: eski sistemin bulutundaki (JSONBin) EN GÜNCEL hali çek — hangi cihazdan geçilirse geçilsin veri kaybolmaz
@@ -9829,7 +9835,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.30-onizleme';
+const APP_VERSION = '2026.07.15.31-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

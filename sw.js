@@ -1,6 +1,8 @@
-// Pilateria Service Worker - minimal, sadece install ve offline fallback için
-// Veriler localStorage'da, bu yüzden cache stratejisi: network-first, cache fallback
-const CACHE_NAME = 'pilateria-v67-2026-07-15-30';
+// Pilateria Service Worker - yalnizca UYGULAMA KABUGU icin (Supabase verileri ASLA cache'lenmez)
+// v51 KOK FIX: eski SW, Supabase GET okumalarini da cache'liyordu; ag kesintisinde ESKI veriyi servis edip
+// state'i geri sariyordu. Artik yalniz kendi kaynagimizdaki (app dosyalari) GET'ler yonetilir; Supabase/harici
+// istekler HIC dokunulmadan dogrudan aga gider (veri tazeligi ZORUNLU).
+const CACHE_NAME = 'pilateria-v68-2026-07-15-31';
 const ASSETS = [
   './',
   './index.html',
@@ -28,11 +30,14 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Sadece GET isteklerini cache'le
   if (e.request.method !== 'GET') return;
-  // JSONBin API isteklerini cache'leme - her zaman fresh
-  if (e.request.url.includes('jsonbin.io')) return;
-  // Network-first, cache fallback
+  let url;
+  try { url = new URL(e.request.url); } catch (err) { return; }
+  // YALNIZ kendi kaynagimizdaki (uygulama dosyalari) GET'leri yonet.
+  // Supabase (*.supabase.co), JSONBin ve TUM harici/API istekleri HIC dokunulmaz -> her zaman dogrudan ag,
+  // ASLA cache'lenmez, ASLA cache'ten servis edilmez (veri geri sarmaz).
+  if (url.origin !== self.location.origin) return;
+  // Uygulama dosyalari: network-first, cache fallback (yalniz cevrimdisi acilis icin)
   e.respondWith(
     fetch(e.request)
       .then(res => {
