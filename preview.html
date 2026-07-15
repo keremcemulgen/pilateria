@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.15-onizleme">
+<meta name="app-version" content="2026.07.15.16-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -4184,7 +4184,8 @@ function buildMemberRows(monthISO) {
   const defaultPkgPrice = ((state.packageTypes||[])[0]||{}).price || 7000;
   // ÖNCE: Bireysel üyeler (gruba dahil olmayanlar) — en üstte
   // Aylık enrollment filtresi: bu aya enrolled olmayan üyeyi gösterme
-  state.members.forEach(m => {
+  // v40: DETERMINISTIK SIRA — bireysel uyeler alfabetik (cihazlar arasi AYNI; Supabase random satir sirasindan/rastgele id'den bagimsiz)
+  state.members.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','tr') || String(a.id||'').localeCompare(String(b.id||'')); }).forEach(m => {
     // v24: AY BAZLI pasiflik — o ayda pasifse gizli; yeniden aktive edilse bile GECMIS pasif aylar sabit kalir
     if (!monthISO) { if (m.archived) return; }
     else if (isMemberInactiveInMonth(m, monthISO)) return;
@@ -8963,7 +8964,7 @@ async function sbLoadAll() {
   for (const t of SB_TABLES) {
     all[t] = {};
     try {
-      const r = await sbClient.from(t).select('id,data');
+      const r = await sbClient.from(t).select('id,data').order('id'); // v40: deterministik yukleme sirasi (cihazlar arasi tutarli)
       (r.data || []).forEach(row => { all[t][row.id] = row.data; });
     } catch(e) { console.error('[sb] select', t, e); }
   }
@@ -9589,7 +9590,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.15-onizleme';
+const APP_VERSION = '2026.07.15.16-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
