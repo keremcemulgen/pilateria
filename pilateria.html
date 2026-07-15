@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.27">
+<meta name="app-version" content="2026.07.15.28">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2713,7 +2713,9 @@ function perLessonPriceForLesson(l) {
       const m = state.members.find(x => x.id === l.packageOwnerId);
       const pkg = m && memberPackageForMonth(m, l.packageMonth);
       if (pkg && pkg.sessions > 0) {
-        return (+pkg.price || 0) / pkg.sessions;
+        // v48 TEK KAYNAK: bireysel uye ay-fiyati memberMonthlyTotalPrice (override>totalPrice>tip); stale paket-kaydi fiyati KULLANILMAZ; uzadi ise 0
+        const __pp = (pkg.status === 'extended') ? 0 : (memberMonthlyTotalPrice(m.id, l.packageMonth) || (+pkg.price || 0));
+        return (+__pp || 0) / pkg.sessions;
       }
     }
   }
@@ -5096,7 +5098,7 @@ function openMemberDetail(id) {
       <span><b>Paket (${ctxAy}):</b> ${(() => { const pid = (m.monthly && m.monthly[ctxAy] && m.monthly[ctxAy].packageId) || m.defaultPackageId; const pt = state.packageTypes.find(x=>x.id===pid); return pt ? `${escapeHtml(pt.name)} (${pt.sessions} ders × ${money(pt.price)} ₺)` : '<span style="color:var(--muted)">seçilmedi — ✏️ Düzenle\'den seç</span>'; })()}</span>
     </div>
     ${activePkg ? `<div style="padding:8px 12px;background:${activePkg.status==='extended'?'#FFF3E0':'#e8f0e0'};border-radius:6px;margin:8px 0;font-size:13px;">
-      📦 <b>${thisMonth} Paketi:</b> ${activePkg.sessions} ders × ${money(activePkg.price)} ₺ — ${activePkg.status==='extended'?'<span style="color:var(--warn)"><b>Paket uzadı (0 ₺)</b></span>':'aktif'}
+      📦 <b>${thisMonth} Paketi:</b> ${activePkg.sessions} ders × ${money(activePkg.status==='extended' ? 0 : (memberMonthlyTotalPrice(m.id, thisMonth) || activePkg.price))} ₺ — ${activePkg.status==='extended'?'<span style="color:var(--warn)"><b>Paket uzadı (0 ₺)</b></span>':'aktif'}
       ${activePkg.extendedNote ? '<br>📝 ' + escapeHtml(activePkg.extendedNote) : ''}
     </div>` : ''}
     ${m.adres?`<div class="note-block" style="background:#f3e5f5;border-left-color:#8e24aa;color:#4a148c;">📍 <b>Adres:</b> ${escapeHtml(m.adres)}</div>`:''}
@@ -9792,7 +9794,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.27';
+const APP_VERSION = '2026.07.15.28';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
