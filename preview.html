@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.14-onizleme">
+<meta name="app-version" content="2026.07.15.15-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1242,7 +1242,7 @@
 <section class="page active" id="page-dashboard">
   <div class="row" style="margin-bottom:10px;align-items:center;gap:8px;flex-wrap:wrap;">
     <label style="font-size:13px;color:var(--muted);font-weight:600;">📅 Panel ayı:</label>
-    <input type="month" id="dash-month" onchange="renderDashboard()" style="max-width:180px;">
+    <input type="month" id="dash-month" onchange="window.__dashMonthUserSet=true; renderDashboard()" style="max-width:180px;">
     <span style="font-size:12px;color:var(--muted);">(gelir ve doluluk bu aya göre)</span>
   </div>
   <div class="grid-stats">
@@ -3002,6 +3002,12 @@ function renderDashboard() {
   // 31 Mayıs'ta alınan Haziran paketi ödemesi HAZİRAN gelirinde görünür — her yerde tek rakam)
   // v35: PANEL AY SEÇİCİ — gelir+doluluk SEÇİLİ AYA göre (varsayılan içinde bulunulan ay)
   const __dm = document.getElementById('dash-month');
+  // v39: panel varsayilan ayi = EN SON odeme olan ay (kullanici degistirene kadar) — bos ay yerine veri olan ay gorunur
+  if (__dm && !window.__dashMonthUserSet) {
+    const __cm0 = currentMonth();
+    const __pm = (state.payments||[]).map(function(p){return p.packageMonth||(p.date?String(p.date).slice(0,7):'');}).filter(function(mm){return mm && mm <= __cm0;}).sort();
+    __dm.value = __pm.length ? __pm[__pm.length-1] : __cm0;
+  }
   const m = (__dm && __dm.value) || currentMonth();
   const __mLbl = (() => { try { return parseISO(m+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return m; } })();
   { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Geliri (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
@@ -7788,7 +7794,7 @@ function renderPayments() {
 function renderReports() {
   const m = document.getElementById('rep-month').value || currentMonth();
   document.getElementById('rep-month').value = m;
-  const payments = state.payments.filter(p=>p.date && p.date.startsWith(m));
+  const payments = state.payments.filter(p=>((p.packageMonth||(p.date?String(p.date).slice(0,7):''))===m)); // v39: gelir PAKET AYINA gore (odeme tarihi degil) — her yerle tutarli
   const lessons = state.lessons.filter(l=>l.date && l.date.startsWith(m));
   const revenue = payments.reduce((a,b)=>a+(+b.amount||0),0);
   const uniqueMembers = new Set(lessons.flatMap(l=>l.memberIds)).size;
@@ -9583,7 +9589,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.14-onizleme';
+const APP_VERSION = '2026.07.15.15-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
