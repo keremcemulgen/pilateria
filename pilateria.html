@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.17">
+<meta name="app-version" content="2026.07.15.18">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -4026,6 +4026,12 @@ function removeMemberFromMonth(memberId, monthISO) {
   if (!m || !monthISO) return;
   if (!confirm(`"${m.name}" üyesi yalnızca ${monthISO} ayının listesinden gizlenecek. Geçmiş aylar (önceki paket, dersler, ödemeler) korunur. Devam?`)) return;
   setMemberMonthly(memberId, monthISO, { enrolled: false });
+  // v42: o ayda pasif olan uye o ayin PLANLI grup derslerinden de cikar (yapilmis/iptal dersler TARIHSEL — dokunulmaz)
+  state.lessons.forEach(l => {
+    if (!l.groupId || l.status !== 'planned') return;
+    const __pm = l.packageMonth || (l.date||'').slice(0,7);
+    if (__pm === monthISO && (l.memberIds||[]).includes(memberId)) l.memberIds = (l.memberIds||[]).filter(x => x !== memberId);
+  });
   save();
   if (typeof renderMembers === 'function') renderMembers();
   if (typeof renderDashboard === 'function') renderDashboard();
@@ -5066,7 +5072,10 @@ function openMemberDetail(id) {
 function deleteMember(id) {
   const m = state.members.find(x => x.id === id);
   if (!m) return;
-  const __ctxAy = __groupOpsCtxMonth(); // v34: pasiflik, ISLEM YAPILAN SAYFANIN AYINDAN itibaren
+  // v42 (Kerem karari): "Pasife Al" = SADECE O AY (🗓️✕ 'bu aydan cikart' ile AYNI mantik). Arsivleme/gelecek-ay etkilenmez.
+  if (m.archived) { permanentDeleteMember(id); return; }
+  { const __ctx42 = __groupOpsCtxMonth(); removeMemberFromMonth(id, __ctx42); refreshMemberDetailIfOpen(); return; }
+  const __ctxAy = __groupOpsCtxMonth(); // v34 (asagisi artik ULASILMAZ — eski arsiv akisi)
   const msg = `"${m.name}" pasif üye listesine taşınacak.\n\n` +
     `• Geçmiş ödemeler, dersler ve gruplar SİLİNMEZ — geçmiş aylarda olduğu gibi gözükür.\n` +
     `• Gelecek tarihli planlı bireysel dersler iptal edilir.\n` +
@@ -9580,7 +9589,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.17';
+const APP_VERSION = '2026.07.15.18';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

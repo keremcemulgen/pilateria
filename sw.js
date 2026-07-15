@@ -1,6 +1,6 @@
 // Pilateria Service Worker - minimal, sadece install ve offline fallback için
 // Veriler localStorage'da, bu yüzden cache stratejisi: network-first, cache fallback
-const CACHE_NAME = 'pilateria-v54-2026-07-15-17';
+const CACHE_NAME = 'pilateria-v55-2026-07-15-18';
 const ASSETS = [
   './',
   './index.html',
