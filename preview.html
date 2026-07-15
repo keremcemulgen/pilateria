@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.22-onizleme">
+<meta name="app-version" content="2026.07.15.23-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -8676,7 +8676,7 @@ function sbInit() {
   if (!SUPABASE_MODE || sbClient) return sbClient;
   try {
     if (typeof supabase === 'undefined' || !supabase.createClient) { console.error('[sb] vendor yüklü değil'); return null; }
-    sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+    sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: true } }); // v.23: oturum KALICI DEGIL — her acilista rol secici + sifre istenir (Kerem istegi)
   } catch(e) { console.error('[sb] init hatası', e); }
   return sbClient;
 }
@@ -9767,7 +9767,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.22-onizleme';
+const APP_VERSION = '2026.07.15.23-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
