@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.26-onizleme">
+<meta name="app-version" content="2026.07.15.27-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9108,14 +9108,23 @@ async function sbLoadAll() {
     const ok = await plConfirm('Bulut veritabanı boş. Bu cihazdaki TÜM veriler (üye, ders, ödeme...) buluta taşınsın mı?\n\nBu tek seferlik kurulum adımıdır.', 'Evet, taşı');
     if (ok) { await sbMigrateLocal(); return; }
   }
+  // v47 VERI GUVENLIGI: yenilemeden once gonderilememis (dirty) yerel degisiklikler VARSA koru + gonder
+  const __wasDirty = (typeof isDirty === 'function') && isDirty();
+  const __localState = __wasDirty ? state : null;
   window.__pilSuppressDirty = true;
   __sbHarvestVer(all);
   state = sbRowsToState(all);
   applyV10MigrationToState(state);
   sanitizeStateText(state);
+  sbSnapshotShadow(sbStateToRows()); // shadow = SUNUCU hali (diff temeli)
+  if (__wasDirty && __localState) {
+    // yerel hali geri koy → sbDiffPush yalniz YERELIN DEGISTIRDIGI kayitlari gonderir (sunucu-shadow ile diff)
+    state = __localState;
+    try { await sbDiffPush(); } catch(e) { console.error('[sb] acilis dirty push', e); }
+    sbSnapshotShadow(sbStateToRows()); // shadow = yerel (gonderildi)
+  }
   save();
   window.__pilSuppressDirty = false;
-  sbSnapshotShadow(sbStateToRows());
   __refreshUIInPlace();
   sbSubscribeAll();
   setCloudDot && setCloudDot('ok');
@@ -9173,7 +9182,7 @@ function sbSchedulePush() {
   if (!SUPABASE_MODE || !sbClient || __sbApplying) return;
   clearTimeout(__sbPushTimer);
   setCloudDot && setCloudDot('pending');
-  __sbPushTimer = setTimeout(sbDiffPush, 800);
+  __sbPushTimer = setTimeout(sbDiffPush, 500); // v47: daha hizli senkron (yenileme veri kaybi penceresi kucult)
 }
 async function sbDiffPush() {
   if (!sbClient) return;
@@ -9255,6 +9264,9 @@ function sbSubscribeAll() {
       try {
         window.addEventListener('online', () => sbResync('online'));
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sbResync('visible'); });
+        // v47: sayfa GIZLENINCE/KAPANIRKEN pending yerel degisiklikleri HEMEN gonder (yenileme/kapatma veri kaybini onler)
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && typeof isDirty === 'function' && isDirty()) { clearTimeout(__sbPushTimer); sbDiffPush(); } });
+        window.addEventListener('pagehide', () => { if (typeof isDirty === 'function' && isDirty()) { clearTimeout(__sbPushTimer); sbDiffPush(); } });
         // v46: 'focus' tetikleyicisi KALDIRILDI — her confirm()/alert() sonrasi ateslenip pending yerel degisiklikleri eziyordu
       } catch(e){}
     }
@@ -9792,7 +9804,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.26-onizleme';
+const APP_VERSION = '2026.07.15.27-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
