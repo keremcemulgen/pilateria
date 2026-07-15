@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.23">
+<meta name="app-version" content="2026.07.15.24">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2800,7 +2800,7 @@ function switchPage(page) {
   if (page==='calendar') renderCalendar();
   if (page==='groups') renderGroups();
   if (page==='members') renderMembers();
-  if (page==='archive') renderArchive();
+  if (page==='archive') { const __am=document.getElementById('archive-month'); if(__am){ __am.value = ((document.getElementById('member-month')||{}).value) || currentMonth(); } renderArchive(); }
   if (page==='instructors') { renderInstructors(); renderSalaries(); }
   if (page==='payments') renderPayments();
   if (page==='reports') renderReports();
@@ -5113,7 +5113,7 @@ function deleteMember(id) {
   if (!m) return;
   // v42 (Kerem karari): "Pasife Al" = SADECE O AY (🗓️✕ 'bu aydan cikart' ile AYNI mantik). Arsivleme/gelecek-ay etkilenmez.
   if (m.archived) { permanentDeleteMember(id); return; }
-  { const __ctx42 = __groupOpsCtxMonth(); const __ok = removeMemberFromMonth(id, __ctx42); if (__ok) { currentMemberDetailId = null; closeModal('modal-member-detail'); } else { refreshMemberDetailIfOpen(); } return; }
+  { const __ctx42 = __groupOpsCtxMonth(); const __nm = (m.name||'Üye'); const __ok = removeMemberFromMonth(id, __ctx42); if (__ok) { currentMemberDetailId = null; closeModal('modal-member-detail'); if (window.plToast) plToast('"'+__nm+'" '+__ctx42+' ayında pasife alındı · Pasif Üyeler ('+__ctx42+')'); } else { refreshMemberDetailIfOpen(); } return; }
   const __ctxAy = __groupOpsCtxMonth(); // v34 (asagisi artik ULASILMAZ — eski arsiv akisi)
   const msg = `"${m.name}" pasif üye listesine taşınacak.\n\n` +
     `• Geçmiş ödemeler, dersler ve gruplar SİLİNMEZ — geçmiş aylarda olduğu gibi gözükür.\n` +
@@ -9755,7 +9755,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.23';
+const APP_VERSION = '2026.07.15.24';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
