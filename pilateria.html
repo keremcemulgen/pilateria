@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.18">
+<meta name="app-version" content="2026.07.15.19">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1398,7 +1398,11 @@
         <h2 style="margin:0;">💤 Pasif Üyeler</h2>
         <small style="color:var(--muted);">Silinen veya 1-2 ay ara veren üyeler burada. Yeni bir gruba/derse eklersen otomatik aktive olur.</small>
       </div>
-      <input type="search" id="archive-search" placeholder="Pasif üye ara..." oninput="renderArchive()" style="max-width:280px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label style="font-size:13px;color:var(--muted);font-weight:600;">📅 Ay:</label>
+        <input type="month" id="archive-month" onchange="renderArchive()" style="max-width:170px;">
+        <input type="search" id="archive-search" placeholder="Pasif üye ara..." oninput="renderArchive()" style="max-width:240px;">
+      </div>
     </div>
     <div id="archive-stats" class="grid-stats" style="margin-bottom:12px;"></div>
     <div class="table-wrap">
@@ -4342,52 +4346,71 @@ function buildMemberRows(monthISO) {
 }
 // v10: Pasif (arşiv) üye sayfası render
 function renderArchive() {
+  // v43: AY BAZLI PASIF — secili ayda pasif (enrolled:false VEYA archived/donem) uyeler
   const q = (document.getElementById('archive-search')?.value || '').toLowerCase();
-  let archived = state.members.filter(m => m.archived);
-  // v24: gecmis pasif donemi olan AKTIF uyeler de bu sekmede gorunur (donem bilgisiyle)
-  let pastOnly = state.members.filter(m => !m.archived && Array.isArray(m.archivePeriods) && m.archivePeriods.length);
-  if (q) {
-    archived = archived.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').toLowerCase().includes(q));
-    pastOnly = pastOnly.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').toLowerCase().includes(q));
-  }
-  // Stats
-  const totalArch = state.members.filter(m => m.archived).length;
+  const __am = document.getElementById('archive-month');
+  const ay = (__am && __am.value) || currentMonth();
+  if (__am && !__am.value) __am.value = ay;
+  const monthLabel = (function(){ try { return parseISO(ay+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return ay; } })();
+  let passives = state.members.filter(m => {
+    if (m.joinDate && String(m.joinDate).slice(0,7) > ay) return false; // henuz katilmamis = pasif degil
+    return !isMemberEnrolledInMonth(m.id, ay); // o ay aktif degilse = pasif
+  });
+  if (q) passives = passives.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').toLowerCase().includes(q));
+  passives.sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
   const stEl = document.getElementById('archive-stats');
   if (stEl) stEl.innerHTML = `
-    <div class="stat blue"><div class="label">Şu An Pasif</div><div class="value">${totalArch}</div></div>
-    <div class="stat"><div class="label">Geçmişte Pasif Kalmış (şimdi aktif)</div><div class="value">${state.members.filter(m=>!m.archived&&(m.archivePeriods||[]).length).length}</div></div>
+    <div class="stat blue"><div class="label">${monthLabel} — Pasif Uye</div><div class="value">${passives.length}</div></div>
+    <div class="stat"><div class="label">Su An Arsivli (tum aylar)</div><div class="value">${state.members.filter(m=>m.archived).length}</div></div>
   `;
   const tb = document.getElementById('archive-tbody');
   if (!tb) return;
-  if (!archived.length && !pastOnly.length) {
-    tb.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="big">💤</div>Pasif üye yok.<br><small>Bir üyeyi silmek istediğinde buraya taşınır, geçmişi kaybolmaz.</small></div></td></tr>`;
+  if (!passives.length) {
+    tb.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="big">💤</div>${monthLabel} ayinda pasif uye yok.</div></td></tr>`;
     return;
   }
-  // Sırala: en son arşivlenen üstte
-  archived.sort((a,b) => (b.archivedAt||'').localeCompare(a.archivedAt||''));
-  tb.innerHTML = archived.map(m => {
+  tb.innerHTML = passives.map(m => {
     const pCnt = state.payments.filter(p => p.memberId === m.id).length;
     const lCnt = state.lessons.filter(l => (l.memberIds||[]).includes(m.id)).length;
-    const reason = m.archivedReason || '—';
-    const reasonLabel = reason.startsWith('group-deleted:') ? `Grup silindi: ${escapeHtml(reason.slice(14))}` : escapeHtml(reason);
+    const isArch = !!m.archived;
+    const how = isArch ? ('Arsivli' + (m.archivedAt?(' · '+String(m.archivedAt).slice(0,7)+"'dan beri"):'')) : (ay + ' ayindan cikarildi');
+    const reason = m.archivedReason ? (String(m.archivedReason).startsWith('group-deleted:') ? 'Grup silindi: '+escapeHtml(String(m.archivedReason).slice(14)) : escapeHtml(m.archivedReason)) : '—';
     return `<tr class="archived-row">
-      <td><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">Pasif${m.archivedAt?(' · '+String(m.archivedAt).slice(0,7)+"'dan beri"):''}</span>${(m.archivePeriods||[]).length?`<br><small style="color:var(--muted)">Önceki pasif dönem: ${m.archivePeriods.map(pp=>pp.from+'→'+(pp.to||'…')).join(', ')}</small>`:''}</td>
+      <td><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">${how}</span></td>
       <td>${escapeHtml(m.phone||'—')}</td>
-      <td>${m.archivedAt ? fmtDate(m.archivedAt) : '—'}</td>
-      <td>${reasonLabel}</td>
+      <td>${m.archivedAt ? fmtDate(m.archivedAt) : ay}</td>
+      <td>${reason}</td>
       <td>${pCnt}</td>
       <td>${lCnt}</td>
       <td>
-        <button class="btn small ok" onclick="reactivateMember('${m.id}')" title="Üyeyi aktif üyelere geri getir">↩️ Aktive Et</button>
-        <button class="btn small secondary" onclick="openMemberDetail('${m.id}')" title="Detayları gör">Detay</button>
-        <button class="btn small danger" onclick="permanentDeleteMember('${m.id}')" title="Tüm verileriyle kalıcı sil">🗑️ Kalıcı Sil</button>
+        <button class="btn small ok" onclick="reactivateMemberForMonth('${m.id}','${ay}')" title="${monthLabel} ayinda aktif uyelere geri getir">↩️ ${ay} Aktive Et</button>
+        <button class="btn small secondary" onclick="openMemberDetail('${m.id}')" title="Detay">Detay</button>
+        ${isArch ? `<button class="btn small danger" onclick="permanentDeleteMember('${m.id}')" title="Kalici sil">🗑️ Kalici Sil</button>` : ''}
       </td>
     </tr>`;
-  }).join('') + (pastOnly.length ? `<tr><td colspan="7" style="background:var(--acc-soft,#e8f0e0);font-weight:700;padding:8px 12px;">↩️ Geçmişte pasif kalmış, şu an AKTİF üyeler (kayıt sabittir)</td></tr>` + pastOnly.map(m => `<tr>
-      <td><b>${escapeHtml(m.name||'')}</b> <span class="badge ok">Aktif</span></td>
-      <td colspan="5" style="font-size:12px;color:var(--muted);">Pasif dönem${(m.archivePeriods||[]).length>1?'ler':''}: <b>${(m.archivePeriods||[]).map(pp=>pp.from+' → '+(pp.to||'…')).join(' , ')}</b>${(m.archivePeriods||[]).some(pp=>pp.reason)?` · ${escapeHtml((m.archivePeriods.find(pp=>pp.reason)||{}).reason||'')}`:''}</td>
-      <td><button class="btn small secondary" onclick="openMemberDetail('${m.id}')">Detay</button></td>
-    </tr>`).join('') : '');
+  }).join('');
+}
+function reactivateMemberForMonth(id, month) {
+  // v43: secili AYDA aktive et (ay-bazli pasif icin enrolled:true; legacy arsivli icin unarchive)
+  const m = state.members.find(x=>x.id===id);
+  if (!m || !month) return;
+  if (m.archived && typeof unarchiveMember==='function') unarchiveMember(id, month);
+  setMemberMonthly(id, month, { enrolled: true });
+  if (Array.isArray(m.archivePeriods)) {
+    m.archivePeriods = m.archivePeriods.filter(per => {
+      const f = String((per&&per.from)||'').slice(0,7); const t = String((per&&per.to)||'').slice(0,7);
+      return !(f && month >= f && (!t || month < t)); // o ayi kapsayan pasif donemi kaldir
+    });
+  }
+  // gruptaki uyeyse o ayin gruop derslerine geri kat
+  state.groups.forEach(g => { if ((g.memberIds||[]).includes(id) && typeof syncGroupLessonsToRoster==='function') syncGroupLessonsToRoster(g.id, month); });
+  save();
+  if (typeof renderArchive==='function') renderArchive();
+  if (typeof renderMembers==='function') renderMembers();
+  if (typeof renderDashboard==='function') renderDashboard();
+  if (typeof renderGroups==='function') renderGroups();
+  if (typeof refreshMemberDetailIfOpen==='function') refreshMemberDetailIfOpen();
+  if (typeof refreshGroupDetailIfOpen==='function') refreshGroupDetailIfOpen();
 }
 // v10: Pasif üyeyi tek tıkla aktive et
 function reactivateMember(id) {
@@ -9589,7 +9612,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.18';
+const APP_VERSION = '2026.07.15.19';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
