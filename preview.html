@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.09-onizleme">
+<meta name="app-version" content="2026.07.15.10-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9352,6 +9352,7 @@ function getStoredPinHash() {
 function hasPinSet() { return !!getStoredPinHash(); }
 let __pinSessionUnlocked = false;
 function lockIfNeeded() {
+  if (SUPABASE_MODE) return; // FAZ2: Supabase modunda PIN yok
   if (__pinSessionUnlocked) return;
   if (!hasPinSet()) return;
   const ov = document.getElementById('pin-lock-overlay');
@@ -9483,6 +9484,7 @@ async function diagnosePinSync() {
 }
 
 function showPinLockScreen() {
+  if (SUPABASE_MODE) return; // FAZ2: Supabase modunda PIN overlay gosterme
   const ov = document.getElementById('pin-lock-overlay');
   if (!ov) return;
   ov.style.display = 'flex';
@@ -9567,7 +9569,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.09-onizleme';
+const APP_VERSION = '2026.07.15.10-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
