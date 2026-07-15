@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.25">
+<meta name="app-version" content="2026.07.15.26">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -8989,7 +8989,7 @@ const SB_TABLES = ['members','member_finance','groups','group_finance','lessons'
 
 // ===== v.20 EŞZAMANLILIK: zaman-damgalı çakışma çözümü + yeniden-tazeleme =====
 let __sbVer = {};      // tablo -> { id -> _v (updatedAt ms) }
-let __sbWasDropped = false, __sbListenersAdded = false, __sbResyncBusy = false, __sbLastResync = 0;
+let __sbWasDropped = false, __sbListenersAdded = false, __sbResyncBusy = false, __sbLastResync = 0, __sbLastPushAt = 0;
 // Sunucudan gelen satirlarin _v damgasini __sbVer'e al, veriden temizle (domain nesnesi temiz kalsin)
 function __sbHarvestVer(all) {
   SB_TABLES.forEach(t => {
@@ -9011,10 +9011,10 @@ async function sbResync(reason) {
   if (__uiBusyForPull && __uiBusyForPull()) { clearTimeout(sbResync._t); sbResync._t = setTimeout(() => sbResync(reason), 3000); return; }
   __sbResyncBusy = true; __sbLastResync = now;
   try {
-    if (typeof isDirty === 'function' && isDirty()) {
-      try { localStorage.setItem('pilateria_pre_resync_backup', JSON.stringify({ at: new Date().toISOString(), reason: reason, state: localStorage.getItem('pilateria') })); } catch(e){}
-      try { await sbDiffPush(); } catch(e){}
-    }
+    // v46 VERI GUVENLIGI: pending yerel degisiklik varsa SADECE gonder, state'i EZME (yaz-sonra-oku gecikmesi eski veriyi geri getirmesin)
+    if (typeof isDirty === 'function' && isDirty()) { try { await sbDiffPush(); } catch(e){} return; }
+    // yakinda push olduysa tazeleme (replica gecikmesi) yapma
+    if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) return;
     const all = {};
     for (const t of SB_TABLES) {
       all[t] = {};
@@ -9187,7 +9187,7 @@ async function sbDiffPush() {
       dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
-  if (okAll) { try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
+  if (okAll) { __sbLastPushAt = Date.now(); try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
   else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbDiffPush, 15000); }
   setCloudDot && setCloudDot(okAll ? 'ok' : 'offline');
 }
@@ -9217,7 +9217,8 @@ function sbSubscribeAll() {
         }
         // state'i topluca yeniden kur (basit ve güvenli): shadow'dan
         clearTimeout(__sbRtTimer);
-        __sbRtTimer = setTimeout(() => {
+        __sbRtTimer = setTimeout(async () => {
+          if (typeof isDirty === 'function' && isDirty()) { try { await sbDiffPush(); } catch(e){} } // v46: pending yerel degisiklikleri once gonder — rebuild ezmesin
           const all = {};
           SB_TABLES.forEach(tt => { all[tt] = {}; for (const id in (__sbShadow[tt] || {})) all[tt][id] = JSON.parse(__sbShadow[tt][id]); });
           __sbApplying = true;
@@ -9242,7 +9243,7 @@ function sbSubscribeAll() {
       try {
         window.addEventListener('online', () => sbResync('online'));
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sbResync('visible'); });
-        window.addEventListener('focus', () => sbResync('focus'));
+        // v46: 'focus' tetikleyicisi KALDIRILDI — her confirm()/alert() sonrasi ateslenip pending yerel degisiklikleri eziyordu
       } catch(e){}
     }
   } catch(e) { console.error('[sb] subscribe', e); }
@@ -9779,7 +9780,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.25';
+const APP_VERSION = '2026.07.15.26';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
