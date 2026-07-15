@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.37-onizleme">
+<meta name="app-version" content="2026.07.15.38-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1062,12 +1062,17 @@
     table.resp-cards, table.resp-cards tbody, table.resp-cards tr, table.resp-cards td { display:block; width:100%; }
     table.resp-cards thead { position:absolute; left:-9999px; top:-9999px; }
     table.resp-cards tr { margin:0 0 10px; border:1px solid var(--border); border-radius:12px; padding:10px 12px; background:var(--card); box-shadow:0 1px 3px rgba(0,0,0,.05); }
-    table.resp-cards td { border:none !important; padding:4px 0 !important; display:block; font-size:13.5px; text-align:left; min-height:0; overflow-wrap:anywhere; word-break:break-word; }
-    table.resp-cards td::before { content:attr(data-label); display:block; font-weight:600; color:var(--muted); font-size:11px; margin-bottom:1px; }
-    table.resp-cards td.card-actions { display:flex; flex-wrap:wrap; gap:6px; padding-top:9px !important; margin-top:5px; border-top:1px solid var(--border) !important; }
+    table.resp-cards td { border:none !important; padding:2px 0 !important; display:block; font-size:13px; text-align:left; min-height:0; overflow-wrap:anywhere; word-break:break-word; color:var(--text); }
+    table.resp-cards td::before { content:attr(data-label) ": "; font-weight:600; color:var(--muted); font-size:11.5px; }
+    table.resp-cards td.card-title { font-size:15.5px; font-weight:700; margin-bottom:4px; padding-bottom:4px !important; }
+    table.resp-cards td.card-title::before { display:none; }
+    table.resp-cards td.card-actions { display:flex; flex-wrap:wrap; gap:6px; padding-top:10px !important; margin-top:7px; border-top:1px solid var(--border) !important; }
     table.resp-cards td.card-actions::before { display:none; }
-    table.resp-cards td.card-actions .btn { flex:1 1 100%; min-width:0; margin:0; box-sizing:border-box; }
-    table.resp-cards tr.archived-row { border-left:4px solid #d7c8a3; background:var(--card); }
+    table.resp-cards td.card-actions .btn { flex:1 1 auto; min-width:calc(50% - 4px); margin:0; box-sizing:border-box; }
+    table.resp-cards td.card-actions .btn:first-child { flex-basis:100%; }
+    table.resp-cards tr.archived-row { background:#faf6ec; border-color:#e6d9b8; }
+    :root:not([data-theme="light"]) table.resp-cards tr.archived-row { background:#26221a; border-color:#3a3423; }
+    table.resp-cards .archived-row td { background:transparent !important; color:inherit !important; }
     table.resp-cards td[data-hide-mobile] { display:none; }
     .table-wrap:has(table.resp-cards) { overflow-x:hidden; }
   }
@@ -4417,9 +4422,10 @@ function renderArchive() {
     if (isArch && m.archivedAt) __since = String(m.archivedAt).slice(0,7);
     const __sinceLabel = (function(){ try { return parseISO(__since+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return __since; } })();
     const how = __sinceLabel + " ayından beri pasif";
-    const reason = m.archivedReason ? (String(m.archivedReason).startsWith('group-deleted:') ? 'Grup silindi: '+escapeHtml(String(m.archivedReason).slice(14)) : escapeHtml(m.archivedReason)) : '—';
+    const __reasonMap = { 'manual-delete':'Elle pasife alındı', 'manual':'Elle pasife alındı', 'inactive':'Ara verdi', 'no-payment':'Ödeme yok' };
+    const reason = m.archivedReason ? (String(m.archivedReason).startsWith('group-deleted:') ? 'Grup silindi: '+escapeHtml(String(m.archivedReason).slice(14)) : (__reasonMap[m.archivedReason] || escapeHtml(m.archivedReason))) : '—';
     return `<tr class="archived-row">
-      <td data-label="Üye"><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">${how}</span></td>
+      <td data-label="Üye" class="card-title"><b>${escapeHtml(m.name||'')}</b> <span class="archived-badge">${how}</span></td>
       <td data-label="Telefon">${escapeHtml(m.phone||'—')}</td>
       <td data-label="Pasif tarihi">${__since}</td>
       <td data-label="Sebep">${reason}</td>
@@ -7861,7 +7867,7 @@ function renderPayments() {
     const groupCell = p.groupId ? `<br><small style="color:var(--p2)">👯 ${groupName(p.groupId)}</small>` : '';
     return `<tr>
       <td data-label="Tarih">${fmtDate(p.date)}</td>
-      <td data-label="Üye">${memberName(p.memberId)}${groupCell}</td>
+      <td data-label="Üye" class="card-title">${memberName(p.memberId)}${groupCell}</td>
       <td data-label="Paket">${p.pkgName}<br><small style="color:var(--muted)">${p.sessions} ders · ${p.size} kişilik</small></td>
       <td data-label="Kampanya">${campCell}</td>
       <td data-label="Tutar">${amtCell}</td>
@@ -9891,7 +9897,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.37-onizleme';
+const APP_VERSION = '2026.07.15.38-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
