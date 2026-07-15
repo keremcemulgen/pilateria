@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.31">
+<meta name="app-version" content="2026.07.15.32">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9229,6 +9229,27 @@ async function sbDiffPush() {
 }
 
 let __sbChannel = null, __sbRtTimer = null;
+// v52 PER-RECORD APPLY: realtime'da gelen TEK kaydi state'e uygula (tum state'i YENIDEN KURMADAN).
+// Boylece uzaktan gelen bir degisiklik, o an gonderilmekte olan/yerel BASKA bir kaydi ASLA ezmez (revert kok fix).
+function sbApplyOne(t, id) {
+  if (!state || id == null) return;
+  const S = (tab) => (__sbShadow[tab] && __sbShadow[tab][id] != null) ? JSON.parse(__sbShadow[tab][id]) : null;
+  const upsert = (arr, obj) => {
+    const i = arr.findIndex(x => String(x && x.id) === String(id));
+    if (obj == null) { if (i >= 0) arr.splice(i, 1); }
+    else if (i >= 0) arr[i] = obj; else arr.push(obj);
+  };
+  if (t === 'members' || t === 'member_finance') { state.members = state.members || []; const b = S('members'); upsert(state.members, b ? sbMergeMember(b, S('member_finance')) : null); }
+  else if (t === 'groups' || t === 'group_finance') { state.groups = state.groups || []; const b = S('groups'); upsert(state.groups, b ? sbMergeGroup(b, S('group_finance')) : null); }
+  else if (t === 'instructors' || t === 'instructor_finance') { state.instructors = state.instructors || []; const b = S('instructors'); upsert(state.instructors, b ? sbMergeInstructor(b, S('instructor_finance')) : null); }
+  else if (t === 'lessons') { state.lessons = state.lessons || []; upsert(state.lessons, S('lessons')); }
+  else if (t === 'payments') { state.payments = state.payments || []; upsert(state.payments, S('payments')); }
+  else if (t === 'instructor_payouts') { state.instructorPayouts = state.instructorPayouts || []; upsert(state.instructorPayouts, S('instructor_payouts')); }
+  else if (t === 'package_types') { state.packageTypes = state.packageTypes || []; upsert(state.packageTypes, S('package_types')); }
+  else if (t === 'campaigns') { state.campaigns = state.campaigns || []; upsert(state.campaigns, S('campaigns')); }
+  else if (t === 'wa_templates') { state.waTemplates = state.waTemplates || []; upsert(state.waTemplates, S('wa_templates')); }
+  else if (t === 'settings') { const st = S('settings'); if (st) { const s2 = JSON.parse(JSON.stringify(st)); if (s2._pinHash) state._pinHash = s2._pinHash; if (s2.monthInit) state.monthInit = s2.monthInit; delete s2._pinHash; delete s2.monthInit; state.settings = Object.assign({}, state.settings, s2); } }
+}
 function sbSubscribeAll() {
   if (!sbClient || __sbChannel) return;
   try {
@@ -9240,8 +9261,9 @@ function sbSubscribeAll() {
         const row = payload.new && payload.new.id ? payload.new : null;
         const oldId = payload.old && payload.old.id;
         __sbShadow[t] = __sbShadow[t] || {}; __sbVer[t] = __sbVer[t] || {};
+        let __applyId = null;
         if (payload.eventType === 'DELETE') {
-          if (oldId) { delete __sbShadow[t][oldId]; delete __sbVer[t][oldId]; }
+          if (oldId) { delete __sbShadow[t][oldId]; delete __sbVer[t][oldId]; __applyId = oldId; }
         } else if (row) {
           const __meta = Object.assign({}, row.data); const __inV = __meta._v || 0; delete __meta._v;
           const j = JSON.stringify(__meta);
@@ -9250,24 +9272,16 @@ function sbSubscribeAll() {
           if (__inV && __inV < __knownV) return; // v.20 LWW: eski uzaktaki yazım yerel yeniyi ezmesin
           __sbVer[t][row.id] = Math.max(__inV, __knownV);
           __sbShadow[t][row.id] = j;
+          __applyId = row.id;
         }
-        // state'i topluca yeniden kur (basit ve güvenli): shadow'dan
+        if (__applyId == null) return;
+        // v52 PER-RECORD APPLY: YALNIZ gelen kaydi guncelle — tum state'i yeniden KURMA (in-flight/yerel baska kaydi EZMEZ).
+        __sbApplying = true; window.__pilSuppressDirty = true;
+        try { sbApplyOne(t, __applyId); save(); } catch(e) { console.error('[sb] applyOne', e); }
+        window.__pilSuppressDirty = false; __sbApplying = false;
+        // yeniden-render'i topakla (60ms) — art arda gelen olaylarda tek render
         clearTimeout(__sbRtTimer);
-        __sbRtTimer = setTimeout(async () => {
-          if (typeof isDirty === 'function' && isDirty()) { try { await sbFlushPush(); } catch(e){} } // v46: pending yerel degisiklikleri once gonder — rebuild ezmesin
-          const all = {};
-          SB_TABLES.forEach(tt => { all[tt] = {}; for (const id in (__sbShadow[tt] || {})) all[tt][id] = JSON.parse(__sbShadow[tt][id]); });
-          __sbApplying = true;
-          window.__pilSuppressDirty = true;
-          state = sbRowsToState(all);
-          applyV10MigrationToState(state);
-          sanitizeStateText(state);
-          save();
-          window.__pilSuppressDirty = false;
-          __sbApplying = false;
-          if (!__uiBusyForPull()) __refreshUIInPlace();
-          if (window.plToast) plToast('☁️ Güncellendi');
-        }, 60); // v49: ANLIK uygulama (60ms)
+        __sbRtTimer = setTimeout(() => { try { if (!__uiBusyForPull()) __refreshUIInPlace(); } catch(e){} if (window.plToast) plToast('☁️ Güncellendi'); }, 60);
       } catch(e) { console.error('[sb] rt', e); }
     });
     __sbChannel.subscribe((status) => {
@@ -9823,7 +9837,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.31';
+const APP_VERSION = '2026.07.15.32';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
