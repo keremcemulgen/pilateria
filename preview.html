@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.19-onizleme">
+<meta name="app-version" content="2026.07.15.21-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1169,9 +1169,17 @@
 
 <!-- PIN LOCK SCREEN -->
 <div id="sb-auth-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#f7e9dc,#e8f0e0);align-items:center;justify-content:center;flex-direction:column;">
-  <div id="sb-login-box" style="background:#fff;padding:30px 36px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);max-width:380px;width:92%;">
+  <div id="sb-role-box" style="display:none;background:#fff;padding:30px 36px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);max-width:400px;width:92%;text-align:center;">
+    <img src="pilateria-logo-full.png" alt="Pilateria" style="width:220px;max-width:80%;margin:0 auto 12px;display:block;">
+    <div style="color:#666;font-size:13.5px;margin-bottom:20px;">Nasıl giriş yapmak istersiniz?</div>
+    <button class="btn" onclick="sbPickRole('yonetici')" style="width:100%;padding:16px;font-size:16px;margin-bottom:12px;">🔑 &nbsp;Yönetici</button>
+    <button class="btn secondary" onclick="sbPickRole('personel')" style="width:100%;padding:16px;font-size:16px;">👤 &nbsp;Personel</button>
+    <div style="color:#999;font-size:11.5px;margin-top:16px;line-height:1.5;">Yetkiniz hesabınıza göre belirlenir; yanlış seçim veri güvenliğini etkilemez.</div>
+  </div>
+  <div id="sb-login-box" style="display:none;background:#fff;padding:26px 36px 30px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);max-width:380px;width:92%;">
+    <button onclick="sbShowAuth('role')" style="background:none;border:none;color:#8a6d3b;font-size:13px;cursor:pointer;padding:0;margin-bottom:4px;">← Geri</button>
     <img src="pilateria-logo-full.png" alt="Pilateria" style="width:220px;max-width:80%;margin:0 auto 10px;display:block;">
-    <div style="color:#666;font-size:13px;margin-bottom:16px;text-align:center;">Devam etmek için giriş yap</div>
+    <div id="sb-login-heading" style="color:#666;font-size:13px;margin-bottom:16px;text-align:center;">Devam etmek için giriş yap</div>
     <label style="font-size:12px;font-weight:600;color:#888;">E-posta</label>
     <input id="sb-email" type="email" autocomplete="username" style="width:100%;margin:4px 0 10px;" onkeydown="if(event.key==='Enter')document.getElementById('sb-pass').focus()">
     <label style="font-size:12px;font-weight:600;color:#888;">Şifre</label>
@@ -1626,6 +1634,13 @@
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Giriş e-posta + şifre iledir; PIN kullanılmaz. Personel hesapları para bilgilerini göremez (sunucu kuralı).</div>
     <button class="btn secondary" onclick="sbSignOut()">Oturumu Kapat</button>
     <button class="btn small secondary" id="sb-force-migrate" style="margin-left:8px;" onclick="sbForceMigrate()" title="Bu cihazdaki yerel veriyi bulut veritabanının ÜZERİNE yazar (tek seferlik geçiş aracı)">Yerel Veriyi Buluta Taşı</button>
+  </div>
+
+  <div class="card" id="staff-perms-card" style="display:none;">
+    <h2>🔐 Personel İzinleri</h2>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">Personel hesaplarının hangi bölümleri görebileceğini tek tıkla aç/kapat. Para bölümleri (Ödemeler, Raporlar, Hocalar &amp; Maaşlar) ayrıca sunucu tarafında da korunur.</div>
+    <div id="staff-perms-list"></div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:10px;">Değişiklik anında tüm personel cihazlarına yansır (bir sonraki senkronda).</div>
   </div>
 
   <div class="card" id="pin-card">
@@ -8670,13 +8685,21 @@ function sbInit() {
 let __sbSession = null;
 let __sbRole = null;
 let __sbUserEmail = '';
+let __sbLoginIntent = null;
+function sbPickRole(role) {
+  __sbLoginIntent = role;
+  const hd = document.getElementById('sb-login-heading');
+  if (hd) hd.textContent = (role === 'personel') ? 'Personel girişi — e-posta ve şifrenle gir' : 'Yönetici girişi — e-posta ve şifrenle gir';
+  sbShowAuth('login');
+}
 function sbShowAuth(mode) {
   const ov = document.getElementById('sb-auth-overlay');
   if (!ov) return;
   ov.style.display = 'flex';
+  const rb = document.getElementById('sb-role-box'); if (rb) rb.style.display = (mode === 'role') ? 'block' : 'none';
   document.getElementById('sb-login-box').style.display = (mode === 'login') ? 'block' : 'none';
   document.getElementById('sb-setpass-box').style.display = (mode === 'setpass') ? 'block' : 'none';
-  setTimeout(() => { const f = document.getElementById(mode === 'login' ? 'sb-email' : 'sb-newpass'); if (f) f.focus(); }, 80);
+  if (mode === 'login' || mode === 'setpass') setTimeout(() => { const f = document.getElementById(mode === 'login' ? 'sb-email' : 'sb-newpass'); if (f) f.focus(); }, 80);
 }
 function sbHideAuth() { const ov = document.getElementById('sb-auth-overlay'); if (ov) ov.style.display = 'none'; }
 function sbAuthMsg(id, m, ok) { const el = document.getElementById(id); if (el) { el.textContent = m || ''; el.style.color = ok ? '#2e7d32' : '#c62828'; } }
@@ -8693,13 +8716,13 @@ async function sbAuthGate() {
   c.auth.onAuthStateChange((event, session) => {
     __sbSession = session || null;
     if (event === 'PASSWORD_RECOVERY') { sbShowAuth('setpass'); return; }
-    if (event === 'SIGNED_OUT') { __sbRole = null; sbShowAuth('login'); }
+    if (event === 'SIGNED_OUT') { __sbRole = null; sbShowAuth('role'); }
   });
   const { data } = await c.auth.getSession();
   __sbSession = (data && data.session) || null;
   const h = String(location.hash || '');
   if (__sbSession && /type=invite|type=recovery|type=signup/.test(h)) { sbShowAuth('setpass'); return; }
-  if (!__sbSession) { sbShowAuth('login'); return; }
+  if (!__sbSession) { sbShowAuth('role'); return; }
   await sbAfterLogin();
 }
 async function sbLogin() {
@@ -8749,7 +8772,12 @@ async function sbAfterLogin() {
   } catch(e) { __sbRole = 'staff'; }
   const el = document.getElementById('sb-session-info');
   if (el) el.textContent = __sbUserEmail + ' — ' + (__sbRole === 'owner' ? 'Sahip (tam yetki)' : 'Personel (para bilgileri kapalı)');
+  try {
+    if (__sbLoginIntent === 'personel' && __sbRole === 'owner' && window.plToast) plToast('Bu hesap YÖNETİCİ hesabı — tam yetkiyle açıldı');
+    else if (__sbLoginIntent === 'yonetici' && __sbRole !== 'owner' && window.plToast) plToast('Bu hesap PERSONEL hesabı — sınırlı yetkiyle açıldı');
+  } catch(e){}
   const sc = document.getElementById('sb-session-card'); if (sc) sc.style.display = '';
+  try { const spc = document.getElementById('staff-perms-card'); if (spc) spc.style.display = (__sbRole === 'owner') ? '' : 'none'; if (__sbRole === 'owner' && typeof renderStaffPerms === 'function') renderStaffPerms(); } catch(e){}
   const pc = document.getElementById('pin-card'); if (pc) pc.style.display = 'none';
   if (typeof sbLoadAll === 'function') { try { await sbLoadAll(); } catch(e) { console.error('[sb] veri yükleme', e); } }
   if (typeof sbApplyRoleUI === 'function') { try { sbApplyRoleUI(); } catch(e){} }
@@ -8946,6 +8974,50 @@ let __sbPushTimer = null;
 let __sbApplying = false; // realtime uygularken save-döngüsünü önle
 const SB_TABLES = ['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
 
+// ===== v.20 EŞZAMANLILIK: zaman-damgalı çakışma çözümü + yeniden-tazeleme =====
+let __sbVer = {};      // tablo -> { id -> _v (updatedAt ms) }
+let __sbWasDropped = false, __sbListenersAdded = false, __sbResyncBusy = false, __sbLastResync = 0;
+// Sunucudan gelen satirlarin _v damgasini __sbVer'e al, veriden temizle (domain nesnesi temiz kalsin)
+function __sbHarvestVer(all) {
+  SB_TABLES.forEach(t => {
+    __sbVer[t] = __sbVer[t] || {};
+    const tab = all[t] || {};
+    for (const id in tab) {
+      const d = tab[id];
+      if (d && typeof d === 'object' && '_v' in d) { __sbVer[t][id] = Math.max(__sbVer[t][id] || 0, d._v || 0); delete d._v; }
+    }
+  });
+}
+// Iki kaydin _v'sine gore kazanan (esitlikte b = uzak/son gelen). Saf fonksiyon - testlenir.
+function sbPickWinner(a, b) { return (((b && b._v) || 0) >= ((a && a._v) || 0)) ? b : a; }
+// Baglanti koptuktan sonra / one gelince / online olunca kacirilan olaylari tazele.
+async function sbResync(reason) {
+  if (!SUPABASE_MODE || !sbClient || __sbResyncBusy) return;
+  const now = Date.now();
+  if (reason !== 'rt-recover' && (now - __sbLastResync) < 4000) return; // asiri tetiklemeyi kis
+  if (__uiBusyForPull && __uiBusyForPull()) { clearTimeout(sbResync._t); sbResync._t = setTimeout(() => sbResync(reason), 3000); return; }
+  __sbResyncBusy = true; __sbLastResync = now;
+  try {
+    if (typeof isDirty === 'function' && isDirty()) {
+      try { localStorage.setItem('pilateria_pre_resync_backup', JSON.stringify({ at: new Date().toISOString(), reason: reason, state: localStorage.getItem('pilateria_preview') })); } catch(e){}
+      try { await sbDiffPush(); } catch(e){}
+    }
+    const all = {};
+    for (const t of SB_TABLES) {
+      all[t] = {};
+      try { const r = await sbClient.from(t).select('id,data').order('id'); (r.data || []).forEach(row => { all[t][row.id] = row.data; }); }
+      catch(e) { console.error('[sb] resync select', t, e); }
+    }
+    __sbHarvestVer(all);
+    __sbApplying = true; window.__pilSuppressDirty = true;
+    state = sbRowsToState(all); applyV10MigrationToState(state); sanitizeStateText(state); save();
+    window.__pilSuppressDirty = false; __sbApplying = false;
+    sbSnapshotShadow(sbStateToRows());
+    if (!(__uiBusyForPull && __uiBusyForPull())) __refreshUIInPlace();
+  } catch(e) { console.error('[sb] resync', e); }
+  finally { __sbResyncBusy = false; }
+}
+
 // state → tablo satırları
 function sbStateToRows() {
   const rows = {}; SB_TABLES.forEach(t => rows[t] = {});
@@ -9012,6 +9084,7 @@ async function sbLoadAll() {
     if (ok) { await sbMigrateLocal(); return; }
   }
   window.__pilSuppressDirty = true;
+  __sbHarvestVer(all);
   state = sbRowsToState(all);
   applyV10MigrationToState(state);
   sanitizeStateText(state);
@@ -9088,14 +9161,17 @@ async function sbDiffPush() {
     for (const id in rows[t]) {
       const j = JSON.stringify(rows[t][id]);
       if (__sbShadow[t] && __sbShadow[t][id] === j) continue;
-      ups.push({ id: id, data: rows[t][id] });
+      __sbVer[t] = __sbVer[t] || {};
+      const __vv = Math.max(Date.now(), (__sbVer[t][id] || 0) + 1);
+      __sbVer[t][id] = __vv;
+      ups.push({ id: id, data: Object.assign({}, rows[t][id], { _v: __vv }), meta: j });
     }
     for (const id in (__sbShadow[t] || {})) if (!(id in rows[t])) dels.push(id);
     try {
       if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; console.error('[sb] upsert', t, r.error.message); continue; } }
       if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; console.error('[sb] delete', t, r2.error.message); continue; } }
-      ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = JSON.stringify(u.data); });
-      dels.forEach(id => { delete __sbShadow[t][id]; });
+      ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = u.meta; });
+      dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
   if (okAll) { try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
@@ -9114,12 +9190,16 @@ function sbSubscribeAll() {
         if (SB_TABLES.indexOf(t) === -1) return;
         const row = payload.new && payload.new.id ? payload.new : null;
         const oldId = payload.old && payload.old.id;
-        __sbShadow[t] = __sbShadow[t] || {};
+        __sbShadow[t] = __sbShadow[t] || {}; __sbVer[t] = __sbVer[t] || {};
         if (payload.eventType === 'DELETE') {
-          if (oldId) delete __sbShadow[t][oldId];
+          if (oldId) { delete __sbShadow[t][oldId]; delete __sbVer[t][oldId]; }
         } else if (row) {
-          const j = JSON.stringify(row.data);
-          if (__sbShadow[t][row.id] === j) return; // kendi yazımımız — yansıma
+          const __meta = Object.assign({}, row.data); const __inV = __meta._v || 0; delete __meta._v;
+          const j = JSON.stringify(__meta);
+          const __knownV = __sbVer[t][row.id] || 0;
+          if (__sbShadow[t][row.id] === j) { if (__inV > __knownV) __sbVer[t][row.id] = __inV; return; } // echo/yansıma
+          if (__inV && __inV < __knownV) return; // v.20 LWW: eski uzaktaki yazım yerel yeniyi ezmesin
+          __sbVer[t][row.id] = Math.max(__inV, __knownV);
           __sbShadow[t][row.id] = j;
         }
         // state'i topluca yeniden kur (basit ve güvenli): shadow'dan
@@ -9140,19 +9220,81 @@ function sbSubscribeAll() {
         }, 250);
       } catch(e) { console.error('[sb] rt', e); }
     });
-    __sbChannel.subscribe();
+    __sbChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') { if (__sbWasDropped) { __sbWasDropped = false; sbResync('rt-recover'); } }
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { __sbWasDropped = true; }
+    });
+    if (!__sbListenersAdded) {
+      __sbListenersAdded = true;
+      try {
+        window.addEventListener('online', () => sbResync('online'));
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sbResync('visible'); });
+        window.addEventListener('focus', () => sbResync('focus'));
+      } catch(e){}
+    }
   } catch(e) { console.error('[sb] subscribe', e); }
 }
 
 // Personel görünümü: para UI ögeleri gizli (gerçek koruma RLS'te)
+// ===== v.22 PERSONEL İZİNLERİ (hazır bölüm anahtarları) =====
+const STAFF_SECTIONS = [
+  { key:'dashboard', label:'📊 Panel' },
+  { key:'calendar',  label:'📅 Takvim' },
+  { key:'members',   label:'👥 Üyeler' },
+  { key:'archive',   label:'💤 Pasif Üyeler' },
+  { key:'instructors', label:'🧑‍🏫 Hocalar & Maaşlar', money:true },
+  { key:'payments',  label:'💳 Ödemeler', money:true },
+  { key:'reports',   label:'📈 Raporlar', money:true },
+];
+const STAFF_PERM_DEFAULTS = { dashboard:true, calendar:true, members:true, archive:true, instructors:false, payments:false, reports:false };
+function getStaffPerms() {
+  const sp = (state.settings && state.settings.staffPerms) || {};
+  const out = {};
+  STAFF_SECTIONS.forEach(s => { out[s.key] = (s.key in sp) ? !!sp[s.key] : STAFF_PERM_DEFAULTS[s.key]; });
+  return out;
+}
+function renderStaffPerms() {
+  const box = document.getElementById('staff-perms-list');
+  if (!box) return;
+  const perms = getStaffPerms();
+  box.innerHTML = STAFF_SECTIONS.map(s => {
+    const on = perms[s.key];
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--border,#eee);">'
+      + '<span style="font-size:14px;">' + s.label + (s.money ? ' <span style="font-size:10.5px;color:#c62828;">(para)</span>' : '') + '</span>'
+      + '<button class="btn small ' + (on ? 'ok' : 'secondary') + '" onclick="toggleStaffPerm(\'' + s.key + '\')" style="min-width:82px;">' + (on ? '✓ Açık' : 'Kapalı') + '</button>'
+      + '</div>';
+  }).join('');
+}
+function toggleStaffPerm(key) {
+  state.settings = state.settings || {};
+  const perms = getStaffPerms();
+  state.settings.staffPerms = state.settings.staffPerms || {};
+  state.settings.staffPerms[key] = !perms[key];
+  save();
+  renderStaffPerms();
+  if (window.plToast) plToast('Personel izni güncellendi');
+}
 function sbApplyRoleUI() {
   if (!SUPABASE_MODE || __sbRole !== 'staff') return;
-  const hide = sel => document.querySelectorAll(sel).forEach(el => { el.style.display = 'none'; });
-  hide('[data-page="payments"], [data-bnav="payments"], [data-page="reports"]');
+  const perms = getStaffPerms();
+  STAFF_SECTIONS.forEach(s => {
+    const vis = !!perms[s.key];
+    document.querySelectorAll('[data-page="' + s.key + '"], [data-bnav="' + s.key + '"]').forEach(el => { el.style.display = vis ? '' : 'none'; });
+  });
   const more = document.getElementById('more-sheet-bg');
-  if (more) more.querySelectorAll('button').forEach(b => { if (/Rapor|Maaş/i.test(b.textContent || '')) b.style.display = 'none'; });
-  try { if (localStorage.getItem('pilateria_mask_amounts') !== '1') { localStorage.setItem('pilateria_mask_amounts', '1'); } } catch(e){}
+  if (more) more.querySelectorAll('button').forEach(b => {
+    const txt = b.textContent || '';
+    if (/Hocalar|Maaş/i.test(txt)) b.style.display = perms.instructors ? '' : 'none';
+    else if (/Rapor/i.test(txt)) b.style.display = perms.reports ? '' : 'none';
+  });
+  const moneyOpen = !!(perms.payments || perms.reports || perms.instructors);
+  try { localStorage.setItem('pilateria_mask_amounts', moneyOpen ? '0' : '1'); } catch(e){}
   document.querySelectorAll('.mask-amounts-btn').forEach(b => { b.style.display = 'none'; });
+  try {
+    const at = document.querySelector('.tab.active');
+    const ap = at && at.dataset ? at.dataset.page : null;
+    if (ap && perms[ap] === false) { const first = STAFF_SECTIONS.find(s => perms[s.key]); if (first) switchPage(first.key); }
+  } catch(e){}
   if (typeof renderDashboard === 'function') try { renderDashboard(); } catch(e){}
 }
 
@@ -9624,7 +9766,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.19-onizleme';
+const APP_VERSION = '2026.07.15.21-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
