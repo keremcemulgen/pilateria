@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.10-onizleme">
+<meta name="app-version" content="2026.07.15.11-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1240,11 +1240,16 @@
 
 <!-- DASHBOARD -->
 <section class="page active" id="page-dashboard">
+  <div class="row" style="margin-bottom:10px;align-items:center;gap:8px;flex-wrap:wrap;">
+    <label style="font-size:13px;color:var(--muted);font-weight:600;">📅 Panel ayı:</label>
+    <input type="month" id="dash-month" onchange="renderDashboard()" style="max-width:180px;">
+    <span style="font-size:12px;color:var(--muted);">(gelir ve doluluk bu aya göre)</span>
+  </div>
   <div class="grid-stats">
     <div class="stat blue"><div class="label">Aktif Üye</div><div class="value" id="s-members">0</div></div>
-    <div class="stat ok"><div class="label">Bu Ay Gelir (₺)</div><div class="value" id="s-revenue">0</div></div>
+    <div class="stat ok"><div class="label" id="s-revenue-label">Bu Ay Gelir (₺)</div><div class="value" id="s-revenue">0</div></div>
     <div class="stat warn"><div class="label">Bu Hafta Dersler</div><div class="value" id="s-lessons">0</div></div>
-    <div class="stat"><div class="label">Bu Ay Doluluk</div><div class="value" id="s-occupancy">—</div></div>
+    <div class="stat"><div class="label" id="s-occupancy-label">Bu Ay Doluluk</div><div class="value" id="s-occupancy">—</div></div>
     <div class="stat bad"><div class="label">Bitmek Üzere (≤2 ders)</div><div class="value" id="s-low">0</div></div>
   </div>
   <div class="card">
@@ -2995,7 +3000,11 @@ function renderDashboard() {
   document.getElementById('s-members').textContent = state.members.filter(m => !m.archived).length; // v18: pasif uyeler sayilmaz
   // this month revenue — v21: PAKET AYI kanonu (Üyeler sayfasındaki "Ödenmiş" ile birebir aynı tanım;
   // 31 Mayıs'ta alınan Haziran paketi ödemesi HAZİRAN gelirinde görünür — her yerde tek rakam)
-  const m = currentMonth();
+  // v35: PANEL AY SEÇİCİ — gelir+doluluk SEÇİLİ AYA göre (varsayılan içinde bulunulan ay)
+  const __dm = document.getElementById('dash-month');
+  const m = (__dm && __dm.value) || currentMonth();
+  const __mLbl = (() => { try { return parseISO(m+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return m; } })();
+  { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Geliri (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
   const rev = state.payments.filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === m).reduce((a,b)=>a+(+b.amount||0),0);
   document.getElementById('s-revenue').textContent = money(rev);
   // this week lessons
@@ -4674,8 +4683,9 @@ function fillEmptySlot(groupId, slotIndex) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return;
   // Henüz hiçbir gruba dahil olmayan üyeler
+  const __ctxAy = __groupOpsCtxMonth(); // v35: ay bazli — bu ay bir grupta AKTIF (enrolled) olmayan uye eklenebilir
   const available = state.members
-    .filter(m => !state.groups.some(gr => (gr.memberIds||[]).includes(m.id)))
+    .filter(m => !m.archived && !state.groups.some(gr => resolveGroupMembersForMonth(gr, __ctxAy).includes(m.id) && isMemberEnrolledInMonth(m.id, __ctxAy)))
     .slice()
     .sort((a,b)=>a.name.localeCompare(b.name,'tr'));
   const listHtml = available.length
@@ -4771,7 +4781,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return;
   const __ctxAy = __groupOpsCtxMonth(); // v34: ekleme, ISLEM YAPILAN SAYFANIN AYINA yapilir
-  if (resolveGroupMembersForMonth(g, __ctxAy).includes(memberId)) { alert('Bu üye zaten bu grupta.'); return; }
+  if (resolveGroupMembersForMonth(g, __ctxAy).includes(memberId) && isMemberEnrolledInMonth(memberId, __ctxAy)) { alert('Bu üye zaten bu grupta.'); return; }
   const __wasAutoName = (g.name||'') === autoGroupName(g.memberIds||[]);
   const removed = removeMemberFromOtherContexts(memberId, groupId, __ctxAy);
   applyRosterChange(g, __ctxAy, mids => {
@@ -4785,6 +4795,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
   });
   if (__wasAutoName) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; }
   { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId, __ctxAy); }
+  setMemberMonthly(memberId, __ctxAy, { enrolled: true }); // v35: gruba eklenen uye o ay ENROLLED — pasiften geri ekleme slotu doldurur
   const __rsync = syncGroupLessonsToRoster(groupId, __ctxAy); // v34
   save();
   closeFillSlotModal();
@@ -4854,10 +4865,9 @@ function onMemberPkgChange() {
   if (!pkgSel || !priceEl) return;
   const pt = state.packageTypes.find(x => x.id === pkgSel.value);
   if (!pt) return;
-  const cur = (priceEl.value || '').trim();
-  if (cur === '' || +cur === 0) {
-    priceEl.value = pt.price;
-  } else if (+cur !== +pt.price) {
+  // v35 (Kerem istegi): paket secilince aylik ucret PAKET FIYATINA guncellenir (ozel fiyat isteyen sonra elle degistirir)
+  priceEl.value = pt.price;
+  if (false) {
     if (confirm(`Aylık ücret ${money(+cur)} ₺ olarak tanımlı. "${pt.name}" paketinin fiyatı ${money(pt.price)} ₺.\n\nÜcreti paket fiyatıyla güncelleyeyim mi?\n(Hayır dersen mevcut özel fiyat korunur.)`)) {
       priceEl.value = pt.price;
     }
@@ -6643,7 +6653,7 @@ function openGroupDetail(id, monthISO) {
   const prevG = idx > 0 ? groupsList[idx-1] : null;
   const nextG = idx >= 0 && idx < groupsList.length - 1 ? groupsList[idx+1] : null;
   document.getElementById('gd-name').innerHTML = `👯 ${escapeHtml(g.name||'')}`;
-  const members = resolveGroupMembersForMonth(g, monthISO).map(mid=>state.members.find(m=>m.id===mid)).filter(Boolean); // v25: ay kadrosu
+  const members = resolveGroupMembersForMonth(g, monthISO).filter(mid => mid && (monthISO ? isMemberEnrolledInMonth(mid, monthISO) : true)).map(mid=>state.members.find(m=>m.id===mid)).filter(Boolean); // v35: pasif (enrolled:false) uye detayda da gizli — buildMemberRows+groupExpectedTotal ile tutarli
   // v10: Ödeme ve dersleri ay'a göre filtrele (eğer ay seçili ise)
   const matchMonth = (p) => !monthISO || (p.packageMonth || (p.date||'').slice(0,7)) === monthISO;
   // v18: packageMonth VARSA yalniz o esas alinir (sarkan ders SADECE kendi paketinin ayinda gorunur);
@@ -9569,7 +9579,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.10-onizleme';
+const APP_VERSION = '2026.07.15.11-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
@@ -9646,6 +9656,7 @@ function init() {
     ];
     save();
   }
+  { const __d=document.getElementById('dash-month'); if(__d && !__d.value) __d.value = currentMonth(); }
   document.getElementById('rep-month').value = currentMonth();
   document.getElementById('pay-month').value = currentMonth();
   document.getElementById('sal-month').value = currentMonth();
