@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.15.39">
+<meta name="app-version" content="2026.07.15.40">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -3021,7 +3021,6 @@ function renderDashboard() {
   document.querySelectorAll('.mask-amounts-btn').forEach(b => {
     b.textContent = __maskAmounts ? '👁 Tutarları Göster' : '🙈 Tutarları Gizle';
   });
-  document.getElementById('s-members').textContent = state.members.filter(m => !m.archived).length; // v18: pasif uyeler sayilmaz
   // this month revenue — v21: PAKET AYI kanonu (Üyeler sayfasındaki "Ödenmiş" ile birebir aynı tanım;
   // 31 Mayıs'ta alınan Haziran paketi ödemesi HAZİRAN gelirinde görünür — her yerde tek rakam)
   // v35: PANEL AY SEÇİCİ — gelir+doluluk SEÇİLİ AYA göre (varsayılan içinde bulunulan ay)
@@ -3033,6 +3032,7 @@ function renderDashboard() {
     __dm.value = __pm.length ? __pm[__pm.length-1] : __cm0;
   }
   const m = (__dm && __dm.value) || currentMonth();
+  document.getElementById('s-members').textContent = state.members.filter(function(mm){ return isMemberEnrolledInMonth(mm.id, m); }).length; // v.40 AKTIF = secili aya ENROLLED (ay-bazli; Haziran != Temmuz)
   const __mLbl = (() => { try { return parseISO(m+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return m; } })();
   { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Geliri (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
   const rev = state.payments.filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === m).reduce((a,b)=>a+(+b.amount||0),0);
@@ -4261,6 +4261,7 @@ function buildMemberRows(monthISO) {
       pkgEnd: '',
       payDate: latestPay ? latestPay.date : '',
       totalPrice: expected,
+      ownPrice: expected,
       paid,
       remaining: Math.max(0, expected - paid),
       note: memberNoteForMonth(m, monthISO),
@@ -4329,6 +4330,7 @@ function buildMemberRows(monthISO) {
           pkgEnd: g.packageStartDate ? groupPackageEnd(g) : '',
           payDate: '',
           totalPrice: isFirstInGroup ? totalPrice : '',
+          ownPrice: '',
           paid: 0,
           groupPaid: isFirstInGroup ? groupPaidTotal : '',
           groupFullyPaid: groupRemaining === 0 && groupPaidTotal > 0,
@@ -4366,6 +4368,7 @@ function buildMemberRows(monthISO) {
         pkgStart: memberStart,
         pkgEnd: memberEnd,
         payDate: latestPay ? latestPay.date : '',
+        ownPrice: memberMonthlyTotalPrice(m.id, monthISO||''), // v.40 uyenin KENDI ay-fiyati (grup toplami DEGIL)
         totalPrice: isFirstInGroup ? totalPrice : '',   // Excel style: only first row shows total
         paid,                                            // Bireyin kendi ödediği tutar
         groupPaid: isFirstInGroup ? groupPaidTotal : '', // Grup bazında toplam ödeme (Excel style)
@@ -4696,7 +4699,7 @@ function renderMembers() {
     return `<tr class="${rowClass}" onclick="openMemberDetail('${r.memberId}')" style="cursor:pointer;">
       <td>${idx+1}</td>
       ${groupNameCell}
-      <td><b>${r.name}</b></td>
+      <td><b>${r.name}</b>${r.type==='group' && r.ownPrice ? ' <small style="color:var(--muted);white-space:nowrap;">· '+money(r.ownPrice)+' ₺</small>' : ''}</td>
       ${pkgStartCell}
       <td>${r.pkgEnd ? fmtDate(r.pkgEnd) : '—'}</td>
       <td>${r.payDate ? fmtDate(r.payDate) : '—'}</td>
@@ -4735,7 +4738,7 @@ function renderMembersCardsMobile(rows, monthISO) {
       return;
     }
     const paid = +r.paid || 0;
-    const fee = +r.totalPrice || 0;
+    const fee = (r.ownPrice !== undefined && r.ownPrice !== '') ? (+r.ownPrice||0) : (+r.totalPrice || 0); // v.40 grup uyesinde KENDI fiyati
     const isPaid = r.type === 'group' ? paid > 0 : ((+r.remaining||0) <= 0 && paid > 0);
     html += `<div class="mc-card ${r.type==='group'?'mc-in-group':''}" onclick="openMemberDetail('${r.memberId}')">
       <div class="mc-top">
@@ -4852,7 +4855,7 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
         while (out.length > 0 && out[out.length-1] === '') out.pop();
         return out;
       });
-      if (__wasAuto) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v28
+      { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v.40 uyelik degisince ad HER ZAMAN uye-adlari
       syncGroupLessonsToRoster(g.id, __ay);
       removed.groups.push(g.name);
     }
@@ -4910,7 +4913,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
     while (out.length > 0 && out[out.length-1] === '') out.pop();
     return out;
   });
-  if (__wasAutoName) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; }
+  { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v.40 uyelik degisince ad HER ZAMAN uye-adlari
   { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId, __ctxAy); }
   setMemberMonthly(memberId, __ctxAy, { enrolled: true }); // v35: gruba eklenen uye o ay ENROLLED — pasiften geri ekleme slotu doldurur
   { const __rm = state.members.find(x=>x.id===memberId); if (__rm) __closeArchivePeriodAt(__rm, __ctxAy); } // v45: carry-forward pasif donemi kapanir
@@ -5203,7 +5206,7 @@ function deleteMember(id) {
       while (out.length > 0 && out[out.length-1] === '') out.pop();
       return out;
     });
-    if (__wasAuto) { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v28
+    { const __nn = autoGroupName(g.memberIds); if (__nn) g.name = __nn; } // v.40 uyelik degisince ad HER ZAMAN uye-adlari
     syncGroupLessonsToRoster(g.id, __ctxAy); // v34
   });
   // Gelecek tarihli planlı BİREYSEL derslerini iptal et
@@ -9920,7 +9923,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.15.39';
+const APP_VERSION = '2026.07.15.40';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
