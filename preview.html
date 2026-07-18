@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.02-onizleme">
+<meta name="app-version" content="2026.07.18.03-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1761,6 +1761,7 @@
       <div class="field"><label>Tercih Ettiği Hoca</label><select id="mm-instructor"><option value="">—</option></select></div>
       <div class="field"><label>Paket <small style="color:var(--muted);font-weight:400;">— gruptaki gibi</small></label><select id="mm-package" onchange="onMemberPkgChange()"><option value="">—</option></select></div>
       <div class="field"><label>Toplam Paket Ücreti (₺) <small style="color:var(--muted);font-weight:400;">— aylık</small></label><input id="mm-total-price" type="number" min="0" step="100" placeholder="örn. 5000"></div>
+      <div class="field"><label>Ders Hakkı (bu ay) <small style="color:var(--muted);font-weight:400;">— boş = otomatik (8)</small></label><input id="mm-sessions" type="number" min="0" step="1" placeholder="Otomatik: 8"></div>
       <div class="field"><label>Hoca Yüzdeliği (%) <small style="color:var(--muted);font-weight:400;">— boş = varsayılan</small></label><input id="mm-share-rate" type="number" min="0" max="100" step="0.5" placeholder="varsayılan"></div>
     </div>
     <div class="field"><label>Adres</label><textarea id="mm-adres" rows="2" placeholder="Açık adres (fatura/sözleşme için)"></textarea></div>
@@ -2635,6 +2636,68 @@ function packageRemainingSessions(ownerType, ownerId, monthISO) {
   const planned = packagePlannedSessions(ownerType, ownerId, monthISO);
   return Math.max(0, (pkg.sessions||8) - used - planned);
 }
+// ===== v43 DERS HAKKI KANONU (Kerem 2026-07-18) =====
+// Ders hakki ODEMEDEN BAGIMSIZDIR. Varsayilan 8 (veya atanan paket tipi / paket kaydi sessions'i), elle override edilebilir.
+// Her IPTAL OLMAYAN ders (planli+yapildi+yandi) hakki 1 dusurur; iptal dusurmez. Odeme AYRI: sadece odendi/odenmedi.
+// Grup = TEK BIRIM: grup dersi grubun hakkini 1 dusurur, tum uyeler ayni kalani gorur.
+function __ptSessions(pid){ const pt=(state.packageTypes||[]).find(x=>x.id===pid); return (pt&&+pt.sessions)?+pt.sessions:0; }
+function memberSessionsOverride(memberId, monthISO){
+  const ov = getMemberMonthlyOverride(memberId, monthISO||currentMonth());
+  return (ov && ov.sessionsOverride !== undefined && ov.sessionsOverride !== null && ov.sessionsOverride !== '') ? +ov.sessionsOverride : null;
+}
+function sessionQuotaFor(ownerType, ownerId, monthISO){
+  const ay = monthISO || currentMonth();
+  if (ownerType === 'group'){
+    const g = state.groups.find(x=>x.id===ownerId); if(!g) return 8;
+    if (g.monthlySessions && g.monthlySessions[ay] !== undefined && g.monthlySessions[ay] !== null && g.monthlySessions[ay] !== '') return +g.monthlySessions[ay];
+    const pkg = groupPackageForMonth(g, ay); if (pkg && +pkg.sessions) return +pkg.sessions;
+    const pts = __ptSessions(g.defaultPackageId); if (pts) return pts;
+    return 8;
+  } else {
+    const m = state.members.find(x=>x.id===ownerId); if(!m) return 8;
+    const ov = memberSessionsOverride(ownerId, ay); if (ov !== null) return ov;
+    const pkg = memberPackageForMonth(m, ay); if (pkg && +pkg.sessions) return +pkg.sessions;
+    const pid = ((getMemberMonthlyOverride(ownerId, ay)||{}).packageId) || m.defaultPackageId;
+    const pts = __ptSessions(pid); if (pts) return pts;
+    return 8;
+  }
+}
+function sessionsUsedFor(ownerType, ownerId, monthISO){
+  const ay = monthISO;
+  return state.lessons.filter(l=>{
+    if (!l || l.status === 'cancelled') return false;
+    if (ay){ const pm = l.packageMonth || String(l.date||'').slice(0,7); if (pm !== ay) return false; }
+    if (ownerType === 'group') return l.groupId === ownerId;
+    return !l.groupId && (l.memberIds||[]).includes(ownerId);
+  }).length;
+}
+function sessionsRemainingFor(ownerType, ownerId, monthISO){
+  return Math.max(0, sessionQuotaFor(ownerType, ownerId, monthISO) - sessionsUsedFor(ownerType, ownerId, monthISO));
+}
+// Bir uyenin O AYKI kalan dersi: grup uyesiyse GRUBUN kalani (tek birim), degilse bireysel.
+function memberRemainingForMonth(memberId, monthISO){
+  const ay = monthISO || currentMonth();
+  const g = state.groups.find(gr => !isGroupInactiveInMonth(gr, ay) && (typeof __activeRosterForMonth==='function' ? __activeRosterForMonth(gr, ay) : resolveGroupMembersForMonth(gr, ay)).includes(memberId));
+  if (g) return sessionsRemainingFor('group', g.id, ay);
+  return sessionsRemainingFor('member', memberId, ay);
+}
+// O ay odeme yapilmis mi? (para gostergesi — ders hakkindan AYRI)
+function memberPaidInMonth(memberId, monthISO){
+  const ay = monthISO || currentMonth();
+  return state.payments.some(pp => pp.memberId===memberId && ((pp.packageMonth || String(pp.date||'').slice(0,7)) === ay));
+}
+async function editGroupSessions(groupId, monthISO){
+  const g = state.groups.find(x=>x.id===groupId); if(!g) return;
+  const ay = monthISO || currentMonth();
+  const cur = sessionQuotaFor('group', groupId, ay);
+  const inp = await plPrompt('"'+groupDisplayName(g,ay)+'" — '+ay+' ders hakki (varsayilan 8):\n\n• Bos birak → otomatik (paket veya 8)\n• Sayi gir → bu ay icin sabitle', String(cur), {placeholder:'orn. 8'});
+  if (inp === null) return;
+  const t = String(inp).trim();
+  if (!g.monthlySessions) g.monthlySessions = {};
+  if (t === '') { delete g.monthlySessions[ay]; }
+  else { const n = +t; if (isNaN(n) || n < 0) { alert('Gecerli bir sayi gir.'); return; } g.monthlySessions[ay] = n; }
+  save(); if(typeof refreshGroupDetailIfOpen==='function') refreshGroupDetailIfOpen(); if(typeof renderGroups==='function') renderGroups(); if(typeof renderMembers==='function') renderMembers();
+}
 // Bir hoca için yüzdelik oran çöz: lesson override > group memberInstructorRate > group default > member default > instructor default > settings default
 function resolveInstructorRate(lesson) {
   if (!lesson) return (+state.settings.instructorShareRate || 30);
@@ -2786,16 +2849,8 @@ function toggleMaskAmounts() {
 }
 window.__getMaskAmounts = () => __maskAmounts; // test için
 function memberRemaining(memberId) {
-  // total sessions bought - sessions counted against this member
-  // A lesson counts against a member's remaining sessions if:
-  //  - status is 'completed' OR 'missed' (yanan = hakkı düşer)
-  //  - or still 'planned' (yer tutuyor)
-  // A 'cancelled' lesson (iptal hakkı kullanılarak) does NOT consume.
-  const bought = state.payments.filter(p=>p.memberId===memberId).reduce((a,b)=>a+(+b.sessions||0),0);
-  const used = state.lessons.filter(l =>
-    l.memberIds.includes(memberId) && l.status !== 'cancelled'
-  ).length;
-  return bought - used;
+  // v43: ODEMEDEN BAGIMSIZ kanona baglandi (8 default, grup=tek birim). Geriye donuk imza korunur.
+  return memberRemainingForMonth(memberId, currentMonth());
 }
 function memberHasPayment(memberId) {
   return state.payments.some(p => p.memberId === memberId);
@@ -5107,6 +5162,14 @@ function openMemberModal(id) {
     rateEl.value = (m.instructorShareRate !== undefined && m.instructorShareRate !== null && m.instructorShareRate !== '') ? m.instructorShareRate : '';
     rateEl.placeholder = 'Varsayılan: %' + (state.settings.instructorShareRate || 30);
   }
+  // v43: Ders Hakki (bu ay) — override varsa deger, yoksa placeholder'da otomatik kota
+  const sessEl = document.getElementById('mm-sessions');
+  if (sessEl) {
+    const __ov = m.id ? memberSessionsOverride(m.id, __ctxMonth) : null;
+    sessEl.value = (__ov !== null) ? __ov : '';
+    const __auto = m.id ? sessionQuotaFor('member', m.id, __ctxMonth) : 8;
+    sessEl.placeholder = 'Otomatik: ' + __auto;
+  }
   // fill instructor select
   const sel = document.getElementById('mm-instructor');
   sel.innerHTML = '<option value="">—</option>' + state.instructors.map(i=>`<option value="${i.id}" ${m.instructorId===i.id?'selected':''}>${escapeHtml(i.name)}</option>`).join('');
@@ -5121,6 +5184,8 @@ function onMemberPkgChange() {
   if (!pt) return;
   // v35 (Kerem istegi): paket secilince aylik ucret PAKET FIYATINA guncellenir (ozel fiyat isteyen sonra elle degistirir)
   priceEl.value = pt.price;
+  // v43: paket secilince ders hakki placeholder'i paket ders sayisina guncellenir (bos = otomatik = bu sayi)
+  const __se = document.getElementById('mm-sessions'); if (__se && (+pt.sessions)) __se.placeholder = 'Otomatik: ' + (+pt.sessions);
   if (false) {
     if (confirm(`Aylık ücret ${money(+cur)} ₺ olarak tanımlı. "${pt.name}" paketinin fiyatı ${money(pt.price)} ₺.\n\nÜcreti paket fiyatıyla güncelleyeyim mi?\n(Hayır dersen mevcut özel fiyat korunur.)`)) {
       priceEl.value = pt.price;
@@ -5157,6 +5222,9 @@ function saveMember() {
   // v22: AY IZOLASYONU — ay secili + MEVCUT uye ise not+fiyat SADECE o ayin kaydina yazilir;
   // genel (m.note / m.totalPrice) DEGISMEZ -> onceki/sonraki aylar etkilenmez (zam ornegi).
   const __ctxM = window.__memberEditCtxMonth || '';
+  const __sessRaw = (document.getElementById('mm-sessions')?.value || '').trim();
+  const __sessOverride = (__sessRaw === '') ? '' : +__sessRaw;
+  if (__sessRaw !== '' && (isNaN(__sessOverride) || __sessOverride < 0)) { markInvalid('mm-sessions', 'Geçerli bir ders sayısı girin'); return; }
   const __noteVal = document.getElementById('mm-note').value.trim();
   const __prevM = id ? state.members.find(x=>x.id===id) : null;
   const data = {
@@ -5178,6 +5246,7 @@ function saveMember() {
     __mm.note = __noteVal;
     if (totalPrice !== null) __mm.totalPrice = totalPrice;
     __mm.packageId = (document.getElementById('mm-package')||{}).value || ''; // v25: paket de AY bazli
+    __mm.sessionsOverride = __sessOverride; // v43: ders hakki (bos='' -> otomatik)
     setMemberMonthly(id, __ctxM, __mm);
   }
   // v23: YENI uye, olusturuldugu ayin listesine otomatik girer (>=2026-08 aylar acik katilim ister)
@@ -5186,6 +5255,10 @@ function saveMember() {
     if (__targetM >= ROSTER_START_MONTH) {
       data.monthly = data.monthly || {};
       data.monthly[__targetM] = { ...(data.monthly[__targetM]||{}), enrolled: true };
+    }
+    if (__sessRaw !== '') { // v43: yeni uyeye elle ders hakki girildiyse o aya yaz
+      data.monthly = data.monthly || {};
+      data.monthly[__targetM] = { ...(data.monthly[__targetM]||{}), sessionsOverride: __sessOverride };
     }
   }
   if (id) {
@@ -5250,6 +5323,8 @@ function openMemberDetail(id) {
   const bought = payments.reduce((a,b)=>a+(+b.sessions||0),0);
   const used = lessons.filter(l=>l.status!=='cancelled').length;
   const r = Math.max(0, bought - used);
+  const remCanon = memberRemainingForMonth(id, ctxAy); // v43: odemeden bagimsiz kalan (grup uyesi ise grubun kalani)
+  const doneCount = lessons.filter(l=>l.status==='completed').length; // v43: gercekten YAPILAN
   const totalPaid = payments.reduce((a,b)=>a+(+b.amount||0),0);
   const thisMonth = ctxAy;
   const activePkg = memberPackageForMonth(m, thisMonth);
@@ -5265,8 +5340,8 @@ function openMemberDetail(id) {
   const html = `
     ${navBar}
     <div class="grid-stats">
-      <div class="stat blue"><div class="label">Kalan Ders (${ctxAy})</div><div class="value">${bought>0 ? r : '—'}</div></div>
-      <div class="stat ok"><div class="label">Yapılan Ders (${ctxAy})</div><div class="value">${used || (bought>0?0:'—')}</div></div>
+      <div class="stat blue"><div class="label">Kalan Ders (${ctxAy})</div><div class="value">${remCanon}</div></div>
+      <div class="stat ok"><div class="label">Yapılan Ders (${ctxAy})</div><div class="value">${doneCount}</div></div>
       <div class="stat warn"><div class="label">Ödeme (${ctxAy}) ₺</div><div class="value">${money(totalPaid)}</div></div>
     </div>
     <div class="row" style="margin:8px 0;flex-wrap:wrap;gap:12px;">
@@ -5980,18 +6055,24 @@ function renderLessonMembersCheckboxes(preselect) {
   const emptyMsg = __lg
     ? '<div class="empty">Grupta üye yok.</div>'
     : '<div class="empty" style="padding:10px;font-size:12.5px;">Üye seçmek için yukarıya ismin ilk harflerini yaz.</div>';
+  // v43: rozet = KALAN DERS (8 default, odemeden bagimsiz, grup uyesi ise grubun kalani) + AYRI odeme etiketi
+  const __mlIdB = (document.getElementById('ml-id')||{}).value || '';
+  const __mlLesB = __mlIdB ? state.lessons.find(x=>x.id===__mlIdB) : null;
+  const __mlDateB = (document.getElementById('ml-date')||{}).value || '';
+  const __badgeMonth = (__mlLesB && __mlLesB.packageMonth) || window.__lessonCtxMonth || (__mlDateB ? __mlDateB.slice(0,7) : '') || currentMonth();
   mEl.innerHTML = searchBar + (sortedMembers.length ? sortedMembers.map(m => {
-    const r = memberRemaining(m.id);
+    const r = memberRemainingForMonth(m.id, __badgeMonth);
     const checked = currentlyChecked.includes(m.id);
-    const paid = memberHasPayment(m.id);
-    const badge = !paid
-      ? '<span class="badge" style="background:#f5f0e0;color:#8a8573">—</span>'
-      : r<=0 ? '<span class="badge bad">0</span>'
+    const badge = r<=0 ? '<span class="badge bad">0</span>'
       : r<=2 ? `<span class="badge warn">${r}</span>`
       : `<span class="badge ok">${r}</span>`;
+    const paidM = memberPaidInMonth(m.id, __badgeMonth);
+    const payTag = paidM
+      ? '<span class="badge" style="background:#E8F5E9;color:#2E7D32;" title="Bu ay ödeme alındı">₺✓</span>'
+      : '<span class="badge" style="background:#f5f0e0;color:#8a8573;" title="Bu ay ödeme bekleniyor">₺⏳</span>';
     return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;">
       <input type="checkbox" value="${m.id}" ${checked?'checked':''} style="width:auto" onchange="onLessonMemberToggle(this)">
-      <span>${m.name}</span> ${badge} ${m.archived?'<span class="archived-badge">Pasif</span>':''} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
+      <span>${m.name}</span> ${badge} ${payTag} ${m.archived?'<span class="archived-badge">Pasif</span>':''} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
     </label>`;
   }).join('') : emptyMsg);
 }
@@ -6233,13 +6314,9 @@ function groupMembersSummary(g) {
   const names = (g.memberIds||[]).map(memberName).filter(n=>n!=='—');
   return names.length ? names.join(', ') : '(üye yok)';
 }
-function groupRemainingSessions(groupId) {
-  // For a group, remaining = minimum remaining sessions across its members (bought via group payments or individually)
-  const g = state.groups.find(x=>x.id===groupId);
-  const activeMids = (g && g.memberIds || []).filter(x => x && state.members.find(m => m.id === x));
-  if (!g || !activeMids.length) return 0;
-  const rems = activeMids.map(mid => memberRemaining(mid));
-  return Math.min(...rems);
+function groupRemainingSessions(groupId, monthISO) {
+  // v43: grup = TEK BIRIM, odemeden bagimsiz (8 default). Kalan = kota - o ayin iptal-disi grup dersleri.
+  return sessionsRemainingFor('group', groupId, monthISO || currentMonth());
 }
 // v10: Grup ay seçici (Üyeler sayfasındaki gibi)
 function ensureGroupMonthSelect() {
@@ -6303,7 +6380,7 @@ function renderGroups() {
       const sessions = showPkg ? (showPkg.sessions || 8) : 8;
       const used = showPkg ? packageUsedSessions('group', g.id, showPkg.month) : 0;
       const planned = showPkg ? packagePlannedSessions('group', g.id, showPkg.month) : 0;
-      const rem = Math.max(0, sessions - used - planned);
+      const rem = sessionsRemainingFor('group', g.id, monthISO || currentMonth()); // v43 kanon (odemeden bagimsiz)
       const anyPaid = state.payments.some(p => p.groupId === g.id && (!monthISO || (p.packageMonth || (p.date||'').slice(0,7)) === monthISO));
       const isCompleted = showPkg && showPkg.status === 'completed';
       const isExtended = showPkg && showPkg.status === 'extended';
@@ -6998,13 +7075,10 @@ function openGroupDetail(id, monthISO) {
     const __ayOf = pp => (pp.packageMonth || (pp.date ? String(pp.date).slice(0,7) : ''));
     const ayPays = state.payments.filter(p => p.memberId===m.id && p.groupId===id && (!monthISO || __ayOf(p) === monthISO));
     const hasGroupPay = ayPays.length > 0;
-    const bought = ayPays.reduce((a,b)=>a+(+b.sessions||0),0);
-    const usedAy = state.lessons.filter(l => l.groupId===id && l.status!=='cancelled' && (l.memberIds||[]).includes(m.id) && (!monthISO || (l.packageMonth || String(l.date||'').slice(0,7)) === monthISO)).length;
-    const rem = Math.max(0, bought - usedAy);
+    // v43: KALAN DERS = GRUBUN kalani (tek birim, odemeden bagimsiz) — tum uyelerde ayni. Odeme AYRI (asagidaki tik).
+    const rem = sessionsRemainingFor('group', id, monthISO || currentMonth());
     const paid = hasGroupPay;
-    const badge = !paid
-      ? '<span class="badge" style="background:#f5f0e0;color:#8a8573">—</span>'
-      : rem<=0 ? '<span class="badge bad">Bitmiş</span>'
+    const badge = rem<=0 ? '<span class="badge bad">Bitmiş</span>'
       : rem<=2 ? `<span class="badge warn">${rem}</span>`
       : `<span class="badge ok">${rem}</span>`;
     const tickLabel = hasGroupPay ? '✅ Ödendi' : '⬜ Ödeme al';
@@ -7074,7 +7148,7 @@ function openGroupDetail(id, monthISO) {
     ${pkgExtendedBanner}
     <div class="grid-stats">
       <div class="stat blue"><div class="label">Üye</div><div class="value">${members.length}/${g.size}</div></div>
-      <div class="stat ok"><div class="label">Kalan Ders (min.)</div><div class="value">${groupRemainingSessions(id)}</div></div>
+      <div class="stat ok"><div class="label">Kalan Ders</div><div class="value">${sessionsRemainingFor('group', id, monthISO || currentMonth())}</div><div style="font-size:9.5px;color:var(--muted);margin-top:2px;">hak: ${sessionQuotaFor('group', id, monthISO || currentMonth())} · <a href="#" onclick="event.preventDefault();editGroupSessions('${id}','${monthISO||currentMonth()}')" style="color:var(--acc);">düzenle</a></div></div>
       <div class="stat warn"><div class="label">Toplam Ders${monthISO?' (Ay)':''}</div><div class="value">${groupLessons.length}</div></div>
       <div class="stat"><div class="label">Grup Toplam Ücreti${missingPriceCount?' ⚠️':''}</div><div class="value">${money(groupTotalComputed)} ₺</div>${missingPriceCount?`<div style="font-size:10px;color:#c62828;margin-top:2px;">${missingPriceCount} üye fiyatsız</div>`:''}</div>
       <div class="stat"><div class="label">Toplanan${monthISO?' (Ay)':''}</div><div class="value">${money(totalRevenue)} ₺</div></div>
@@ -10120,7 +10194,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.02-onizleme';
+const APP_VERSION = '2026.07.18.03-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
