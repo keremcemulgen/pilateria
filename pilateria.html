@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.19">
+<meta name="app-version" content="2026.07.18.20">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2711,6 +2711,22 @@ function __ptSessions(pid){ const pt=(state.packageTypes||[]).find(x=>x.id===pid
 function memberSessionsOverride(memberId, monthISO){
   const ov = getMemberMonthlyOverride(memberId, monthISO||currentMonth());
   return (ov && ov.sessionsOverride !== undefined && ov.sessionsOverride !== null && ov.sessionsOverride !== '') ? +ov.sessionsOverride : null;
+}
+// v60 KANON (Kerem): kalan=0 IKI FARKLI durumdur — (a) haklarin tamami YAPILDI/YANDI = gercekten BITTI;
+// (b) haklar takvime PLANLANDI ama dersler henuz yapilmadi = paket BITMEDI, sadece takvim dolu.
+// Rozetler bu ayrimi gosterir. HAK HESABI DEGISMEZ (v43: planli ders hak dusurur — 9. ders yazilamasin).
+function sessionsFinishState(ownerType, ownerId, ay) {
+  const quota = sessionQuotaFor(ownerType, ownerId, ay);
+  let done = 0, planned = 0;
+  (state.lessons || []).forEach(l => {
+    if (!l || l.status === 'cancelled') return;
+    const pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (pm !== ay) return;
+    if (ownerType === 'group') { if (l.groupId !== ownerId) return; }
+    else { if (l.groupId) return; if (!(l.memberIds || []).includes(ownerId)) return; }
+    if (l.status === 'planned') planned++; else done++;
+  });
+  return { quota, done, planned, remaining: Math.max(0, quota - done - planned), trulyFinished: done >= quota };
 }
 function sessionQuotaFor(ownerType, ownerId, monthISO){
   const ay = monthISO || currentMonth();
@@ -6681,7 +6697,7 @@ function renderGroups() {
       if (isCompleted) badge = '<span class="badge bad">✅ Paket tamamlandı</span>';
       else if (isExtended) badge = '<span class="badge warn">📌 Paket uzadı</span>';
       else if (!anyPaid && !monthISO) badge = '<span class="badge" style="background:#f5f0e0;color:#8a8573">Ödeme bekleniyor</span>';
-      else if (rem<=0) badge = '<span class="badge bad">Paket bitmiş</span>';
+      else if (rem<=0) badge = (sessionsFinishState('group', g.id, monthISO || currentMonth()).trulyFinished) ? '<span class="badge bad">Paket bitmiş</span>' : '<span class="badge" style="background:#E3F2FD;color:#1565C0;">⏳ Dersler planlandı</span>'; // v60
       else if (rem<=2) badge = `<span class="badge warn">${rem} ders kaldı</span>`;
       else badge = `<span class="badge ok">${rem} ders kaldı</span>`;
       const days = (g.defaultDays||[]).map(d=>DAYS[d]).join(', ') || '—';
@@ -7379,7 +7395,11 @@ function openGroupDetail(id, monthISO) {
     // v43: KALAN DERS = GRUBUN kalani (tek birim, odemeden bagimsiz) — tum uyelerde ayni. Odeme AYRI (asagidaki tik).
     const rem = sessionsRemainingFor('group', id, monthISO || currentMonth());
     const paid = hasGroupPay;
-    const badge = rem<=0 ? '<span class="badge bad">Bitmiş</span>'
+    const __fs = sessionsFinishState('group', id, monthISO || currentMonth()); // v60: bitti mi, planlandi mi?
+    const badge = rem<=0
+      ? (__fs.trulyFinished
+          ? '<span class="badge bad">Bitmiş</span>'
+          : `<span class="badge" style="background:#E3F2FD;color:#1565C0;" title="Ders hakkının tamamı takvime yazıldı — paket BİTMEDİ: ${__fs.done} yapıldı, ${__fs.planned} ders planlı">⏳ ${__fs.done}/${__fs.quota} · planlandı</span>`)
       : rem<=2 ? `<span class="badge warn">${rem}</span>`
       : `<span class="badge ok">${rem}</span>`;
     const tickLabel = hasGroupPay ? '✅ Ödendi' : '⬜ Ödeme al';
@@ -10628,7 +10648,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.19';
+const APP_VERSION = '2026.07.18.20';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
