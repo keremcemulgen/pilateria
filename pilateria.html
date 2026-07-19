@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.06">
+<meta name="app-version" content="2026.07.18.07">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -7461,18 +7461,67 @@ function openBatchDatesMember(memberId, monthISO) {
   renderBatchDatesRows();
   openModal('modal-batch-dates');
 }
+// v47: toplu ders girme — metin tarih/saat, yil OTOMATIK bulunulan yil, Enter ile alan-alan gecis
+function bdCurrentYear() { return +currentMonth().slice(0,4); }
+function bdParseDate(str) {
+  str = (str||'').trim();
+  if (!str) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str; // zaten ISO
+  let d, m, y;
+  const parts = str.split(/[.\/\s-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    d = +parts[0]; m = +parts[1];
+    if (parts[2] != null && parts[2] !== '') { y = +parts[2]; if (parts[2].length <= 2) y = 2000 + (+parts[2]); }
+    else y = bdCurrentYear(); // v47: YIL OTOMATIK bulunulan yil
+  } else if (/^\d{4}$/.test(str)) { d = +str.slice(0,2); m = +str.slice(2,4); y = bdCurrentYear(); } // "1508" -> 15.08
+  else return '';
+  if (!(d >= 1 && d <= 31 && m >= 1 && m <= 12)) return '';
+  if (!y || y < 2000 || y > 2100) y = bdCurrentYear();
+  const pad = n => String(n).padStart(2,'0');
+  return y + '-' + pad(m) + '-' + pad(d);
+}
+function bdFmtDate(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const a = iso.split('-'); return a[2] + '.' + a[1] + '.' + a[0];
+}
+function bdParseTime(str) {
+  str = (str||'').trim(); if (!str) return '';
+  if (/^\d{1,2}:\d{2}$/.test(str)) { const b = str.split(':'); return String(b[0]).padStart(2,'0') + ':' + b[1]; }
+  if (/^\d{3,4}$/.test(str)) { const s = str.padStart(4,'0'); return s.slice(0,2) + ':' + s.slice(2); } // "1000" -> 10:00
+  if (/^\d{1,2}$/.test(str)) { return String(str).padStart(2,'0') + ':00'; } // "10" -> 10:00
+  return str;
+}
+// Enter: alani parse et, sonraki tarih/saat alanina gec (son alandaysa yeni satir ac)
+function bdKey(ev) {
+  if (ev.key !== 'Enter') return;
+  ev.preventDefault();
+  const inp = ev.target;
+  const idx = +inp.getAttribute('data-bdidx');
+  const isDate = inp.classList.contains('bd-date');
+  batchDatesUpdate(idx, isDate ? 'date' : 'time', inp.value);
+  if (isDate) inp.value = (bdFmtDate(__batchDatesRows[idx] && __batchDatesRows[idx].date)) || inp.value;
+  else if (__batchDatesRows[idx]) inp.value = __batchDatesRows[idx].time || inp.value;
+  const navs = [].slice.call(document.querySelectorAll('#bd-rows .bd-nav'));
+  const pos = navs.indexOf(inp);
+  if (pos >= 0 && pos < navs.length - 1) {
+    const nx = navs[pos+1]; nx.focus(); try { nx.select(); } catch(e){}
+  } else {
+    batchDatesAddRow(); // son alan -> yeni satir + odakla (surekli giris)
+    setTimeout(() => { const ds = document.querySelectorAll('#bd-rows .bd-date'); const last = ds[ds.length-1]; if (last) { last.focus(); try { last.select(); } catch(e){} } }, 20);
+  }
+}
 function renderBatchDatesRows() {
   const wrap = document.getElementById('bd-rows');
   if (!wrap) return;
   wrap.innerHTML = __batchDatesRows.map((r,i) => `
     <div class="row" style="gap:6px;align-items:center;margin-bottom:6px;padding:8px;background:#fafafa;border-radius:6px;">
       <span style="min-width:32px;font-weight:600;color:var(--muted);">#${i+1}</span>
-      <input type="date" value="${r.date}" onchange="batchDatesUpdate(${i},'date',this.value)" style="flex:1;min-width:140px;">
-      <input type="time" value="${r.time}" onchange="batchDatesUpdate(${i},'time',this.value)" style="width:120px;">
+      <input type="text" inputmode="numeric" class="bd-nav bd-date" data-bdidx="${i}" value="${bdFmtDate(r.date)}" placeholder="gg.aa" onkeydown="bdKey(event)" onchange="batchDatesUpdate(${i},'date',this.value); this.value=bdFmtDate(__batchDatesRows[${i}].date)||this.value;" style="flex:1;min-width:110px;" title="Gün.Ay yaz (yıl otomatik bu yıl) — Enter ile saate geç">
+      <input type="text" inputmode="numeric" class="bd-nav bd-time" data-bdidx="${i}" value="${r.time||''}" placeholder="ss:dd" onkeydown="bdKey(event)" onchange="batchDatesUpdate(${i},'time',this.value); this.value=__batchDatesRows[${i}].time||this.value;" style="width:96px;" title="Saat yaz (örn 1000 → 10:00) — Enter ile alt satıra geç">
       <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;white-space:nowrap;" title="Bu dersi paketin SON DERSİ olarak işaretle (takvimde ⭐ SON DERS rozeti)"><input type="checkbox" ${r.last?'checked':''} onchange="batchDatesSetLast(${i}, this.checked)" style="width:auto">⭐ son</label>
       ${r.lessonId ? '<span style="font-size:11px;color:#2e7d32;">📌 mevcut</span>' : '<span style="font-size:11px;color:#888;">yeni</span>'}
       <button class="btn small secondary" onclick="batchDatesRemoveRow(${i})" title="Satırı sil">✕</button>
-    </div>`).join('') + '<div style="font-size:11px;color:var(--muted);margin-top:4px;">⭐ son: işaretlediğin ders takvimde "SON DERS" rozeti alır. İşaretlemezsen rozet, paketin tüm dersleri girildiğinde son derse otomatik gelir.</div>';
+    </div>`).join('') + '<div style="font-size:11px;color:var(--muted);margin-top:6px;">⌨️ <b>Hızlı giriş:</b> tarihe <b>gün.ay</b> yaz (örn <b>15.08</b> → yıl otomatik ' + bdCurrentYear() + '), <b>Enter</b> ile saate, saate <b>1000</b> yaz (→10:00), <b>Enter</b> ile alt satıra geç. Fare gerekmez.<br>⭐ son: işaretlediğin ders takvimde "SON DERS" rozeti alır; işaretlemezsen paketin tüm dersleri girilince son derse otomatik gelir.</div>';
 }
 // v18.1: ⭐ son ders isareti — pakette TEK son ders olur, digerlerinden isaret kalkar
 function batchDatesSetLast(idx, val) {
@@ -7482,7 +7531,10 @@ function batchDatesSetLast(idx, val) {
   renderBatchDatesRows();
 }
 function batchDatesUpdate(idx, field, val) {
-  if (__batchDatesRows[idx]) __batchDatesRows[idx][field] = val;
+  if (!__batchDatesRows[idx]) return;
+  if (field === 'date') __batchDatesRows[idx].date = bdParseDate(val); // metin -> ISO (yil otomatik)
+  else if (field === 'time') __batchDatesRows[idx].time = bdParseTime(val); // "1000" -> "10:00"
+  else __batchDatesRows[idx][field] = val;
 }
 function batchDatesAddRow() {
   let defTime = '';
@@ -10250,7 +10302,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.06';
+const APP_VERSION = '2026.07.18.07';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
