@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.12">
+<meta name="app-version" content="2026.07.18.13">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -6271,7 +6271,7 @@ function renderLessonMembersCheckboxes(preselect) {
   const __mlLesB = __mlIdB ? state.lessons.find(x=>x.id===__mlIdB) : null;
   const __mlDateB = (document.getElementById('ml-date')||{}).value || '';
   const __badgeMonth = (__mlLesB && __mlLesB.packageMonth) || window.__lessonCtxMonth || (__mlDateB ? __mlDateB.slice(0,7) : '') || currentMonth();
-  mEl.innerHTML = searchBar + (sortedMembers.length ? sortedMembers.map(m => {
+  const __mlKeepHTML = searchBar + (sortedMembers.length ? sortedMembers.map(m => {
     const r = memberRemainingForMonth(m.id, __badgeMonth);
     const checked = currentlyChecked.includes(m.id);
     const badge = r<=0 ? '<span class="badge bad">0</span>'
@@ -6286,6 +6286,7 @@ function renderLessonMembersCheckboxes(preselect) {
       <span>${m.name}</span> ${badge} ${payTag} ${(()=>{ const __l=ownerPkgMonthLabel('member',m.id); return __l?'<span class="badge" style="background:#eef2f7;color:#3a4a5a;">'+__l+'</span>':''; })()} ${m.archived?'<span class="archived-badge">Pasif</span>':''} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
     </label>`;
   }).join('') : emptyMsg);
+  setHTMLKeepFocus(mEl, __mlKeepHTML);
 }
 function saveLesson() {
   clearModalErrors('modal-lesson');
@@ -6744,9 +6745,27 @@ function updateGroupPricePreview() {
   el.innerHTML = html;
   el.style.display = 'block';
 }
+// v53 (Kerem): innerHTML ile yeniden cizilen konteynerdeki ODAKLI input, her tusta focus/caret
+// kaybediyordu (grup + ders modali uye-arama kutulari). Bu yardimci swap oncesi odakli descendant
+// input'u id ile yakalar, innerHTML'i uygular, sonra odagi + secim araligini geri koyar.
+function setHTMLKeepFocus(el, html){
+  var a = document.activeElement;
+  var keepId = (a && a.id && el.contains(a)) ? a.id : null;
+  var s = null, e = null;
+  if (keepId) { try { s = a.selectionStart; e = a.selectionEnd; } catch(_){} }
+  el.innerHTML = html;
+  if (keepId) {
+    var n = document.getElementById(keepId);
+    if (n) {
+      try { n.focus({preventScroll:true}); } catch(_){ try { n.focus(); } catch(__){} }
+      if (s != null) { try { n.setSelectionRange(s, e); } catch(_){} }
+    }
+  }
+}
 function renderGroupMembersCheckboxes(selected, currentGroupId) {
   const mEl = document.getElementById('mg-members');
-  const q = (document.getElementById('mg-member-search')?.value || '').toLowerCase();
+  const rawQ = (document.getElementById('mg-member-search')?.value || '');
+  const q = rawQ.toLowerCase(); // filtre lowercase; gosterim rawQ (v53: yazarken buyuk/kucuk korunur)
   // v10: pasif üyeleri de göster (gruba eklenince otomatik aktive olur)
   const sortedMembers = state.members.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
   const showAll = document.getElementById('mg-show-all')?.checked || false;
@@ -6772,7 +6791,7 @@ function renderGroupMembersCheckboxes(selected, currentGroupId) {
     </div>`;
   }).filter(Boolean).join('');
   const filterBar = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;padding:6px 8px;background:#fafafa;border-radius:6px;flex-wrap:wrap;">
-    <input type="search" id="mg-member-search" placeholder="🔍 Üye ara..." value="${escapeHtml(q)}" oninput="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')" style="flex:1;min-width:160px;font-size:13px;padding:6px 10px;">
+    <input type="search" id="mg-member-search" placeholder="🔍 Üye ara..." value="${escapeHtml(rawQ)}" oninput="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')" style="flex:1;min-width:160px;font-size:13px;padding:6px 10px;">
     <label style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
       <input type="checkbox" id="mg-show-all" ${showAll?'checked':''} onchange="renderGroupMembersCheckboxes([...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value), '${currentGroupId||''}')" style="width:auto">
       Başka grupta olanlar
@@ -6786,9 +6805,9 @@ function renderGroupMembersCheckboxes(selected, currentGroupId) {
   <div style="font-size:11px;color:var(--muted);margin-bottom:8px;padding:4px 8px;background:#fffaf0;border-radius:4px;">
     💡 Sağdaki kutu seçilen üyenin <b>hoca yüzdelik oranı</b>'dır. Boş bırakırsan grup veya genel ayarlar kullanılır.
   </div>`;
-  mEl.innerHTML = filterBar + (rows
+  setHTMLKeepFocus(mEl, filterBar + (rows
     ? rows
-    : '<div class="empty" style="padding:20px;">Uygun üye yok. <button type="button" class="btn small" onclick="quickAddMemberFromGroup(\''+(currentGroupId||'')+'\')">+ Yeni Üye Oluştur</button></div>');
+    : '<div class="empty" style="padding:20px;">Uygun üye yok. <button type="button" class="btn small" onclick="quickAddMemberFromGroup(\''+(currentGroupId||'')+'\')">+ Yeni Üye Oluştur</button></div>'));
 }
 // v10: Grup modali içinden hızlı yeni üye oluşturma
 // v44 (Kerem): "+ Yeni Üye" artik TAM uye formunu acar (paket + fiyat + ders hakki secilebilsin — sadece ad/telefon DEGIL).
@@ -10447,7 +10466,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.12';
+const APP_VERSION = '2026.07.18.13';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
