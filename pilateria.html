@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.21">
+<meta name="app-version" content="2026.07.18.22">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2908,7 +2908,12 @@ let __maskAmounts = false;
 try { __maskAmounts = localStorage.getItem('pilateria_mask_amounts') === '1'; } catch(e){}
 function money(n) {
   if (__maskAmounts) return '••••';
-  return new Intl.NumberFormat('tr-TR').format(Math.round(Number(n)||0));
+  // v62 KANON (Kerem): TUM para gosterimi KURUS hassasiyetli — virgulden sonra 2 haneye kadar.
+  // Kurus 0 ise sade tam sayi (4.500), degilse 2 hane (1.062,50). Hesaplar zaten float — yalniz
+  // GOSTERIM tam sayiya yuvarlaniyordu (1.062,50 -> 1.063 gorunuyordu); o kayip bitti.
+  const r = Math.round((Number(n) || 0) * 100) / 100;
+  const kurus = Math.round(Math.abs(r) * 100) % 100;
+  return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: kurus ? 2 : 0, maximumFractionDigits: 2 }).format(r);
 }
 function toggleMaskAmounts() {
   __maskAmounts = !__maskAmounts;
@@ -10648,7 +10653,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.21';
+const APP_VERSION = '2026.07.18.22';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
