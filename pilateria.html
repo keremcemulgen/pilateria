@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.15">
+<meta name="app-version" content="2026.07.18.16">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2611,11 +2611,15 @@ function createMemberPackage(m, monthISO, startDate, opts) {
   if (!m.packages) m.packages = [];
   const exists = m.packages.find(p => p.month === monthISO);
   if (exists) return exists;
-  const defaultPkg = (state.packageTypes||[])[0] || {sessions:8, price:7000};
+  // v56: kayit sessions'i = SATIN ALINAN hak — uyenin o-ay override'i > uyenin (o-ay/default) paket tipi > tip[0].
+  const __ownPkgId = (monthISO && m.monthly && m.monthly[monthISO] && m.monthly[monthISO].packageId) || m.defaultPackageId || '';
+  const __ownPkg = (state.packageTypes||[]).find(p => p.id === __ownPkgId) || null;
+  const defaultPkg = __ownPkg || (state.packageTypes||[])[0] || {sessions:8, price:7000};
+  let __ovS = null; try { __ovS = memberSessionsOverride(m.id, monthISO); } catch(e) {}
   const newPkg = {
     month: monthISO,
     startDate: startDate || (monthISO + '-01'),
-    sessions: opts.sessions || defaultPkg.sessions || 8,
+    sessions: opts.sessions || __ovS || defaultPkg.sessions || 8,
     price: opts.price !== undefined ? +opts.price : (m.totalPrice ? +m.totalPrice : defaultPkg.price || 0),
     instructorId: opts.instructorId || m.instructorId || '',
     instructorShareRate: opts.instructorShareRate !== undefined ? +opts.instructorShareRate : null,
@@ -2965,7 +2969,7 @@ function perLessonPriceForLesson(l) {
         // v54: bireysel ders = uyenin AY FIYATI / KENDI ders sayisi (eski v41 sabit /8 yerine; Kerem karari).
         const __pp = memberPerLessonPrice(m.id, l.packageMonth);
         if (__pp > 0) return __pp;
-        return ((pkg ? (+pkg.price || 0) : 0)) / PKG_LESSON_DIVISOR;
+        return ((pkg ? (+pkg.price || 0) : 0)) / ((pkg && +pkg.sessions) || PKG_LESSON_DIVISOR);
       }
     }
   }
@@ -10568,7 +10572,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.15';
+const APP_VERSION = '2026.07.18.16';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
