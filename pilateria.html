@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.22">
+<meta name="app-version" content="2026.07.18.23">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -930,6 +930,9 @@
     .m-cards { display:block; }
     /* hizli kaydirmada yapisma/bozulma yapan sticky basliklar telefonda kapali */
     thead.sticky-thead th, table.sticky-head thead th { position:static !important; top:auto !important; box-shadow:none !important; }
+    /* v63: mobilde sticky KAPALI; :has() overflow:visible geniş tabloyu ekrana tasitiyordu -> yatay KAYDIR */
+    .table-wrap:has(table.sticky-head), .table-wrap:has(thead.sticky-thead) { overflow-x:auto !important; overflow-y:visible !important; -webkit-overflow-scrolling:touch; }
+    .card { overflow-x:hidden; } /* kart icerigi ekrani tasmasin (tablolar kendi .table-wrap'inda kaydirilir) */
     .mc-group-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:14px 2px 6px; padding:9px 12px; background:var(--acc-soft, #e8f0e0); border-radius:10px; font-weight:700; color:var(--acc-strong, var(--p2)); cursor:pointer; }
     .mc-gname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .mc-gsum { font-size:12px; font-weight:700; flex-shrink:0; }
@@ -1007,7 +1010,7 @@
   @media (max-width: 768px) {
     /* --- NAVIGASYON: ust sekmeler yerine native alt bar --- */
     .tabs { display:none !important; }
-    main { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important; }
+    main { padding-bottom: calc(176px + env(safe-area-inset-bottom, 0px)) !important; } /* v63: FAB(+) tepesi(~140px)+alt bar+pay icin bol bosluk — son satir/buton FAB altinda kalmasin */
     .bottom-nav {
       display:flex; position:fixed; left:0; right:0; bottom:0; z-index:180;
       background:var(--surface, #fff); border-top:1px solid var(--border, #e6e8ea);
@@ -1077,6 +1080,19 @@
     table.resp-cards .archived-row td { background:transparent !important; color:inherit !important; }
     table.resp-cards td[data-hide-mobile] { display:none; }
     .table-wrap:has(table.resp-cards) { overflow-x:hidden; }
+    /* v63: odeme/uye kartinda UZUN GRUP ADI + alt yazilar sag kenardan tasmasin — zorla sar */
+    table.resp-cards td.card-title, table.resp-cards td.card-title * { white-space:normal !important; overflow-wrap:anywhere; word-break:break-word; }
+    table.resp-cards td small { display:inline-block; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
+    /* v63 KRITIK: resp-cards KART modunda .table-wrap table{min-width:600px} kart'i ekrandan genis yapip
+       sag kenari kirpiyordu (uzun grup adi tasmasi). Kart modunda min-width SIFIR, tam genislik. */
+    .table-wrap:has(table.resp-cards) { width:100%; max-width:100%; overflow-x:hidden; }
+    .table-wrap table.resp-cards, table.resp-cards, table.resp-cards tr, table.resp-cards td { min-width:0 !important; max-width:100% !important; }
+  }
+  /* v63: dar ekranda TOOLBAR (filtre/buton) kirpilmasin — sarilsin, kontroller okunur genislige gelsin */
+  @media (max-width:560px){
+    .toolbar { flex-wrap:wrap; gap:8px; }
+    .toolbar > button { flex:1 1 100%; }
+    .toolbar > input, .toolbar > select { flex:1 1 46%; min-width:0; max-width:100%; font-size:14px; }
   }
 /* ===== ŞIK DİYALOGLAR (Faz 1b) ===== */
 #pl-dlg-bg{position:fixed;inset:0;background:rgba(10,12,14,.45);z-index:999999;display:none;align-items:center;justify-content:center;padding:20px;}
@@ -8590,7 +8606,7 @@ function renderPayments() {
     return `<tr>
       <td data-label="Tarih">${fmtDate(p.date)}${(()=>{ const __pm=paymentMonthOf(p); return (__pm && __pm!==String(p.date||'').slice(0,7)) ? ' <span class="badge" style="background:#eef2f7;color:#3a4a5a;font-size:10px;" title="Odeme bu paketin ayina sayilir">📦 '+(typeof __shortMonth==='function'?__shortMonth(__pm):__pm)+'</span>' : ''; })()}</td>
       <td data-label="Üye" class="card-title">${memberName(p.memberId)}${groupCell}</td>
-      <td data-label="Paket">${p.pkgName}<br><small style="color:var(--muted)">${p.sessions} ders · ${p.size} kişilik</small></td>
+      <td data-label="Paket">${escapeHtml(p.pkgName||'')}<br><small style="color:var(--muted)">${(p.sessions!==undefined&&p.sessions!==null&&p.sessions!=='')?p.sessions+' ders':''}${(p.size!==undefined&&p.size!==null&&p.size!=='')?(p.sessions?' · ':'')+p.size+' kişilik':''}</small></td>
       <td data-label="Kampanya">${campCell}</td>
       <td data-label="Tutar">${amtCell}</td>
       <td data-label="Yöntem">${methodBadge}</td>
@@ -10653,7 +10669,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.22';
+const APP_VERSION = '2026.07.18.23';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
