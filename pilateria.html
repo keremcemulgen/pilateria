@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.03">
+<meta name="app-version" content="2026.07.18.04">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1766,7 +1766,7 @@
     <div class="field"><label>Sağlık Notları (rahatsızlık, sakatlık vb.)</label><textarea id="mm-health" rows="2"></textarea></div>
     <div class="field"><label>Genel Not</label><textarea id="mm-note" rows="2"></textarea></div>
     <div class="row end">
-      <button class="btn secondary" onclick="closeModal('modal-member')">İptal</button>
+      <button class="btn secondary" onclick="cancelMemberModal()">İptal</button>
       <button class="btn" onclick="saveMember()">Kaydet</button>
     </div>
   </div>
@@ -3054,6 +3054,7 @@ function openModal(id) {
 function closeModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
+  if (id === 'modal-member') { _pendingGroupModalAdd = null; _pendingEmptySlot = null; } // v44: bekleyen akis bayraklarini temizle
   el.classList.remove('open');
   el.style.zIndex = '';
   const idx = __modalStack.indexOf(id);
@@ -4973,6 +4974,8 @@ function createSecondPackage(sourceType, sourceId, monthISO) {
 // Grubun boş slotunu doldurma akışı: mevcut bir üye seçilebilir ya da yeni üye oluşturulabilir.
 // Yeni üye kaydedildiğinde _pendingEmptySlot üzerinden otomatik gruba eklenir.
 let _pendingEmptySlot = null;
+// v44: grup penceresindeki "+ Yeni Üye" akisi — yeni uye kaydedilince grup penceresinde otomatik isaretlenir.
+let _pendingGroupModalAdd = null;
 function fillEmptySlot(groupId, slotIndex) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return;
@@ -5276,9 +5279,20 @@ function saveMember() {
     }
   }
   save();
+  const __grpAdd = _pendingGroupModalAdd; _pendingGroupModalAdd = null; // v44: kapatmadan ONCE yakala (closeModal temizler)
   closeModal('modal-member');
   renderMembers(); renderGroups(); renderDashboard();
   refreshMemberDetailIfOpen(); refreshGroupDetailIfOpen();
+  // v44: grup penceresinden "+ Yeni Üye" ile gelindiyse yeni uyeyi grup penceresinde isaretle (fiyat/paket zaten kaydedildi)
+  if (!id && __grpAdd) {
+    const __gm = document.getElementById('modal-group');
+    if (__gm && __gm.classList.contains('open')) {
+      const __checked = (__grpAdd.checked || []).slice();
+      if (!__checked.includes(data.id)) __checked.push(data.id);
+      try { renderGroupMembersCheckboxes(__checked, __grpAdd.groupId); } catch(e){}
+      setTimeout(() => { try { updateGroupPricePreview(); } catch(e){} }, 10);
+    }
+  }
 }
 
 // v12: Aktif üye detayı (cross-modal refresh için)
@@ -6573,25 +6587,15 @@ function renderGroupMembersCheckboxes(selected, currentGroupId) {
     : '<div class="empty" style="padding:20px;">Uygun üye yok. <button type="button" class="btn small" onclick="quickAddMemberFromGroup(\''+(currentGroupId||'')+'\')">+ Yeni Üye Oluştur</button></div>');
 }
 // v10: Grup modali içinden hızlı yeni üye oluşturma
-async function quickAddMemberFromGroup(groupId) {
-  const name = await plPrompt('Yeni üyenin adı:', '', { placeholder: 'Ad Soyad' });
-  if (!name || !name.trim()) return;
-  const phone = (await plPrompt('Telefon (opsiyonel):', '', { placeholder: '05xx xxx xx xx', type: 'tel' })) || '';
-  const newMember = {
-    id: uid(),
-    name: name.trim(),
-    phone: phone.trim(),
-    joinDate: todayISO(),
-    archived: false,
-    packages: []
-  };
-  state.members.push(newMember);
-  save();
-  // Re-render checkboxes; otomatik seç
+// v44 (Kerem): "+ Yeni Üye" artik TAM uye formunu acar (paket + fiyat + ders hakki secilebilsin — sadece ad/telefon DEGIL).
+// Kaydedince yeni uye grup penceresinde OTOMATIK isaretlenir ve fiyati/paketi grup sayfasinda gorunur.
+function quickAddMemberFromGroup(groupId) {
   const currentChecked = [...document.querySelectorAll('#mg-members input.gm-mc:checked')].map(x => x.value);
-  currentChecked.push(newMember.id);
-  renderGroupMembersCheckboxes(currentChecked, groupId);
+  _pendingGroupModalAdd = { groupId: groupId || '', checked: currentChecked };
+  _pendingEmptySlot = null; // slot akisiyle karismasin
+  openMemberModal(); // yeni uye — paket/fiyat/ders hakki alanlariyla
 }
+function cancelMemberModal() { _pendingEmptySlot = null; _pendingGroupModalAdd = null; closeModal('modal-member'); }
 function saveGroup() {
   clearModalErrors('modal-group');
   const id = document.getElementById('mg-id').value;
@@ -10182,7 +10186,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.03';
+const APP_VERSION = '2026.07.18.04';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
