@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.08-onizleme">
+<meta name="app-version" content="2026.07.18.09-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2362,6 +2362,11 @@ function applyV10MigrationToState(s) {
       l.memberIds = l.memberIds.filter(mid => {
         const mm = (s.members || []).find(x => x && x.id === mid);
         if (!mm) return true; // bilinmeyen id'ye dokunma (senkron sirasi guvenligi)
+        // v49 KOK FIX: PLANLI grup dersinde grubun O AYKI kadrosunda OLMAYAN uyeyi AT (eski/baska gruptan sizanlar)
+        if (l.groupId) {
+          const gg = (s.groups || []).find(x => x && x.id === l.groupId);
+          if (gg) { const roster = (resolveGroupMembersForMonth(gg, __pm) || []).filter(Boolean); if (roster.length && roster.indexOf(mid) < 0) return false; }
+        }
         for (const per of (mm.archivePeriods || [])) {
           const f = String((per && per.from) || '').slice(0, 7);
           const t = (per && per.to) ? String(per.to).slice(0, 7) : null;
@@ -6132,7 +6137,12 @@ function renderLessonMembersCheckboxes(preselect) {
       if (isMemberInactiveInMonth(mm, __lpm)) return false;
       return isMemberEnrolledInMonth(mid, __lpm);
     });
-    const __gset = new Set(__gmids.concat(currentlyChecked));
+    // v49 KOK FIX: grup dersinde YALNIZ grubun O AYKI kadrosu gorunur. Dersin bayat memberIds'indeki
+    // grup-DISI (eski/baska grup) uyeler LISTEYE KATILMAZ -> 4 kisilik grupta 5 kisi gorunup kapasite
+    // asilmasi ve kaydin bloke olmasi biter. Grup uyesi olan secililer korunur.
+    const __monthRoster = new Set((resolveGroupMembersForMonth(__lg, __lpm) || []).filter(Boolean));
+    const __checkedInGroup = currentlyChecked.filter(mid => __monthRoster.has(mid));
+    const __gset = new Set(__gmids.concat(__checkedInGroup));
     sortedMembers = sortedMembers.filter(m => __gset.has(m.id));
   } else {
     const q = __lessonMemberSearch.toLocaleLowerCase('tr');
@@ -10338,7 +10348,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.08-onizleme';
+const APP_VERSION = '2026.07.18.09-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
