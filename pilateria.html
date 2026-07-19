@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.04">
+<meta name="app-version" content="2026.07.18.05">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -852,7 +852,8 @@
   .tab{color:var(--muted);border-radius:9px;font-weight:500;transition:var(--tr);}
   .tab.active{background:var(--acc-soft)!important;color:var(--acc-strong)!important;}
   .tab:not(.active):hover{background:var(--bg)!important;color:var(--text)!important;}
-  main{max-width:1280px;}
+  main{max-width:none;padding:20px 32px;} /* v45: PC tam genislik */
+  @media (min-width:1200px){ body{ zoom:1.12; } } /* v45: masaustunde daha buyuk/okunakli */
   .card{box-shadow:none;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);}
   .card h2{color:var(--text);font-weight:600;} .card h3{color:var(--muted);font-weight:500;}
   .stat{box-shadow:none;border:1px solid var(--border);border-left:3px solid var(--acc);border-radius:var(--radius);background:var(--card);}
@@ -1829,10 +1830,10 @@
       <div class="field"><label>Paket Ayı <small style="color:var(--muted);font-weight:400;">— ödeme bu ayın sayfasına yazılır</small></label><input type="text" id="mp-pkg-month-label" disabled style="font-weight:700;"><input type="hidden" id="mp-pkg-month"></div>
       <div class="field" id="mp-pkg-start-field"><label>Paket Başlangıç Tarihi <small style="color:var(--muted);font-weight:400;">— opsiyonel; boşsa ilk ders / ayın 1'i</small></label><input type="date" id="mp-pkg-start"></div>
       <div class="field">
-        <label>Paket *</label>
+        <label>Paket <small style="color:var(--muted);font-weight:400;">— opsiyonel</small></label>
         <select id="mp-pkg" onchange="onPkgChange()"></select>
       </div>
-      <div class="field"><label>Ders Sayısı (hak) *</label><input type="number" id="mp-sessions" min="1" placeholder="örn. 8 — elle gir"></div>
+      <div class="field"><label>Ders Sayısı (hak) <small style="color:var(--muted);font-weight:400;">— otomatik (8), opsiyonel</small></label><input type="number" id="mp-sessions" min="0" placeholder="otomatik: 8"></div>
       <div class="field">
         <label>Kampanya / İndirim</label>
         <select id="mp-campaign" onchange="applyCampaign()"></select>
@@ -7806,7 +7807,7 @@ function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
     }
   } else {
     document.getElementById('mp-date').value = todayISO();
-    document.getElementById('mp-sessions').value = ''; // v22: elle girilecek
+    document.getElementById('mp-sessions').value = sessionQuotaFor(groupId ? 'group' : 'member', groupId || memberId, pkgMonthCtx || currentMonth()) || 8; // v45: otomatik ders hakki (opsiyonel — odeme buna baglanmaz)
     document.getElementById('mp-delete-btn').style.display = 'none';
     cSel.value = 'none';
     // v18: bireysel üyenin tanımlı paketi varsa otomatik seç (gruptaki defaultPackageId mantığı)
@@ -7994,7 +7995,9 @@ function savePayment() {
   const date = document.getElementById('mp-date').value;
   const pkgId = document.getElementById('mp-pkg').value;
   const pkgObj = state.packageTypes.find(x=>x.id===pkgId);
-  const sessions = +document.getElementById('mp-sessions').value;
+  // v45: DERS SAYISI odemeden BAGIMSIZ — bos ise otomatik (paket tipi veya 8). Odeme icin ZORUNLU DEGIL.
+  let sessions = +document.getElementById('mp-sessions').value;
+  if (!sessions || sessions < 1) sessions = (pkgObj && +pkgObj.sessions) || 8;
   const listPrice = +document.getElementById('mp-list').value || 0;
   const amount = +document.getElementById('mp-amount').value;
   const method = document.getElementById('mp-method').value;
@@ -8006,8 +8009,7 @@ function savePayment() {
   let errs = 0;
   if (!memberId) { markInvalid('mp-member', 'Üye seçilmeli'); errs++; }
   if (!date) { markInvalid('mp-date', 'Tarih zorunludur'); errs++; }
-  if (!pkgId) { markInvalid('mp-pkg', 'Paket seçilmeli'); errs++; }
-  if (!sessions || sessions < 1) { markInvalid('mp-sessions', 'Ders sayısı ≥ 1 olmalı'); errs++; }
+  // v45: Paket ve Ders Sayisi ZORUNLU DEGIL (odeme = odendi gostergesi; ders hakki ayri, varsayilan 8)
   if (isNaN(amount) || amount < 0) { markInvalid('mp-amount', 'Geçersiz tutar'); errs++; }
   if (errs) { alert(`${errs} zorunlu alan eksik. Kırmızı ile işaretli alanları kontrol et.`); return; }
   if (amount === 0) {
@@ -8066,7 +8068,9 @@ function saveGroupPaymentAll() {
   const date = document.getElementById('mp-date').value;
   const pkgId = document.getElementById('mp-pkg').value;
   const pkgObj = state.packageTypes.find(x=>x.id===pkgId);
-  const sessions = +document.getElementById('mp-sessions').value;
+  // v45: ders sayisi opsiyonel/otomatik, paket opsiyonel
+  let sessions = +document.getElementById('mp-sessions').value;
+  if (!sessions || sessions < 1) sessions = (pkgObj && +pkgObj.sessions) || 8;
   const listPrice = +document.getElementById('mp-list').value || 0;
   const amount = +document.getElementById('mp-amount').value;
   const method = document.getElementById('mp-method').value;
@@ -8077,8 +8081,6 @@ function saveGroupPaymentAll() {
   const campaignName = camp ? camp.name : '';
   let errs = 0;
   if (!date) { markInvalid('mp-date', 'Tarih zorunludur'); errs++; }
-  if (!pkgId) { markInvalid('mp-pkg', 'Paket seçilmeli'); errs++; }
-  if (!sessions || sessions < 1) { markInvalid('mp-sessions', 'Ders sayısı ≥ 1 olmalı'); errs++; }
   if (isNaN(amount) || amount < 0) { markInvalid('mp-amount', 'Geçersiz tutar'); errs++; }
   if (errs) { alert(`${errs} zorunlu alan eksik. Kırmızı ile işaretli alanları kontrol et.`); return; }
   const packageMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
@@ -10186,7 +10188,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.04';
+const APP_VERSION = '2026.07.18.05';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
