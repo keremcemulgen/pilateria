@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.09-onizleme">
+<meta name="app-version" content="2026.07.18.10-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1301,6 +1301,14 @@
     <div id="overdue-list"></div>
     <div class="note-block" style="margin-top:10px;">İlk ders tarihi geçmiş olup henüz ödeme yapmayan üyeler / gruplar burada listelenir. İlk dersin yapıldığı günden sonraki gün hatırlatmaya düşer.</div>
   </div>
+  <div class="card" id="nextweek-missing-card">
+    <div class="row between">
+      <h2>🗓️ Gelecek Hafta Ders Girilmemiş <small id="nwm-count" style="font-weight:400;font-size:12px;color:var(--muted);"></small></h2>
+      <button class="btn small secondary" onclick="copyTextToClipboard(window.__nwmText||'', this)" title="Listeyi kopyala">📋 Kopyala</button>
+    </div>
+    <div id="nextweek-missing-list"></div>
+    <div class="note-block" style="margin-top:8px;">Önümüzdeki hafta (Pzt–Paz) için henüz ders girilmemiş <b>aktif grup ve bireysel üyeler</b>. Her Cumartesi buradan kontrol et; eksik dersleri "Ders Gir/Aç" ile planla — kimsenin dersi aksamasın.</div>
+  </div>
   <div class="card" id="today-messages-card">
     <div class="row between">
       <h2>🌅 Bugünün Mesajları <small id="tm-notif-status" style="font-weight:400;font-size:12px;color:var(--muted);"></small></h2>
@@ -1825,6 +1833,14 @@
   </div>
 </div>
 
+<div class="modal-bg" id="modal-schedule-report">
+  <div class="modal" style="max-width:520px;">
+    <div class="row between"><h2 id="sr-title" style="margin:0;">Ders Programı</h2><button class="btn secondary small" onclick="closeModal('modal-schedule-report')">✕</button></div>
+    <div style="font-size:12px;color:var(--muted);margin:6px 0;">Aşağıdaki metni kopyalayıp üyeye/gruba WhatsApp'tan gönderebilirsin.</div>
+    <pre id="sr-text" style="white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;margin:10px 0;font-family:inherit;max-height:50vh;overflow:auto;"></pre>
+    <div class="row" style="gap:8px;"><button class="btn" onclick="copyTextToClipboard(document.getElementById('sr-text').textContent, this)">📋 Kopyala</button><button class="btn secondary" onclick="closeModal('modal-schedule-report')">Kapat</button></div>
+  </div>
+</div>
 <div class="modal-bg" id="modal-payment">
   <div class="modal">
     <h2>Ödeme Kaydet</h2>
@@ -3197,7 +3213,71 @@ function clearModalErrors(modalId) {
 }
 
 // ========== DASHBOARD ==========
+// v50: DERS PROGRAMI RAPORU (uye/grup) — WhatsApp'a kopyalanabilir metin
+function __lessonStatusWord(st){ return st==='completed'?'✅ Yapıldı':st==='missed'?'🔥 Gelmedi':st==='cancelled'?'🚫 İptal':'⏳ Planlı'; }
+function __dayNameTR(iso){ try { return parseISO(iso).toLocaleDateString('tr-TR',{weekday:'long'}); } catch(e){ return ''; } }
+function buildMemberLessonReport(memberId, monthISO){
+  const m = state.members.find(x=>x.id===memberId); if(!m) return '';
+  const ay = monthISO || currentMonth();
+  const ls = state.lessons.filter(l => (l.memberIds||[]).includes(memberId) && (l.packageMonth||String(l.date||'').slice(0,7))===ay && l.status!=='cancelled')
+    .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const ayLbl = parseISO(ay+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
+  let out = 'Merhaba '+(m.name||'')+' 👋\n📅 '+ayLbl+' ders programın:\n';
+  if(!ls.length) out += '(bu ay planlı ders yok)\n';
+  else ls.forEach(l=>{ out += '• '+bdFmtDate(l.date)+' '+__dayNameTR(l.date)+' '+l.time+' — '+__lessonStatusWord(l.status||'planned')+(l.groupId?' (grup)':'')+'\n'; });
+  const done = ls.filter(l=>l.status==='completed').length, planned = ls.filter(l=>(l.status||'planned')==='planned').length;
+  out += 'Toplam '+ls.length+' ders · '+done+' yapıldı · '+planned+' planlı.\nSağlıklı günler! 🧘‍♀️';
+  return out;
+}
+function buildGroupLessonReport(groupId, monthISO){
+  const g = state.groups.find(x=>x.id===groupId); if(!g) return '';
+  const ay = monthISO || currentMonth();
+  const ls = state.lessons.filter(l => l.groupId===groupId && (l.packageMonth||String(l.date||'').slice(0,7))===ay && l.status!=='cancelled')
+    .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const ayLbl = parseISO(ay+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
+  let out = 'Merhaba 👋 ('+groupDisplayName(g,ay)+')\n📅 '+ayLbl+' grup ders programı:\n';
+  if(!ls.length) out += '(bu ay planlı ders yok)\n';
+  else ls.forEach(l=>{ out += '• '+bdFmtDate(l.date)+' '+__dayNameTR(l.date)+' '+l.time+' — '+__lessonStatusWord(l.status||'planned')+'\n'; });
+  const done = ls.filter(l=>l.status==='completed').length, planned = ls.filter(l=>(l.status||'planned')==='planned').length;
+  out += 'Toplam '+ls.length+' ders · '+done+' yapıldı · '+planned+' planlı.\nGörüşmek üzere! 💪';
+  return out;
+}
+function openScheduleReport(type, id, monthISO){
+  const ay = monthISO || currentMonth();
+  const txt = type==='group' ? buildGroupLessonReport(id, ay) : buildMemberLessonReport(id, ay);
+  const nm = type==='group' ? groupDisplayName(state.groups.find(x=>x.id===id)||{}, ay) : ((state.members.find(x=>x.id===id)||{}).name||'');
+  const tEl=document.getElementById('sr-title'); if(tEl) tEl.textContent = '📋 '+nm+' — Ders Programı';
+  const xEl=document.getElementById('sr-text'); if(xEl) xEl.textContent = txt;
+  openModal('modal-schedule-report');
+}
+// v50: GELECEK HAFTA (onumuzdeki Pzt-Paz) ders GIRILMEMIS aktif grup + bireysel uyeler
+function getNextWeekMissing(){
+  const ws = startOfWeek(0);
+  const start = addDays(ws, 7);   // gelecek hafta Pzt
+  const end = addDays(ws, 14);    // sonraki Pzt (haric)
+  const cm = currentMonth();
+  const hasInRange = (pred) => state.lessons.some(l => { if(!l||l.status==='cancelled') return false; const d=parseISO(l.date); return d>=start && d<end && pred(l); });
+  const groups = state.groups.filter(g => !isGroupInactiveInMonth(g, cm) && __activeRosterForMonth(g, cm).length>0 && !hasInRange(l => l.groupId===g.id));
+  const inAnyGroup = new Set(); state.groups.forEach(g => __activeRosterForMonth(g, cm).forEach(id=>inAnyGroup.add(id)));
+  const members = state.members.filter(m => !m.archived && isMemberEnrolledInMonth(m.id, cm) && !inAnyGroup.has(m.id) && !hasInRange(l => !l.groupId && (l.memberIds||[]).includes(m.id)));
+  return { start, end, groups, members };
+}
+function renderNextWeekMissing(){
+  const el = document.getElementById('nextweek-missing-list'); if(!el) return;
+  const { start, end, groups, members } = getNextWeekMissing();
+  const rangeLbl = bdFmtDate(isoDate(start))+' – '+bdFmtDate(isoDate(addDays(end,-1)));
+  const cntEl = document.getElementById('nwm-count'); if(cntEl) cntEl.textContent = '('+groups.length+' grup, '+members.length+' üye · '+rangeLbl+')';
+  if(!groups.length && !members.length){ el.innerHTML = '<div class="empty" style="padding:14px;">🎉 Tüm aktif grup ve üyelerin gelecek hafta dersi planlanmış.</div>'; window.__nwmText='Gelecek hafta ('+rangeLbl+'): tüm dersler planlı 🎉'; return; }
+  let txt = '🗓️ Gelecek hafta ('+rangeLbl+') ders GİRİLMEMİŞ:\n', html='';
+  if(groups.length){ txt+='\nGRUPLAR ('+groups.length+'):\n';
+    html += '<div style="font-weight:700;margin:6px 0 4px;">👯 Gruplar ('+groups.length+')</div>' + groups.map(g=>{ const nm=groupDisplayName(g,currentMonth()); txt+='• '+nm+'\n'; return '<div class="row between" style="padding:7px 8px;border-bottom:1px solid var(--border);"><span>'+escapeHtml(nm)+'</span><button class="btn small" onclick="openGroupDetail(\''+g.id+'\', currentMonth())">📅 Ders Gir</button></div>'; }).join(''); }
+  if(members.length){ txt+='\nBİREYSEL ('+members.length+'):\n';
+    html += '<div style="font-weight:700;margin:10px 0 4px;">👤 Bireysel ('+members.length+')</div>' + members.map(m=>{ txt+='• '+(m.name||'')+'\n'; return '<div class="row between" style="padding:7px 8px;border-bottom:1px solid var(--border);"><span>'+escapeHtml(m.name||'')+'</span><button class="btn small" onclick="openMemberDetail(\''+m.id+'\')">📅 Aç</button></div>'; }).join(''); }
+  el.innerHTML = html;
+  window.__nwmText = txt;
+}
 function renderDashboard() {
+  try { renderNextWeekMissing(); } catch(e){}
   // Tutar gizleme butonu metnini güncelle
   document.querySelectorAll('.mask-amounts-btn').forEach(b => {
     b.textContent = __maskAmounts ? '👁 Tutarları Göster' : '🙈 Tutarları Gizle';
@@ -5387,6 +5467,7 @@ function openMemberDetail(id) {
     <div class="row" style="margin:12px 0;flex-wrap:wrap;gap:6px;">
       <button class="btn pl-owner-only" onclick="openPaymentModal('${id}');" title="Ödeme penceresi üstte açılır — üye detayı arkada açık kalır">+ Paket/Ödeme</button>
       <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">Düzenle</button>
+      <button class="btn secondary" onclick="openScheduleReport('member','${id}','${thisMonth}')" title="Üyenin ders programını kopyalanabilir metin olarak aç (WhatsApp'a gönder)">📋 Ders Programı</button>
       ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">Toplu Ders Gir</button>` : ''}
       ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Paket erken bittiyse: bu üye için aynı ay içinde BAĞIMSIZ yeni paket kaydı">+ 2. Paket</button>` : ''}
       ${m.archived
@@ -7257,6 +7338,7 @@ function openGroupDetail(id, monthISO) {
     <div class="row" style="margin:12px 0;flex-wrap:wrap;">
       <button class="btn" onclick="openGroupPaymentModal('${id}')">💳 Gruba Ödeme Al</button>
       <button class="btn" onclick="openLessonModalForGroup('${id}', '${monthISO}')">📅 Ders Ekle</button>
+      <button class="btn secondary" onclick="openScheduleReport('group','${id}','${monthISO}')" title="Grubun ders programını kopyalanabilir metin olarak aç (WhatsApp'a gönder)">📋 Ders Programı</button>
       <button class="btn secondary" onclick="openGroupModal('${id}')" title="Grubu düzenle — grup detayı arka planda açık kalır">Düzenle</button>
       <button class="btn secondary" onclick="createSecondPackage('group','${id}','${monthISO||''}')" title="Paket erken bittiyse: aynı üyelerle BAĞIMSIZ yeni paket kaydı (ayrı ödeme/ders; üye sayısı değişmez)">+ 2. Paket</button>
       ${monthISO ? `<button class="btn secondary" onclick="markGroupPackageExtended('${id}','${monthISO}', true)" title="Bu ay ödeme alınmadan paket devam ediyor (0 TL)">📌 Paket Uzadı (0 TL)</button>` : ''}
@@ -10348,7 +10430,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.09-onizleme';
+const APP_VERSION = '2026.07.18.10-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
