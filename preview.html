@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.05-onizleme">
+<meta name="app-version" content="2026.07.18.06-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1783,6 +1783,10 @@
     <div class="field">
       <label>Grup (hızlı dolgu için seç — üye/hoca/kapasite otomatik gelir)</label>
       <select id="ml-group-select" onchange="applyGroupToLesson(this.value)"></select>
+    </div>
+    <div class="field" id="ml-pkg-month-field">
+      <label>📦 Paket Ayı <small style="color:var(--muted);font-weight:400;">— ders bu ayın paketine sayılır; sarkan/önceki ay paketi için o ayı seç (📦 = o ayda ders hakkı kalan)</small></label>
+      <select id="ml-pkg-month" onchange="onLessonPkgMonthChange()"></select>
     </div>
     <div class="fields-grid">
       <div class="field"><label>Tarih *</label><input type="date" id="ml-date"></div>
@@ -5902,6 +5906,59 @@ function deleteInstructor() {
 }
 
 // ========== LESSONS ==========
+// v46: ders modalindaki mevcut sahibi (grup varsa grup; yoksa TEK secili bireysel uye)
+function lessonModalOwner() {
+  const gid = (document.getElementById('ml-group')||{}).value || '';
+  if (gid) return { type:'group', id:gid };
+  const checked = [...document.querySelectorAll('#ml-members input:checked')].map(x=>x.value);
+  if (checked.length === 1) return { type:'member', id:checked[0] };
+  return { type:'', id:'' };
+}
+// v46: sahibin ders hakki KALAN (bitmemis) paket aylari — en yeni once
+function ownerUnfinishedMonths(ownerType, ownerId) {
+  if (!ownerId) return [];
+  const o = ownerType==='group' ? state.groups.find(x=>x.id===ownerId) : state.members.find(x=>x.id===ownerId);
+  return ((o && o.packages) || [])
+    .filter(pk => pk && pk.month && sessionsRemainingFor(ownerType, ownerId, pk.month) > 0)
+    .map(pk => pk.month).sort().reverse();
+}
+// v46: takvimden ders eklerken akilli varsayilan paket ayi
+function smartPkgMonthFor(ownerType, ownerId, dateISO) {
+  const dm = String(dateISO||'').slice(0,7);
+  if (!ownerId) return dm;
+  const win = resolvePackageMonthForDate(ownerType, ownerId, dateISO); // 1) tarihi kapsayan (30 gun) sarkan paket
+  if (win && win !== dm) return win;
+  const o = ownerType==='group' ? state.groups.find(x=>x.id===ownerId) : state.members.find(x=>x.id===ownerId);
+  const packs = (o && o.packages) || [];
+  if (packs.some(pk => pk && pk.month === dm)) return dm; // 2) tarih ayinda paket varsa o
+  const unfin = ownerUnfinishedMonths(ownerType, ownerId).filter(mo => mo < dm); // 3) onceki ayda BITMEMIS paket
+  if (unfin.length) return unfin[0];
+  return dm;
+}
+// v46: Paket Ayi seciciyi doldur — sahibin sarkan/eski paket aylarini isaretle
+function populateLessonPkgMonth(preferMonth) {
+  const sel = document.getElementById('ml-pkg-month'); if (!sel) return;
+  const dateISO = (document.getElementById('ml-date')||{}).value || todayISO();
+  const dm = String(dateISO).slice(0,7);
+  const owner = lessonModalOwner();
+  const ownerObj = owner.id ? (owner.type==='group' ? state.groups.find(x=>x.id===owner.id) : state.members.find(x=>x.id===owner.id)) : null;
+  const base = parseISO(dm + '-01');
+  const months = [];
+  for (let i=-3;i<=1;i++){ const d=new Date(base.getFullYear(), base.getMonth()+i, 1); const mo=isoDate(d).slice(0,7); if(!months.includes(mo)) months.push(mo); }
+  ((ownerObj && ownerObj.packages) || []).forEach(pk => { if (pk && pk.month && !months.includes(pk.month)) months.push(pk.month); });
+  months.sort();
+  const cur = preferMonth || sel.value || (owner.id ? smartPkgMonthFor(owner.type, owner.id, dateISO) : dm) || dm;
+  sel.innerHTML = months.map(mo => {
+    const lbl = parseISO(mo+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
+    let mark = '';
+    if (ownerObj && (ownerObj.packages||[]).some(pk => pk && pk.month === mo)) {
+      const rem = sessionsRemainingFor(owner.type, owner.id, mo);
+      mark = rem>0 ? (' · 📦 ' + rem + ' ders kalan') : ' · paket dolu';
+    }
+    return '<option value="'+mo+'"'+(mo===cur?' selected':'')+'>'+lbl+(mo===dm?' (dersin ayı)':'')+mark+'</option>';
+  }).join('');
+}
+function onLessonPkgMonthChange() { renderLessonMembersCheckboxes(); }
 function openLessonModal(id, date, time, groupId, ctxMonth) {
   window.__lessonCtxMonth = ctxMonth || ''; // v38: grup detay ayindan acildiysa o ay (yoksa tarih bazli)
   __lessonMemberSearch = ''; // v29: arama her açılışta sıfırlanır
@@ -5959,6 +6016,8 @@ function openLessonModal(id, date, time, groupId, ctxMonth) {
   }
   document.getElementById('ml-size').value = l.size;
   document.getElementById('ml-note').value = l.note||'';
+  // v46: Paket Ayi seciciyi doldur (roster bu aya gore listelenir; sarkan paket icin onceki ay secilebilir)
+  try { populateLessonPkgMonth(l.packageMonth || window.__lessonCtxMonth || ''); } catch(e){}
   // members (checkbox list)
   renderLessonMembersCheckboxes(l.memberIds || []);
   document.getElementById('ml-warning').textContent = '';
@@ -6010,6 +6069,7 @@ function applyGroupToLesson(groupId) {
     const ts = document.getElementById('ml-time');
     if (ts) ts.value = g.defaultTime;
   }
+  try { populateLessonPkgMonth(smartPkgMonthFor('group', groupId, (document.getElementById('ml-date')||{}).value || todayISO())); } catch(e){} // v46: sarkan paket ayi otomatik secilir
   renderLessonMembersCheckboxes(g.memberIds||[]);
 }
 // v21: Bireysel derste uye isaretlenince uyenin VARSAYILAN HOCASI otomatik secilir
@@ -6048,7 +6108,7 @@ function renderLessonMembersCheckboxes(preselect) {
     const __mlId = (document.getElementById('ml-id')||{}).value || '';
     const __mlLesson = __mlId ? state.lessons.find(x => x.id === __mlId) : null;
     const __mlDate = (document.getElementById('ml-date')||{}).value || '';
-    const __lpm = (__mlLesson && __mlLesson.packageMonth) || window.__lessonCtxMonth || (__mlDate ? __mlDate.slice(0,7) : '') || currentMonth();
+    const __lpm = ((document.getElementById('ml-pkg-month')||{}).value) || (__mlLesson && __mlLesson.packageMonth) || window.__lessonCtxMonth || (__mlDate ? __mlDate.slice(0,7) : '') || currentMonth();
     const __gmids = resolveGroupMembersForMonth(__lg, __lpm).filter(mid => {
       if (!mid) return false;
       const mm = state.members.find(x => x.id === mid);
@@ -6144,9 +6204,11 @@ function saveLesson() {
   // v10/v18: Paket etiketi — DUZENLEMEDE mevcut paket ayi KORUNUR (tarih degisse bile ders ayni pakete ait kalir);
   // yeni derste tarihi kapsayan paketin ayi kullanilir (ay sarkmasi karismaz).
   const __exForPkg = id ? state.lessons.find(x => x.id === id) : null;
+  const __pmField = ((document.getElementById('ml-pkg-month')||{}).value) || '';
   let packageMonth;
-  if (__exForPkg && __exForPkg.packageMonth) packageMonth = __exForPkg.packageMonth;
-  else if (groupId) packageMonth = (window.__lessonCtxMonth || resolvePackageMonthForDate('group', groupId, date)); // v38: grup detay ayi varsa o
+  if (__pmField) packageMonth = __pmField; // v46: kullanicinin sectigi PAKET AYI (sarkan/onceki ay dahil) — her zaman kazanir
+  else if (__exForPkg && __exForPkg.packageMonth) packageMonth = __exForPkg.packageMonth;
+  else if (groupId) packageMonth = (window.__lessonCtxMonth || resolvePackageMonthForDate('group', groupId, date));
   else if (checked.length === 1) packageMonth = resolvePackageMonthForDate('member', checked[0], date);
   else packageMonth = String(date).slice(0,7);
   let packageOwnerType = '';
@@ -10200,7 +10262,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.05-onizleme';
+const APP_VERSION = '2026.07.18.06-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
