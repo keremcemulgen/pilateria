@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.10-onizleme">
+<meta name="app-version" content="2026.07.18.11-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2311,6 +2311,7 @@ function applyV10MigrationToState(s) {
   s.lessons = (s.lessons || []).map(l => {
     if (!l) return l;
     if (!l.packageMonth && l.date) l.packageMonth = String(l.date).slice(0,7);
+    if (l.time && /[.,]/.test(l.time)) { const __tm = String(l.time).replace(/[.,]/g,':').match(/^(\d{1,2}):(\d{1,2})$/); if (__tm) l.time = String(__tm[1]).padStart(2,'0')+':'+String(__tm[2]).padStart(2,'0'); }
     if (l.groupId && !l.packageOwnerType) {
       l.packageOwnerType = 'group';
       l.packageOwnerId = l.groupId;
@@ -2366,36 +2367,52 @@ function applyV10MigrationToState(s) {
     }
     return g;
   });
-  // v42 ONARIM (idempotent): PLANLI derslerde, dersin ayinda kadroda OLMAYAN (aydan cikarilmis/pasif) uyeleri dusur.
-  // Eski surumlerde cikarilip derste kalan uyeleri temizler. Yapilmis/yanan/iptal dersler TARIHSEL — dokunulmaz.
-  // NOT: global state'e degil s'e bakar (load sirasinda global hazir olmayabilir); kurallar isMemberEnrolled/Inactive ile birebir.
+  // v51 KOK FIX (idempotent): PLANLI grup dersi = grubun O AYKI kadrosu (enrolled+aktif). EKSIK kadro uyesi
+  // EKLENIR, kadro DISI (eski/baska grup) uye ATILIR -> "uye grupta ama derste tiksiz / N/M eksik" biter.
+  // BIREYSEL planli derste pasif/kayitsiz uyeler duser; bosalirsa iptal. Yapilmis/yanan/iptal dersler TARIHSEL — dokunulmaz.
+  // NOT: global state'e degil s'e bakar (load/sync sirasinda global hazir olmayabilir).
   try {
+    const __memActive = (mm, pm) => {
+      if (!mm) return false;
+      for (const per of (mm.archivePeriods || [])) {
+        const f = String((per && per.from) || '').slice(0, 7);
+        const t = (per && per.to) ? String(per.to).slice(0, 7) : null;
+        if (f && pm >= f && (!t || pm < t)) return false; // o ay pasif donemde
+      }
+      if (mm.archived) { const a = String(mm.archivedAt || '').slice(0, 7); if (!a || pm >= a) return false; }
+      const jd = String(mm.joinDate || '').slice(0, 7);
+      if (jd && jd > pm) return false;
+      const mo = (mm.monthly || {})[pm];
+      if (pm >= '2026-08') return !!(mo && mo.enrolled === true); // ROSTER_START_MONTH (TDZ nedeniyle sabit)
+      return !(mo && mo.enrolled === false);
+    };
     (s.lessons || []).forEach(l => {
-      if (!l || l.status !== 'planned' || !Array.isArray(l.memberIds) || !l.memberIds.length) return;
+      if (!l || l.status !== 'planned') return;
       const __pm = l.packageMonth || String(l.date || '').slice(0, 7);
       if (!__pm) return;
+      if (l.groupId) {
+        // GRUP: memberIds = o ayin AKTIF kadrosu. Kadrodaki id'nin uye kaydi henuz gelmediyse (sync) KORU.
+        const gg = (s.groups || []).find(x => x && x.id === l.groupId);
+        if (!gg) return;
+        const roster = (resolveGroupMembersForMonth(gg, __pm) || []).filter(Boolean).filter(mid => {
+          const mm = (s.members || []).find(x => x && x.id === mid);
+          return mm ? __memActive(mm, __pm) : true;
+        });
+        if (roster.length && JSON.stringify(l.memberIds || []) !== JSON.stringify(roster)) {
+          l.memberIds = roster.slice();
+          if (+gg.size) l.size = +gg.size;
+        }
+        return;
+      }
+      // BIREYSEL: pasif/kayitsiz uyeleri dusur; bosalirsa iptal
+      if (!Array.isArray(l.memberIds) || !l.memberIds.length) return;
       const __before = l.memberIds.length;
       l.memberIds = l.memberIds.filter(mid => {
         const mm = (s.members || []).find(x => x && x.id === mid);
         if (!mm) return true; // bilinmeyen id'ye dokunma (senkron sirasi guvenligi)
-        // v49 KOK FIX: PLANLI grup dersinde grubun O AYKI kadrosunda OLMAYAN uyeyi AT (eski/baska gruptan sizanlar)
-        if (l.groupId) {
-          const gg = (s.groups || []).find(x => x && x.id === l.groupId);
-          if (gg) { const roster = (resolveGroupMembersForMonth(gg, __pm) || []).filter(Boolean); if (roster.length && roster.indexOf(mid) < 0) return false; }
-        }
-        for (const per of (mm.archivePeriods || [])) {
-          const f = String((per && per.from) || '').slice(0, 7);
-          const t = (per && per.to) ? String(per.to).slice(0, 7) : null;
-          if (f && __pm >= f && (!t || __pm < t)) return false; // o ay pasif donemde
-        }
-        if (mm.archived) { const a = String(mm.archivedAt || '').slice(0, 7); if (!a || __pm >= a) return false; }
-        const jd = String(mm.joinDate || '').slice(0, 7);
-        if (jd && jd > __pm) return false;
-        const mo = (mm.monthly || {})[__pm];
-        if (__pm >= '2026-08') return !!(mo && mo.enrolled === true); // ROSTER_START_MONTH (TDZ nedeniyle sabit)
-        return !(mo && mo.enrolled === false);
+        return __memActive(mm, __pm);
       });
-      if (!l.groupId && __before > 0 && l.memberIds.length === 0) l.status = 'cancelled';
+      if (__before > 0 && l.memberIds.length === 0) l.status = 'cancelled';
     });
   } catch(e) {}
   // 4) Members
@@ -3593,7 +3610,18 @@ function pkgMonthLabel(pm) {
 // Geçerli HH:MM mı?
 function isValidTime(t) { return typeof t === 'string' && /^\d{2}:\d{2}$/.test(t); }
 // HH:MM → dakika
+// v51: TEK KAYNAK saat normalizasyonu — "18.15"/"18,15"/"1815"/"18" -> "18:15"/"18:00" (nokta/virgul TR yazimi).
+// KOK FIX: ayrac nokta olunca isValidTime false doner, timeToMinutes 0 verir, ders takvimde ekran disina (gorunmez) cizilirdi.
+function normTime(t) {
+  t = String(t == null ? '' : t).trim().replace(/[.,]/g, ':');
+  let m = t.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (m) return String(m[1]).padStart(2,'0') + ':' + String(m[2]).padStart(2,'0');
+  if (/^\d{3,4}$/.test(t)) { const s = t.padStart(4,'0'); return s.slice(0,2) + ':' + s.slice(2); }
+  if (/^\d{1,2}$/.test(t)) return String(t).padStart(2,'0') + ':00';
+  return t;
+}
 function timeToMinutes(t) {
+  t = normTime(t);
   if (!isValidTime(t)) return 0;
   const [h,m] = t.split(':').map(Number);
   return h*60 + m;
@@ -6263,11 +6291,8 @@ function saveLesson() {
   const id = document.getElementById('ml-id').value;
   const date = document.getElementById('ml-date').value;
   let time = (document.getElementById('ml-time').value || '').trim();
-  // v10: HH:MM normalleştirme — kullanıcı "9:00" yazdıysa "09:00" yap
-  if (/^\d{1,2}:\d{2}$/.test(time)) {
-    const [hh,mm] = time.split(':');
-    time = String(hh).padStart(2,'0') + ':' + mm;
-  }
+  // v51: nokta/virgul/kisayol saat yazimini da normalize et ("18.15"/"1815" -> "18:15")
+  time = normTime(time);
   const instructorId = document.getElementById('ml-instructor').value;
   const size = +document.getElementById('ml-size').value;
   const groupId = document.getElementById('ml-group').value || '';
@@ -7395,7 +7420,7 @@ function openGroupLessonModal(lessonId) {
 function saveGroupLesson() {
   const id = document.getElementById('gl-id').value;
   const date = document.getElementById('gl-date').value;
-  const time = document.getElementById('gl-time').value;
+  const time = normTime(document.getElementById('gl-time').value);
   const status = document.getElementById('gl-status').value;
   const instructorId = document.getElementById('gl-instructor').value;
   const l = state.lessons.find(x=>x.id===id); if (!l) return;
@@ -7601,11 +7626,7 @@ function bdFmtDate(iso) {
   const a = iso.split('-'); return a[2] + '.' + a[1] + '.' + a[0];
 }
 function bdParseTime(str) {
-  str = (str||'').trim(); if (!str) return '';
-  if (/^\d{1,2}:\d{2}$/.test(str)) { const b = str.split(':'); return String(b[0]).padStart(2,'0') + ':' + b[1]; }
-  if (/^\d{3,4}$/.test(str)) { const s = str.padStart(4,'0'); return s.slice(0,2) + ':' + s.slice(2); } // "1000" -> 10:00
-  if (/^\d{1,2}$/.test(str)) { return String(str).padStart(2,'0') + ':00'; } // "10" -> 10:00
-  return str;
+  return normTime(str); // v51: nokta/virgul/':' ayraclarini da normalize eder ("18.15"->"18:15")
 }
 // Enter: alani parse et, sonraki tarih/saat alanina gec (son alandaysa yeni satir ac)
 function bdKey(ev) {
@@ -10430,7 +10451,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.10-onizleme';
+const APP_VERSION = '2026.07.18.11-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
