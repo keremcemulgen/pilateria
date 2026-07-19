@@ -157,9 +157,9 @@ setTimeout(()=>{ try {
 
   console.log('[10] YANAN DERS BEYAZ/SIYAH stili');
   {
-    t('.gst-missed beyaz zemin', html.includes('.gst-missed { background:#ffffff; color:#000000;'));
+    t('.gst-missed KIRMIZI zemin + siyah yazi (v61)', html.includes('.gst-missed { background:#f5b8b8; color:#000000;'));
     t('ay-chip missed beyaz', html.includes('.gm-chip.gst-missed'));
-    t('koyu temada da beyaz kalir', html.includes('[data-theme="dark"] .gst-missed'));
+    t('koyu temada da kirmizi/siyah kalir', html.includes('[data-theme="dark"] .gst-missed'));
   }
 
   console.log('[11] OTOMATIK DERS-DURUMU YOK (guvence)');
