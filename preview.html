@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.13-onizleme">
+<meta name="app-version" content="2026.07.18.14-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2401,10 +2401,11 @@ function applyV10MigrationToState(s) {
         // GRUP: memberIds = o ayin AKTIF kadrosu. Kadrodaki id'nin uye kaydi henuz gelmediyse (sync) KORU.
         const gg = (s.groups || []).find(x => x && x.id === l.groupId);
         if (!gg) return;
-        const roster = (resolveGroupMembersForMonth(gg, __pm) || []).filter(Boolean).filter(mid => {
+        let roster = (resolveGroupMembersForMonth(gg, __pm) || []).filter(Boolean).filter(mid => {
           const mm = (s.members || []).find(x => x && x.id === mid);
           return mm ? __memActive(mm, __pm) : true;
         });
+        roster = __applyRosterOverrides(roster, l, gg); // v54: elle cikarma (excludedMemberIds) + gec katilim (joinDate)
         if (roster.length && JSON.stringify(l.memberIds || []) !== JSON.stringify(roster)) {
           l.memberIds = roster.slice();
           if (+gg.size) l.size = +gg.size;
@@ -2926,6 +2927,16 @@ function lessonHappened(l) { return l && (l.status === 'completed' || l.status =
 // v41 KANON (Kerem 2026-07-18): DERS BASI UCRET = AY FIYATI / 8 — paket kaydina kac ders yazilirsa yazilsin
 // (grup: grubun o ayki toplam fiyati / 8; bireysel: uyenin o ayki fiyati / 8). Hoca payi = bu deger x oran.
 const PKG_LESSON_DIVISOR = 8;
+function memberPerLessonPrice(memberId, monthISO) {
+  // v54: bir uyenin 1-ders parasal payi = ay-fiyati / KENDI ders sayisi (sessionQuotaFor; 8 varsayilan,
+  // gec-katilan/az-ders uye icin 5/7...). Grup+bireysel hoca ucreti tabaninda kullanilir.
+  const price = +memberMonthlyTotalPrice(memberId, monthISO) || 0;
+  if (!price) return 0;
+  let q;
+  try { q = +sessionQuotaFor('member', memberId, monthISO); } catch (e) { q = 0; }
+  if (!q || q < 1) q = PKG_LESSON_DIVISOR;
+  return price / q;
+}
 function perLessonPriceForLesson(l) {
   if (!l) return 0;
   // 1) Önce paket etiketinden çöz (lesson.packageMonth + packageOwnerType + packageOwnerId)
@@ -2934,17 +2945,30 @@ function perLessonPriceForLesson(l) {
       const g = state.groups.find(x => x.id === l.packageOwnerId);
       if (g) {
         const pkg = groupPackageForMonth(g, l.packageMonth);
-        // v41: grup ders ucreti = grubun O AYKI TOPLAM fiyati (uye fiyat toplami; stale paket kaydi DEGIL) / 8
-        const __gTot = (pkg && pkg.status === 'extended') ? 0 : (groupExpectedTotal(g, l.packageMonth) || (pkg ? (+pkg.price || 0) : 0));
+        if (pkg && pkg.status === 'extended') return 0;
+        // v54 (Kerem): DERS-BAZLI taban = o derste BULUNAN (ve grubun o ayki kadrosundaki) uyelerin
+        // 1-ders paylari toplami. Her uye: ay-fiyati / kendi ders sayisi. 3 kisilik ders 3 uyeye,
+        // 4. uye katildiktan sonra 4 uyeye gore hesaplanir. v49 emniyeti: grup-disi sizan uye kadroda
+        // olmadigindan toplama KATILMAZ. memberIds bos/bayatsa eski kanona (grup toplami / 8) duser.
+        const __roster = new Set(resolveGroupMembersForMonth(g, l.packageMonth).filter(mid => {
+          const mm = state.members.find(x => x.id === mid);
+          return mm && !isMemberInactiveInMonth(mm, l.packageMonth) && isMemberEnrolledInMonth(mid, l.packageMonth);
+        }));
+        let __sum = 0, __n = 0;
+        (l.memberIds || []).forEach(mid => { if (__roster.has(mid)) { __sum += memberPerLessonPrice(mid, l.packageMonth); __n++; } });
+        if (__n > 0) return __sum;
+        const __gTot = groupExpectedTotal(g, l.packageMonth) || (pkg ? (+pkg.price || 0) : 0);
         return (+__gTot || 0) / PKG_LESSON_DIVISOR;
       }
     } else if (l.packageOwnerType === 'member') {
       const m = state.members.find(x => x.id === l.packageOwnerId);
       if (m) {
         const pkg = memberPackageForMonth(m, l.packageMonth);
-        // v48 TEK KAYNAK + v41: bireysel ders ucreti = uyenin AY FIYATI / 8 (paket kac ders olursa olsun); uzadi ise 0
-        const __pp = (pkg && pkg.status === 'extended') ? 0 : (memberMonthlyTotalPrice(m.id, l.packageMonth) || (pkg ? (+pkg.price || 0) : 0));
-        return (+__pp || 0) / PKG_LESSON_DIVISOR;
+        if (pkg && pkg.status === 'extended') return 0;
+        // v54: bireysel ders = uyenin AY FIYATI / KENDI ders sayisi (eski v41 sabit /8 yerine; Kerem karari).
+        const __pp = memberPerLessonPrice(m.id, l.packageMonth);
+        if (__pp > 0) return __pp;
+        return ((pkg ? (+pkg.price || 0) : 0)) / PKG_LESSON_DIVISOR;
       }
     }
   }
@@ -5191,6 +5215,23 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
 // v28 (Kerem kurali): KADRO DEGISINCE DERSLER OTOMATIK GUNCEL — bu ay ve sonraki aylarin
 // PLANLI grup dersleri yeni kadroya cekilir. Gecmis/yapilmis/iptal dersler TARIHSEL KAYIT, dokunulmaz.
 // Onceki aylarin planli dersleri de o ayin kadrosuyla kalir (ay izolasyonu).
+// v54: bir grup dersinin OTOMATIK kadrosuna (roster) ELLE CIKARMA + GEC KATILIM kurallarini uygular.
+// Saf fonksiyon (global state okumaz) -> migration (s-guvenli) ve sync ayni sekilde kullanir.
+// - l.excludedMemberIds: elle cikarilan uye geri EKLENMEZ.
+// - g.memberJoinDates[mid]: uye o tarihten ONCEKI derse otomatik eklenmez (elle eklenmis=halihazirda
+//   derste ise KORUNUR).
+function __applyRosterOverrides(roster, l, g) {
+  const excl = new Set((l && l.excludedMemberIds) || []);
+  const present = new Set((l && l.memberIds) || []);
+  const jmap = (g && g.memberJoinDates) || {};
+  const ldate = (l && l.date) || '';
+  return (roster || []).filter(mid => {
+    if (excl.has(mid)) return false;
+    const jd = jmap[mid] ? String(jmap[mid]).slice(0, 10) : '';
+    if (jd && ldate && ldate < jd && !present.has(mid)) return false;
+    return true;
+  });
+}
 function syncGroupLessonsToRoster(groupId, fromMonth) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return { updated: 0, over: [] };
@@ -5201,13 +5242,14 @@ function syncGroupLessonsToRoster(groupId, fromMonth) {
     const pm = l.packageMonth || (l.date||'').slice(0,7);
     if (pm < fm) return;
     // v34: her ders KENDI AYININ kadrosuyla guncellenir
-    const mids = resolveGroupMembersForMonth(g, pm).filter(mid => {
+    let mids = resolveGroupMembersForMonth(g, pm).filter(mid => {
       if (!mid) return false;
       const mm = state.members.find(x => x.id === mid);
       if (!mm) return false;
       if (isMemberInactiveInMonth(mm, pm)) return false; // v41: o ay pasif uye derse YAZILMAZ
       return isMemberEnrolledInMonth(mid, pm); // v41: aydan cikarilan uye derse geri DONMEZ
     });
+    mids = __applyRosterOverrides(mids, l, g); // v54: elle cikarma + gec katilim
     if (JSON.stringify(l.memberIds||[]) === JSON.stringify(mids)) return;
     l.memberIds = mids.slice();
     if (+g.size) l.size = +g.size;
@@ -6372,6 +6414,20 @@ function saveLesson() {
       createMemberPackage(m, packageMonth, date);
     }
   }
+  // v54: GRUP dersinde ISARETSIZ birakilan kadro uyesi = ELLE CIKARMA -> excludedMemberIds'e yazilir ki
+  // reconcile/sync OTOMATIK geri EKLEMESIN (Kerem: "elle dersten cikartabileyim"). Bireysel derste bos.
+  let __lessonExcluded = [];
+  if (groupId) {
+    const __gEx = state.groups.find(x => x.id === groupId);
+    if (__gEx) {
+      const __chk = new Set(checked);
+      __lessonExcluded = resolveGroupMembersForMonth(__gEx, packageMonth).filter(mid => {
+        const mm = state.members.find(x => x.id === mid);
+        if (!mm || isMemberInactiveInMonth(mm, packageMonth) || !isMemberEnrolledInMonth(mid, packageMonth)) return false;
+        return !__chk.has(mid);
+      });
+    }
+  }
   // preserve existing status if editing; default planned on new
   const existing = id ? state.lessons.find(x=>x.id===id) : null;
   const status = existing ? (existing.status || 'planned') : 'planned';
@@ -6382,6 +6438,7 @@ function saveLesson() {
     instructorId, size,
     memberIds: checked,
     groupId,
+    excludedMemberIds: __lessonExcluded,
     packageMonth,
     packageOwnerType,
     packageOwnerId,
@@ -10478,7 +10535,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.13-onizleme';
+const APP_VERSION = '2026.07.18.14-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

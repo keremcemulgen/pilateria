@@ -123,7 +123,7 @@ setTimeout(()=>{ try {
     t('aydan cikarilan (BANU) listede DEGIL', !namesHtml.includes('BANU DEMIR'), 'BANU listede olmamali');
   }
 
-  console.log('[8] HOCA UCRETI /8 KANONU');
+  console.log('[8] HOCA UCRETI — KENDI DERS SAYISINA BOL (v54 kanon; eski sabit /8 DEGIL)');
   {
     w.eval(`state.instructors=[{id:'h1',name:'HOCA BIR',shareRate:30}]; state.settings.instructorShareRate=30;
     state.members.find(x=>x.id==='a').packages=[{month:'2026-07',startDate:'2026-07-01',sessions:4,price:9999,status:'active'}];
@@ -134,11 +134,14 @@ setTimeout(()=>{ try {
       {id:'LG',date:'2026-07-11',time:'12:00',durationMin:45,instructorId:'h1',size:3,memberIds:['a','f'],groupId:'g1',packageMonth:'2026-07',packageOwnerType:'group',packageOwnerId:'g1',status:'completed',note:''}
     ];`);
     const LI=w.S().lessons.find(l=>l.id==='LI'), LG=w.S().lessons.find(l=>l.id==='LG');
-    t('bireysel: 8500/8=1062.5 (sessions=4 olsa bile /8)', Math.abs(w.perLessonPriceForLesson(LI)-1062.5)<0.01, w.perLessonPriceForLesson(LI));
-    t('bireysel hoca payi 1062.5x0.30=318.75', Math.abs(w.instructorEarningForLesson(LI)-318.75)<0.01, w.instructorEarningForLesson(LI));
-    const gBase = w.groupExpectedTotal(w.S().groups[0],'2026-07');
-    t('grup ders ucreti = uye toplami('+gBase+')/8 (stale 77777 paket fiyati DEGIL)', Math.abs(w.perLessonPriceForLesson(LG)-gBase/8)<0.01, w.perLessonPriceForLesson(LG));
-    t('grup hoca payi = /8 x %30', Math.abs(w.instructorEarningForLesson(LG)-gBase/8*0.30)<0.01, w.instructorEarningForLesson(LG));
+    // v54: 'a' ay-fiyati 8500, KENDI ders sayisi 4 (paket sessions:4) -> 8500/4 = 2125 (eski kanon /8=1062.5 DEGIL)
+    t('bireysel: 8500/4=2125 (kendi ders sayisi=4; v54 kanon)', Math.abs(w.perLessonPriceForLesson(LI)-2125)<0.01, w.perLessonPriceForLesson(LI));
+    t('bireysel hoca payi 2125x0.30=637.5', Math.abs(w.instructorEarningForLesson(LI)-637.5)<0.01, w.instructorEarningForLesson(LI));
+    // v54: grup dersi tabani = o derste bulunan KADRO uyelerinin paylari. LG memberIds=['a','f']:
+    // 'a' g1 kadrosunda -> 8500/4=2125 sayilir; 'f' g1 kadrosunda DEGIL -> v49 emniyeti, toplama KATILMAZ (sismez).
+    const expLG = w.memberPerLessonPrice('a','2026-07');
+    t('grup ders ucreti = o derste bulunan kadronun paylari ('+expLG+') = 2125 (f kadroda yok)', Math.abs(w.perLessonPriceForLesson(LG)-expLG)<0.01 && Math.abs(expLG-2125)<0.01, w.perLessonPriceForLesson(LG));
+    t('grup hoca payi = taban x %30 = 637.5', Math.abs(w.instructorEarningForLesson(LG)-expLG*0.30)<0.01 && Math.abs(w.instructorEarningForLesson(LG)-637.5)<0.01, w.instructorEarningForLesson(LG));
   }
 
   console.log('[9] HOCALAR SAYFASI: ders bazli dokum');
