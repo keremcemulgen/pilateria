@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.18-onizleme">
+<meta name="app-version" content="2026.07.18.19-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2760,6 +2760,9 @@ function memberRemainingForMonth(memberId, monthISO){
 // v58 KANON: bir odemenin AYI = odedigi PAKETIN ayi (packageMonth; yoksa odeme tarihi ayi).
 // Gec odeme (Haziran paketi Temmuz'da odendi) HAZIRAN gelirine/listesine yazilir. Ay-filtreli TUM
 // odeme yuzeyleri bunu kullanir (gelir istatistigi zaten boyleydi; Odemeler sayfasi v58'de baglandi).
+// v59 KANON (Kerem): UYE SAYISI = benzersiz KISI sayisi. 2.paket klonu (secondOfMember) ayni kisidir,
+// hicbir sayacta ikinci kisi olarak SAYILMAZ (listede satiri gorunur, yonetilir — sadece sayima katilmaz).
+function personIdOf(memberId){ const m = state.members.find(x => x.id === memberId); return (m && m.secondOfMember) || memberId; }
 function paymentMonthOf(p){ return (p && (p.packageMonth || String(p.date||'').slice(0,7))) || ''; }
 function memberPaidInMonth(memberId, monthISO){
   const ay = monthISO || currentMonth();
@@ -3357,7 +3360,7 @@ function renderDashboard() {
     __dm.value = __pm.length ? __pm[__pm.length-1] : __cm0;
   }
   const m = (__dm && __dm.value) || currentMonth();
-  document.getElementById('s-members').textContent = state.members.filter(function(mm){ return !mm.secondOfMember && isMemberEnrolledInMonth(mm.id, m); }).length; // v.40 AKTIF = secili aya ENROLLED; v52: 2.paket klonlari (secondOfMember) SAYILMAZ (ayni kisi)
+  document.getElementById('s-members').textContent = new Set(state.members.filter(function(mm){ return isMemberEnrolledInMonth(mm.id, m); }).map(function(mm){ return mm.secondOfMember || mm.id; })).size; // v59: AKTIF = benzersiz KISI — klon ayni kisiye katlanir (cift sayilmaz; yalniz-klon aktifse kisi yine 1)
   const __mLbl = (() => { try { return parseISO(m+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return m; } })();
   { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Geliri (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
   const rev = state.payments.filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === m).reduce((a,b)=>a+(+b.amount||0),0);
@@ -4921,7 +4924,7 @@ function renderMembers() {
       pending += +r.remaining || 0;  // Sadece grup başına 1 kez, bireyler tek başına sayılır
     }
     paid += +r.paid || 0;
-    if (r.memberId) __uniqMemberIds.add(r.memberId);
+    if (r.memberId) __uniqMemberIds.add(personIdOf(r.memberId)); // v59: klon ayni KISI — cift sayilmaz
   });
   const memberCount = __uniqMemberIds.size;
   document.getElementById('members-stats').innerHTML = `
@@ -10637,7 +10640,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.18-onizleme';
+const APP_VERSION = '2026.07.18.19-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
