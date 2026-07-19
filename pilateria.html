@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.17">
+<meta name="app-version" content="2026.07.18.18">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2049,6 +2049,21 @@
 </div>
 
 <!-- GROUP LESSON EDIT (reschedule/delete inline from group page) -->
+<div class="modal-bg" id="modal-admin-verify">
+  <div class="modal" style="max-width:380px;">
+    <h2>🔐 Yönetici Doğrulaması</h2>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px;"><b id="adv-action"></b> için yönetici e-posta ve şifreni gir. Yanlışlıkla tıklamalara karşı koruma.</div>
+    <div class="fields-grid" style="grid-template-columns:1fr;">
+      <label>E-posta<input type="email" id="adv-email" autocomplete="off"></label>
+      <label>Şifre<input type="password" id="adv-pass" autocomplete="new-password" onkeydown="if(event.key==='Enter')confirmAdminVerify()"></label>
+    </div>
+    <div id="adv-msg" style="min-height:18px;color:var(--bad);font-size:13px;margin:6px 0;"></div>
+    <div class="row" style="justify-content:flex-end;gap:6px;margin-top:8px;">
+      <button class="btn secondary" onclick="__advCb=null;closeModal('modal-admin-verify')">İptal</button>
+      <button class="btn" onclick="confirmAdminVerify()">Doğrula ve Devam Et</button>
+    </div>
+  </div>
+</div>
 <div class="modal-bg" id="modal-group-lesson">
   <div class="modal" style="max-width:460px;">
     <h2 id="gl-title">Dersi Düzenle</h2>
@@ -2404,6 +2419,21 @@ function applyV10MigrationToState(s) {
       if (__before > 0 && l.memberIds.length === 0) l.status = 'cancelled';
     });
   } catch(e) { try { console.error('[MIG] roster reconcile', e); } catch(_) {} }
+  // v58: %0 hoca orani temizligi — 0 'tanimsiz' demektir (default %30'a duser). Idempotent.
+  try {
+    const __isZeroRate = v => v !== null && v !== undefined && v !== '' && isFinite(+v) && +v === 0;
+    (s.groups || []).forEach(g => { if (!g) return;
+      if (__isZeroRate(g.instructorShareRate)) g.instructorShareRate = null;
+      (g.packages || []).forEach(p => { if (p && __isZeroRate(p.instructorShareRate)) p.instructorShareRate = null; });
+      if (g.memberInstructorRates) Object.keys(g.memberInstructorRates).forEach(k => { if (__isZeroRate(g.memberInstructorRates[k])) delete g.memberInstructorRates[k]; });
+    });
+    (s.members || []).forEach(m => { if (!m) return;
+      if (__isZeroRate(m.instructorShareRate)) m.instructorShareRate = null;
+      (m.packages || []).forEach(p => { if (p && __isZeroRate(p.instructorShareRate)) p.instructorShareRate = null; });
+    });
+    (s.instructors || []).forEach(i => { if (i && __isZeroRate(i.shareRate)) i.shareRate = null; });
+    (s.lessons || []).forEach(l => { if (l && __isZeroRate(l.instructorRateOverride)) l.instructorRateOverride = null; });
+  } catch(e) { try { console.error('[MIG] zero-rate', e); } catch(_) {} }
   // 4) Members
   s.members = (s.members || []).map(m => {
     if (m.archived === undefined) m.archived = false;
@@ -2579,7 +2609,7 @@ function createGroupPackage(g, monthISO, startDate, opts) {
     sessions: opts.sessions || defaultPkg.sessions || 8,
     price: opts.price !== undefined ? +opts.price : (g.customTotalPrice ? +g.customTotalPrice : defaultPkg.price || 0),
     instructorId: opts.instructorId || g.defaultInstructorId || '',
-    instructorShareRate: opts.instructorShareRate !== undefined ? +opts.instructorShareRate : null, // null = settings varsayılan
+    instructorShareRate: rateDefined(opts.instructorShareRate) ? +opts.instructorShareRate : null, // v58: 0/bos -> null (default %30)
     rescheduleUsed: 0,
     cancelUsed: 0,
     status: 'active'
@@ -2606,7 +2636,7 @@ function createMemberPackage(m, monthISO, startDate, opts) {
     sessions: opts.sessions || __ovS || defaultPkg.sessions || 8,
     price: opts.price !== undefined ? +opts.price : (m.totalPrice ? +m.totalPrice : defaultPkg.price || 0),
     instructorId: opts.instructorId || m.instructorId || '',
-    instructorShareRate: opts.instructorShareRate !== undefined ? +opts.instructorShareRate : null,
+    instructorShareRate: rateDefined(opts.instructorShareRate) ? +opts.instructorShareRate : null, // v58: 0/bos -> null
     status: 'active'
   };
   m.packages.push(newPkg);
@@ -2719,6 +2749,10 @@ function memberRemainingForMonth(memberId, monthISO){
   return sessionsRemainingFor('member', memberId, ay);
 }
 // O ay odeme yapilmis mi? (para gostergesi — ders hakkindan AYRI)
+// v58 KANON: bir odemenin AYI = odedigi PAKETIN ayi (packageMonth; yoksa odeme tarihi ayi).
+// Gec odeme (Haziran paketi Temmuz'da odendi) HAZIRAN gelirine/listesine yazilir. Ay-filtreli TUM
+// odeme yuzeyleri bunu kullanir (gelir istatistigi zaten boyleydi; Odemeler sayfasi v58'de baglandi).
+function paymentMonthOf(p){ return (p && (p.packageMonth || String(p.date||'').slice(0,7))) || ''; }
 function memberPaidInMonth(memberId, monthISO){
   const ay = monthISO || currentMonth();
   return state.payments.some(pp => pp.memberId===memberId && ((pp.packageMonth || String(pp.date||'').slice(0,7)) === ay));
@@ -2736,56 +2770,45 @@ async function editGroupSessions(groupId, monthISO){
   save(); if(typeof refreshGroupDetailIfOpen==='function') refreshGroupDetailIfOpen(); if(typeof renderGroups==='function') renderGroups(); if(typeof renderMembers==='function') renderMembers();
 }
 // Bir hoca için yüzdelik oran çöz: lesson override > group memberInstructorRate > group default > member default > instructor default > settings default
+// v58 KANON (Kerem): %0 hoca orani YOKTUR. 0/bos/gecersiz deger 'tanimsiz' sayilir, oran zinciri
+// devam eder, hicbir katman tanimli degilse DEFAULT %30. Elle ders-bazi override (1-100) aynen calisir.
+function rateDefined(v) { return v !== undefined && v !== null && v !== '' && isFinite(+v) && +v > 0; }
 function resolveInstructorRate(lesson) {
   if (!lesson) return (+state.settings.instructorShareRate || 30);
   // 1) Ders bazında override (en yüksek öncelik)
-  if (lesson.instructorRateOverride !== undefined && lesson.instructorRateOverride !== null && lesson.instructorRateOverride !== '') {
-    return +lesson.instructorRateOverride;
-  }
+  if (rateDefined(lesson.instructorRateOverride)) return +lesson.instructorRateOverride; // v58: 0 override tanimsiz sayilir
   // 2) Paket bazında (groupPackage veya memberPackage'in instructorShareRate'i)
   if (lesson.packageOwnerType === 'group' && lesson.packageOwnerId && lesson.packageMonth) {
     const g = state.groups.find(x => x.id === lesson.packageOwnerId);
     if (g) {
       const pkg = (g.packages||[]).find(p => p.month === lesson.packageMonth);
-      if (pkg && pkg.instructorShareRate !== null && pkg.instructorShareRate !== undefined && pkg.instructorShareRate !== '') {
-        return +pkg.instructorShareRate;
-      }
+      if (pkg && rateDefined(pkg.instructorShareRate)) return +pkg.instructorShareRate;
       // 2b) Grup içi üye bazlı yüzdelik (tek üye varsa o üye için ayarlanan rate)
       if (g.memberInstructorRates && lesson.memberIds && lesson.memberIds.length === 1) {
         const rate = g.memberInstructorRates[lesson.memberIds[0]];
-        if (rate !== undefined && rate !== null && rate !== '') return +rate;
+        if (rateDefined(rate)) return +rate;
       }
       // 2c) Grup default rate
-      if (g.instructorShareRate !== undefined && g.instructorShareRate !== null && g.instructorShareRate !== '') {
-        return +g.instructorShareRate;
-      }
+      if (rateDefined(g.instructorShareRate)) return +g.instructorShareRate;
     }
   }
   if (lesson.packageOwnerType === 'member' && lesson.packageOwnerId && lesson.packageMonth) {
     const m = state.members.find(x => x.id === lesson.packageOwnerId);
     if (m) {
       const pkg = (m.packages||[]).find(p => p.month === lesson.packageMonth);
-      if (pkg && pkg.instructorShareRate !== null && pkg.instructorShareRate !== undefined && pkg.instructorShareRate !== '') {
-        return +pkg.instructorShareRate;
-      }
-      if (m.instructorShareRate !== undefined && m.instructorShareRate !== null && m.instructorShareRate !== '') {
-        return +m.instructorShareRate;
-      }
+      if (pkg && rateDefined(pkg.instructorShareRate)) return +pkg.instructorShareRate;
+      if (rateDefined(m.instructorShareRate)) return +m.instructorShareRate;
     }
   }
   // 3) Bireysel üye (groupId yok)
   if (!lesson.groupId && lesson.memberIds && lesson.memberIds[0]) {
     const m = state.members.find(x => x.id === lesson.memberIds[0]);
-    if (m && m.instructorShareRate !== undefined && m.instructorShareRate !== null && m.instructorShareRate !== '') {
-      return +m.instructorShareRate;
-    }
+    if (m && rateDefined(m.instructorShareRate)) return +m.instructorShareRate;
   }
   // 4) Hoca kendi default rate'i
   if (lesson.instructorId) {
     const inst = state.instructors.find(i => i.id === lesson.instructorId);
-    if (inst && inst.shareRate !== undefined && inst.shareRate !== null && inst.shareRate !== '') {
-      return +inst.shareRate;
-    }
+    if (inst && rateDefined(inst.shareRate)) return +inst.shareRate;
   }
   // 5) Settings varsayılan
   return (+state.settings.instructorShareRate || 30);
@@ -4219,16 +4242,8 @@ function isMemberEnrolledInMonth(memberId, monthISO) {
   if (!monthISO) return true;
   const m = state.members.find(x=>x.id===memberId);
   if (!m) return false;
-  // Kayit tarihinden ONCEKI aylarda hicbir uye gorunmez (yeni uye gecmis listelere sizmasin)
-  if (m.joinDate && String(m.joinDate).slice(0,7) > monthISO) return false;
-  // v24: o ayda pasifse (donem kaydi dahil) listede degildir
-  if (typeof isMemberInactiveInMonth === 'function' && isMemberInactiveInMonth(m, monthISO)) return false;
-  const rec = (m.monthly||{})[monthISO];
-  if (monthISO >= ROSTER_START_MONTH) {
-    return !!(rec && rec.enrolled === true);
-  }
-  if (rec && rec.enrolled === false) return false;
-  return true;
+  // v58: TEK KAYNAK — v57 kanonu (joinDate + arsiv + ROSTER kurali + KLON kurali) her gorunumde ayni.
+  return __memberActiveInMonth(m, monthISO);
 }
 // Ay baslatildi mi? (bos baslatma da 'baslatildi' sayilir — UI mesaji icin)
 function isMonthInitialized(monthISO) {
@@ -4468,6 +4483,7 @@ function __memberActiveInMonth(mm, pm) {
   if (jd && jd > pm) return false;
   let rsm; try { rsm = ROSTER_START_MONTH; } catch (e) { rsm = '2026-08'; } // TDZ guvenligi (load sirasi)
   const mo = (mm.monthly || {})[pm];
+  if (mm.secondOfMember) return !!(mo && mo.enrolled === true); // v58 KANON: 2.paket klonu yalniz ACIKCA kaydedildigi ayda aktif — sonraki aya MIRAS YOK
   if (pm >= rsm) return !!(mo && mo.enrolled === true);
   return !(mo && mo.enrolled === false);
 }
@@ -8433,7 +8449,7 @@ function savePayment() {
     }
   }
   // v23: odeme alinan uye, paket ayinin listesine otomatik girer
-  if (data.packageMonth >= ROSTER_START_MONTH && memberId) setMemberMonthly(memberId, data.packageMonth, { enrolled: true });
+  if (memberId && (data.packageMonth >= ROSTER_START_MONTH || ((state.members.find(x=>x.id===memberId)||{}).secondOfMember))) setMemberMonthly(memberId, data.packageMonth, { enrolled: true }); // v58: klon, odeme aldigi ayda da aktif olur
   save();
   closeModal('modal-payment');
   renderPayments(); renderDashboard(); renderMembers(); renderCalendar(); if(typeof renderReports==='function') renderReports();
@@ -8518,7 +8534,7 @@ function renderPayments() {
   const mm = document.getElementById('pay-month').value;
   const fm = document.getElementById('pay-member-filter').value;
   let list = state.payments.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if (mm) list = list.filter(p=>p.date.startsWith(mm));
+  if (mm) list = list.filter(p=>paymentMonthOf(p)===mm); // v58 KANON: PAKET AYINA gore listele (gec odeme dogru ayda)
   if (fm) list = list.filter(p=>p.memberId===fm);
   const total = list.reduce((a,b)=>a+(+b.amount||0),0);
   const totalSess = list.reduce((a,b)=>a+(+b.sessions||0),0);
@@ -8544,7 +8560,7 @@ function renderPayments() {
     const methodBadge = p.method==='IBAN' ? '<span class="badge blue">IBAN</span>' : (p.method||'—');
     const groupCell = p.groupId ? `<br><small style="color:var(--p2)">👯 ${groupNameForMonth(p.groupId, p.packageMonth || String(p.date||'').slice(0,7))}</small>` : '';
     return `<tr>
-      <td data-label="Tarih">${fmtDate(p.date)}</td>
+      <td data-label="Tarih">${fmtDate(p.date)}${(()=>{ const __pm=paymentMonthOf(p); return (__pm && __pm!==String(p.date||'').slice(0,7)) ? ' <span class="badge" style="background:#eef2f7;color:#3a4a5a;font-size:10px;" title="Odeme bu paketin ayina sayilir">📦 '+(typeof __shortMonth==='function'?__shortMonth(__pm):__pm)+'</span>' : ''; })()}</td>
       <td data-label="Üye" class="card-title">${memberName(p.memberId)}${groupCell}</td>
       <td data-label="Paket">${p.pkgName}<br><small style="color:var(--muted)">${p.sessions} ders · ${p.size} kişilik</small></td>
       <td data-label="Kampanya">${campCell}</td>
@@ -9280,7 +9296,38 @@ function openWaBulkModal(memberIds, templateId) {
 }
 
 // ========== EXPORT / IMPORT ==========
-function exportData() {
+// v58 (Kerem): Yedek Indir / Veri Yukle / Tum Veriyi Sifirla -> YONETICI e-posta+sifre dogrulamasi
+// (yanlislikla tiklama korumasi). Supabase yoksa (offline/dev) cifte onaya duser.
+let __advCb = null;
+function requireAdminVerify(actionLabel, cb) {
+  if (!SUPABASE_MODE || !sbInit()) {
+    plConfirm('⚠️ ' + actionLabel + ' — emin misin? (Çevrimdışı mod: yönetici doğrulaması atlandı)', 'Devam').then(ok => { if (ok) cb(); });
+    return;
+  }
+  __advCb = cb;
+  var a = document.getElementById('adv-action'); if (a) a.textContent = actionLabel;
+  var e1 = document.getElementById('adv-email'); if (e1) e1.value = '';
+  var p1 = document.getElementById('adv-pass'); if (p1) p1.value = '';
+  var m1 = document.getElementById('adv-msg'); if (m1) m1.textContent = '';
+  openModal('modal-admin-verify');
+  setTimeout(() => { try { document.getElementById('adv-email').focus(); } catch(_) {} }, 60);
+}
+async function confirmAdminVerify() {
+  const email = (document.getElementById('adv-email').value || '').trim();
+  const pass = document.getElementById('adv-pass').value || '';
+  const msg = document.getElementById('adv-msg');
+  if (!email || !pass) { if (msg) msg.textContent = 'E-posta ve şifreni gir.'; return; }
+  if (msg) msg.textContent = 'Doğrulanıyor...';
+  try {
+    const { error } = await sbClient.auth.signInWithPassword({ email: email, password: pass });
+    if (error) { if (msg) msg.textContent = 'E-posta veya şifre hatalı.'; return; }
+    try { const { data } = await sbClient.auth.getSession(); if (data && data.session) __sbSession = data.session; } catch(_) {}
+  } catch(e2) { if (msg) msg.textContent = 'Doğrulama başarısız — bağlantıyı kontrol et.'; return; }
+  closeModal('modal-admin-verify');
+  const cb = __advCb; __advCb = null; if (cb) cb();
+}
+function exportData() { requireAdminVerify('Yedek İndir (JSON)', __exportDataNow); } // v58: yonetici dogrulamasi
+function __exportDataNow() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -9289,8 +9336,14 @@ function exportData() {
   a.click();
   URL.revokeObjectURL(url);
 }
-function importData(e) {
-  const f = e.target.files[0]; if (!f) return;
+function importData(e) { // v58: yonetici dogrulamasi — dosya secilir, ONCE dogrula, sonra oku
+  const f = e.target.files && e.target.files[0];
+  try { e.target.value = ''; } catch(_) {}
+  if (!f) return;
+  requireAdminVerify('Veri Yükle (JSON geri yükleme)', () => __importDataFile(f));
+}
+function __importDataFile(f) {
+  if (!f) return;
   const rd = new FileReader();
   rd.onload = ev => {
     try {
@@ -9372,7 +9425,8 @@ function plPrompt(msg, defVal, opts) {
 window.__nativeAlert = window.alert.bind(window);
 window.alert = function(m) { try { plAlert(m); } catch(e) { window.__nativeAlert(m); } };
 
-async function resetAllData() {
+async function resetAllData() { requireAdminVerify('Tüm Veriyi Sıfırla', __resetAllDataNow); } // v58: yonetici dogrulamasi
+async function __resetAllDataNow() {
   if (!(await plConfirm('TÜM veriler bu cihazdan silinecek. Emin misin?', 'Evet, sıfırla'))) return;
   localStorage.removeItem('pilateria');
   location.reload();
@@ -10571,7 +10625,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.17';
+const APP_VERSION = '2026.07.18.18';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
