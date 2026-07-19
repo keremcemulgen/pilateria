@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.07-onizleme">
+<meta name="app-version" content="2026.07.18.08-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -925,6 +925,7 @@
   .m-cards { display:none; }
   @media (max-width:768px) {
     html, body { max-width:100vw; overflow-x:hidden; } /* sayfa geneli yatay tasma kilidi — zoom ihtiyaci biter */
+    main { padding:12px 10px !important; } /* v48: mobilde dar padding (v45 32px cok genisti) — tam alan kullanilir */
     #members-table-wrap, #archive-table-wrap { display:none !important; }   /* telefonda tablo yok, kartlar gorunur */
     .m-cards { display:block; }
     /* hizli kaydirmada yapisma/bozulma yapan sticky basliklar telefonda kapali */
@@ -5922,6 +5923,21 @@ function ownerUnfinishedMonths(ownerType, ownerId) {
     .filter(pk => pk && pk.month && sessionsRemainingFor(ownerType, ownerId, pk.month) > 0)
     .map(pk => pk.month).sort().reverse();
 }
+// v48: kisa ay adi (deterministik, ICU'suz)
+const __TR_AY_KISA = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+function __shortMonth(mo){ const m=+String(mo||'').slice(5,7); return __TR_AY_KISA[m-1] || String(mo||''); }
+// v48: grup/uyenin HANGI AY paketi oldugunu gosteren kisa etiket (dropdown/liste icin)
+function ownerPkgMonthLabel(ownerType, ownerId) {
+  const unfin = ownerUnfinishedMonths(ownerType, ownerId); // kalan>0, en yeni once
+  if (unfin.length) {
+    const mo = unfin[0]; const rem = sessionsRemainingFor(ownerType, ownerId, mo);
+    return '📦 ' + __shortMonth(mo) + ': ' + rem + ' kalan';
+  }
+  const o = ownerType==='group' ? state.groups.find(x=>x.id===ownerId) : state.members.find(x=>x.id===ownerId);
+  const months = ((o && o.packages) || []).map(pk => pk && pk.month).filter(Boolean).sort();
+  if (months.length) return __shortMonth(months[months.length-1]) + ' (dolu)';
+  return '';
+}
 // v46: takvimden ders eklerken akilli varsayilan paket ayi
 function smartPkgMonthFor(ownerType, ownerId, dateISO) {
   const dm = String(dateISO||'').slice(0,7);
@@ -6012,7 +6028,7 @@ function openLessonModal(id, date, time, groupId, ctxMonth) {
   const __gnAy = (l && l.packageMonth) || window.__lessonCtxMonth || ((l && l.date) ? String(l.date).slice(0,7) : '') || currentMonth();
   const gSel = document.getElementById('ml-group-select');
   if (gSel) {
-    gSel.innerHTML = '<option value="">— Grup seçmeden —</option>' + state.groups.map(g=>`<option value="${g.id}" ${g.id===l.groupId?'selected':''}>${groupDisplayName(g, __gnAy)} (${g.size} kişi)</option>`).join('');
+    gSel.innerHTML = '<option value="">— Grup seçmeden —</option>' + state.groups.map(g=>{ const __ml = ownerPkgMonthLabel('group', g.id); return `<option value="${g.id}" ${g.id===l.groupId?'selected':''}>${groupDisplayName(g, __gnAy)} (${g.size} kişi)${__ml?' · '+__ml:''}</option>`; }).join('');
   }
   document.getElementById('ml-size').value = l.size;
   document.getElementById('ml-note').value = l.note||'';
@@ -6147,7 +6163,7 @@ function renderLessonMembersCheckboxes(preselect) {
       : '<span class="badge" style="background:#f5f0e0;color:#8a8573;" title="Bu ay ödeme bekleniyor">₺⏳</span>';
     return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;">
       <input type="checkbox" value="${m.id}" ${checked?'checked':''} style="width:auto" onchange="onLessonMemberToggle(this)">
-      <span>${m.name}</span> ${badge} ${payTag} ${m.archived?'<span class="archived-badge">Pasif</span>':''} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
+      <span>${m.name}</span> ${badge} ${payTag} ${(()=>{ const __l=ownerPkgMonthLabel('member',m.id); return __l?'<span class="badge" style="background:#eef2f7;color:#3a4a5a;">'+__l+'</span>':''; })()} ${m.archived?'<span class="archived-badge">Pasif</span>':''} ${m.instructorId?'<span class="instructor-pill">'+instructorName(m.instructorId)+'</span>':''}
     </label>`;
   }).join('') : emptyMsg);
 }
@@ -7442,7 +7458,7 @@ function openBatchDatesGroup(groupId, monthISO) {
     if (l.packageMonth) return l.packageMonth === __batchDatesTarget.packageMonth;
     return (l.date||'').startsWith(__batchDatesTarget.packageMonth);
   }).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  __batchDatesRows = existing.map(l => ({ lessonId:l.id, date:l.date||'', time:l.time||'', last: l.isLastOfPackage === true }));
+  __batchDatesRows = existing.map(l => ({ lessonId:l.id, date:l.date||'', time:l.time||'', last: l.isLastOfPackage === true, status: l.status||'planned' }));
   while (__batchDatesRows.length < 8) {
     __batchDatesRows.push({ lessonId:null, date:'', time: g.defaultTime || '' });
   }
@@ -7462,7 +7478,7 @@ function openBatchDatesMember(memberId, monthISO) {
     if (l.packageMonth) return l.packageMonth === month;
     return (l.date||'').startsWith(month);
   }).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  __batchDatesRows = existing.map(l => ({ lessonId:l.id, date:l.date||'', time:l.time||'', last: l.isLastOfPackage === true }));
+  __batchDatesRows = existing.map(l => ({ lessonId:l.id, date:l.date||'', time:l.time||'', last: l.isLastOfPackage === true, status: l.status||'planned' }));
   while (__batchDatesRows.length < 8) {
     __batchDatesRows.push({ lessonId:null, date:'', time: m.defaultTime || '' });
   }
@@ -7525,11 +7541,17 @@ function renderBatchDatesRows() {
     <div class="row" style="gap:6px;align-items:center;margin-bottom:6px;padding:8px;background:#fafafa;border-radius:6px;">
       <span style="min-width:32px;font-weight:600;color:var(--muted);">#${i+1}</span>
       <input type="text" inputmode="numeric" class="bd-nav bd-date" data-bdidx="${i}" value="${bdFmtDate(r.date)}" placeholder="gg.aa" onkeydown="bdKey(event)" onchange="batchDatesUpdate(${i},'date',this.value); this.value=bdFmtDate(__batchDatesRows[${i}].date)||this.value;" style="flex:1;min-width:110px;" title="Gün.Ay yaz (yıl otomatik bu yıl) — Enter ile saate geç">
-      <input type="text" inputmode="numeric" class="bd-nav bd-time" data-bdidx="${i}" value="${r.time||''}" placeholder="ss:dd" onkeydown="bdKey(event)" onchange="batchDatesUpdate(${i},'time',this.value); this.value=__batchDatesRows[${i}].time||this.value;" style="width:96px;" title="Saat yaz (örn 1000 → 10:00) — Enter ile alt satıra geç">
+      <input type="text" inputmode="numeric" class="bd-nav bd-time" data-bdidx="${i}" value="${r.time||''}" placeholder="ss:dd" onkeydown="bdKey(event)" onchange="batchDatesUpdate(${i},'time',this.value); this.value=__batchDatesRows[${i}].time||this.value;" style="width:88px;" title="Saat yaz (örn 1000 → 10:00) — Enter ile alt satıra geç">
+      <select class="bd-status" data-bdidx="${i}" onchange="batchDatesUpdate(${i},'status',this.value)" style="width:104px;font-size:12px;" title="Ders durumu — toplu yapıldı/yandı/iptal">
+        <option value="planned"${(r.status||'planned')==='planned'?' selected':''}>⏳ Planlı</option>
+        <option value="completed"${r.status==='completed'?' selected':''}>✅ Yapıldı</option>
+        <option value="missed"${r.status==='missed'?' selected':''}>🔥 Yandı</option>
+        <option value="cancelled"${r.status==='cancelled'?' selected':''}>🚫 İptal</option>
+      </select>
       <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;white-space:nowrap;" title="Bu dersi paketin SON DERSİ olarak işaretle (takvimde ⭐ SON DERS rozeti)"><input type="checkbox" ${r.last?'checked':''} onchange="batchDatesSetLast(${i}, this.checked)" style="width:auto">⭐ son</label>
       ${r.lessonId ? '<span style="font-size:11px;color:#2e7d32;">📌 mevcut</span>' : '<span style="font-size:11px;color:#888;">yeni</span>'}
       <button class="btn small secondary" onclick="batchDatesRemoveRow(${i})" title="Satırı sil">✕</button>
-    </div>`).join('') + '<div style="font-size:11px;color:var(--muted);margin-top:6px;">⌨️ <b>Hızlı giriş:</b> tarihe <b>gün.ay</b> yaz (örn <b>15.08</b> → yıl otomatik ' + bdCurrentYear() + '), <b>Enter</b> ile saate, saate <b>1000</b> yaz (→10:00), <b>Enter</b> ile alt satıra geç. Fare gerekmez.<br>⭐ son: işaretlediğin ders takvimde "SON DERS" rozeti alır; işaretlemezsen paketin tüm dersleri girilince son derse otomatik gelir.</div>';
+    </div>`).join('') + '<div style="font-size:11px;color:var(--muted);margin-top:6px;">⌨️ <b>Hızlı giriş:</b> tarihe <b>gün.ay</b> yaz (örn <b>15.08</b> → yıl otomatik ' + bdCurrentYear() + '), <b>Enter</b> ile saate, saate <b>1000</b> yaz (→10:00), <b>Enter</b> ile alt satıra geç. Fare gerekmez. <b>Durum</b> sütunundan dersi toplu <b>Yapıldı/Yandı/İptal</b> işaretle (gün/hafta sonu girişi için).<br>⭐ son: işaretlediğin ders takvimde "SON DERS" rozeti alır; işaretlemezsen paketin tüm dersleri girilince son derse otomatik gelir.</div>';
 }
 // v18.1: ⭐ son ders isareti — pakette TEK son ders olur, digerlerinden isaret kalkar
 function batchDatesSetLast(idx, val) {
@@ -7553,7 +7575,7 @@ function batchDatesAddRow() {
     const m = state.members.find(x => x.id === __batchDatesTarget.id);
     defTime = m?.defaultTime || '';
   }
-  __batchDatesRows.push({ lessonId:null, date:'', time: defTime });
+  __batchDatesRows.push({ lessonId:null, date:'', time: defTime, status:'planned' });
   renderBatchDatesRows();
 }
 function batchDatesRemoveRow(idx) {
@@ -7647,7 +7669,7 @@ function saveBatchDates() {
     const __moved = new Set(idsToRemove);
     __batchDatesRows.forEach(r => { if (r.lessonId) __moved.add(r.lessonId); });
     const __fixed = state.lessons.filter(l => l.status !== 'cancelled' && l.status !== 'missed' && !__moved.has(l.id));
-    const __rows = __batchDatesRows.map((r,i) => ({...r, __no: i+1})).filter(r => r.date && r.time);
+    const __rows = __batchDatesRows.map((r,i) => ({...r, __no: i+1})).filter(r => r.date && r.time && r.status !== 'cancelled' && r.status !== 'missed'); // v48: iptal/yanan makine isgal etmez
     const __problems = [];
     for (let i = 0; i < __rows.length; i++) {
       const r = __rows[i];
@@ -7680,11 +7702,13 @@ function saveBatchDates() {
       if (empty) { state.lessons.splice(idx,1); removed++; }
       else {
         const __lx = state.lessons[idx];
-        const __chg = __lx.date !== r.date || __lx.time !== r.time || (__lx.isLastOfPackage === true) !== (!!r.last);
+        const __newSt = r.status || __lx.status || 'planned';
+        const __chg = __lx.date !== r.date || __lx.time !== r.time || (__lx.isLastOfPackage === true) !== (!!r.last) || (__lx.status||'planned') !== __newSt;
         __lx.date = r.date;
         __lx.time = r.time;
         __lx.packageMonth = packageMonth;
         __lx.isLastOfPackage = !!r.last; // v18.1: ⭐ son ders isareti
+        __lx.status = __newSt; // v48: toplu durum (yapildi/yandi/iptal)
         if (__chg) updated++;
       }
     } else if (!empty) {
@@ -7692,7 +7716,7 @@ function saveBatchDates() {
         id: uid(),
         date: r.date, time: r.time,
         durationMin: +state.settings.lessonDuration || +state.settings.duration || 60,
-        status:'planned', note:'',
+        status: r.status || 'planned', note:'', // v48: toplu durum
         packageMonth,
         isLastOfPackage: !!r.last, // v18.1: ⭐ son ders isareti
       };
@@ -10314,7 +10338,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.07-onizleme';
+const APP_VERSION = '2026.07.18.08-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
