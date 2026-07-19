@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.11-onizleme">
+<meta name="app-version" content="2026.07.18.12-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2352,6 +2352,13 @@ function applyV10MigrationToState(s) {
       if (g.monthlyMembers && typeof g.monthlyMembers === 'object') {
         Object.keys(g.monthlyMembers).forEach(k => { g.monthlyMembers[k] = __normRoster(g.monthlyMembers[k], g.size); });
       } }
+    // v52: eski GRUP-bazli 2.paket klonu (secondOf) PASIFE alinir — grup 2.paket kaldirildi; ayni memberId'ler
+    // yuzunden "uyeyi pasife alinca iki grupta da pasif" catismasi biter. Planli dersleri iptal; ODEME ve
+    // GECMIS ders (yapildi/yandi) KORUNUR. Idempotent + reaktivasyonla catismaz (__secondPkgArchived bayragi).
+    if (g.secondOf && !g.__secondPkgArchived) {
+      g.archived = true; g.__secondPkgArchived = true;
+      (s.lessons || []).forEach(l => { if (l && l.groupId === g.id && l.status === 'planned') l.status = 'cancelled'; });
+    }
     if (g.packageStartDate && g.packages.length === 0) {
       const month = String(g.packageStartDate).slice(0,7);
       const pkg = (s.packageTypes||[]).find(p => p.id === g.defaultPackageId) || (s.packageTypes||[])[0] || {sessions:8, price:7000};
@@ -3310,7 +3317,7 @@ function renderDashboard() {
     __dm.value = __pm.length ? __pm[__pm.length-1] : __cm0;
   }
   const m = (__dm && __dm.value) || currentMonth();
-  document.getElementById('s-members').textContent = state.members.filter(function(mm){ return isMemberEnrolledInMonth(mm.id, m); }).length; // v.40 AKTIF = secili aya ENROLLED (ay-bazli; Haziran != Temmuz)
+  document.getElementById('s-members').textContent = state.members.filter(function(mm){ return !mm.secondOfMember && isMemberEnrolledInMonth(mm.id, m); }).length; // v.40 AKTIF = secili aya ENROLLED; v52: 2.paket klonlari (secondOfMember) SAYILMAZ (ayni kisi)
   const __mLbl = (() => { try { return parseISO(m+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return m; } })();
   { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Geliri (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
   const rev = state.payments.filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === m).reduce((a,b)=>a+(+b.amount||0),0);
@@ -5068,34 +5075,36 @@ function renderMembersCardsMobile(rows, monthISO) {
 // Cozum: BAGIMSIZ klon grup (bireyselde 1 kisilik grup) — ayri satir/sayfa/odeme/dersler.
 // Uye SAYISI degismez (sayac benzersiz uye bazli), hoca hakedisi ders bazli normal isler.
 function createSecondPackage(sourceType, sourceId, monthISO) {
-  let mids, baseName, inst, time, days, size, defPkg;
-  if (sourceType === 'group') {
-    const g = state.groups.find(x => x.id === sourceId); if (!g) return;
-    mids = (g.memberIds||[]).filter(Boolean).slice();
-    baseName = (g.name||'Grup').replace(/ · \d+\. Paket$/,'');
-    inst = g.defaultInstructorId||''; time = g.defaultTime||''; days = (g.defaultDays||[]).slice(); size = g.size||mids.length||1; defPkg = g.defaultPackageId||'';
-  } else {
-    const m = state.members.find(x => x.id === sourceId); if (!m) return;
-    mids = [m.id];
-    baseName = ((m.name||'Üye').trim().split(/\s+/)[0]) || 'Üye';
-    inst = m.instructorId||''; time=''; days=[]; size=1; defPkg = m.defaultPackageId||'';
-  }
-  const rootId = (function(){ const src = state.groups.find(x=>x.id===sourceId); return (src && src.secondOf) ? src.secondOf : sourceId; })();
-  const n = state.groups.filter(x => x.secondOf === rootId && !x.archived).length + 2; // orijinal=1. paket; ilk klon=2.
-  const name = baseName + ' · ' + n + '. Paket';
-  if (!confirm(`"${name}" adında BAĞIMSIZ yeni bir ${sourceType==='group'?'grup':'paket kaydı'} oluşturulacak.\n\n• Üyeler aynı (${mids.length} kişi) — üye sayısı DEĞİŞMEZ.\n• Ödemesi, dersleri ve paketi tamamen ayrı tutulur; ilk paketi ETKİLEMEZ.\n• Üye listesinde ayrı bir blok olarak görünür.\n\nDevam?`)) return;
-  const ng = {
-    id: uid(), name, size, memberIds: mids,
-    defaultInstructorId: inst, defaultPackageId: defPkg, defaultTime: time, defaultDays: days,
-    packages: [], rescheduleUsed: 0, cancelUsed: 0, customTotalPrice: '',
-    secondOf: rootId, note: '', monthlyNotes: {}
+  // v52: 2. PAKET ARTIK UYE-BAZLI. Bagimsiz KLON UYE olusur (grup 2.paket klonu KALDIRILDI).
+  // Klon = ayni kisi ama AYRI kimlik: kendi enrollment/sessions/odeme/ders. Gruba eklenebilir veya bireysel kalir.
+  // AKTIF UYE SAYISINI DEGISTIRMEZ (s-members secondOfMember'lari saymaz). Arsiv/pasif TAMAMEN bagimsiz -> catisma yok.
+  const ay = monthISO || currentMonth();
+  let srcMember = null;
+  if (sourceType === 'group') { const g = state.groups.find(x=>x.id===sourceId); srcMember = g ? state.members.find(x=>x.id===(g.memberIds||[]).filter(Boolean)[0]) : null; }
+  else srcMember = state.members.find(x => x.id === sourceId);
+  if (!srcMember) return;
+  const rootId = srcMember.secondOfMember || srcMember.id;
+  const root = state.members.find(x => x.id === rootId) || srcMember;
+  const rootName = (root.name || 'Üye').replace(/\s*\(\d+\.\s*Paket\)\s*$/, '').trim();
+  const n = state.members.filter(x => x.secondOfMember === rootId && !x.archived).length + 2; // 1.paket=asil; ilk klon=2.
+  const name = rootName + ' (' + n + '. Paket)';
+  if (!confirm(`"${name}" adında BAĞIMSIZ bir üye kaydı oluşturulacak.\n\n• ${rootName} ile AYNI kişi, ayrı paket: kendi ödemesi, dersleri ve ders hakkı ayrı tutulur.\n• Aktif üye SAYISINI DEĞİŞTİRMEZ.\n• İstersen bir gruba ekleyebilir veya bireysel paket olarak kullanabilirsin.\n\nDevam?`)) return;
+  const clone = {
+    id: uid(), name, secondOfMember: rootId,
+    joinDate: root.joinDate || todayISO(),
+    phone: root.phone || '', tcno: '', adres: '', instructorId: root.instructorId || '',
+    health: '', note: '', instructorShareRate: null,
+    totalPrice: (root.totalPrice !== undefined ? root.totalPrice : ''),
+    defaultPackageId: root.defaultPackageId || '',
+    monthly: { [ay]: { enrolled: true } },
+    packages: [], archived: false
   };
-  state.groups.push(ng); // AILE: removeMemberFromOtherContexts KULLANILMAZ — uye iki pakette birden kalir
+  state.members.push(clone);
   save();
   renderMembers(); renderGroups(); renderDashboard();
-  refreshGroupDetailIfOpen(); refreshMemberDetailIfOpen();
-  openGroupDetail(ng.id, monthISO || currentMonth());
-  if (typeof plToast === 'function') { try { plToast('2. paket oluşturuldu — ödemeyi bu yeni sayfadan alabilirsin'); } catch(e){} }
+  refreshMemberDetailIfOpen();
+  openMemberDetail(clone.id);
+  if (typeof plToast === 'function') { try { plToast('2. paket için bağımsız üye kaydı açıldı — ödeme/dersi buradan yönet; istersen gruba ekle'); } catch(e){} }
 }
 // ========== EMPTY SLOT FILL ==========
 // Grubun boş slotunu doldurma akışı: mevcut bir üye seçilebilir ya da yeni üye oluşturulabilir.
@@ -5497,7 +5506,7 @@ function openMemberDetail(id) {
       <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">Düzenle</button>
       <button class="btn secondary" onclick="openScheduleReport('member','${id}','${thisMonth}')" title="Üyenin ders programını kopyalanabilir metin olarak aç (WhatsApp'a gönder)">📋 Ders Programı</button>
       ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">Toplu Ders Gir</button>` : ''}
-      ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Paket erken bittiyse: bu üye için aynı ay içinde BAĞIMSIZ yeni paket kaydı">+ 2. Paket</button>` : ''}
+      ${(!m.archived && !m.secondOfMember) ? `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Bu kişi için AYNI kişi ama bağımsız 2. paket üye kaydı oluştur (gruba eklenebilir veya bireysel; aktif üye sayısını değiştirmez)">+ 2. Paket</button>` : ''}
       ${m.archived
         ? `<button class="btn ok" onclick="reactivateMember('${id}');">↩️ Aktive Et</button>`
         : `<button class="btn secondary" onclick="markMemberPackageExtended('${id}','${thisMonth}', true);" title="Bu ay ödeme alınmadan paket devam ediyor (0 ₺)">Bu Ay Paket Uzadı</button>`
@@ -7365,7 +7374,6 @@ function openGroupDetail(id, monthISO) {
       <button class="btn" onclick="openLessonModalForGroup('${id}', '${monthISO}')">📅 Ders Ekle</button>
       <button class="btn secondary" onclick="openScheduleReport('group','${id}','${monthISO}')" title="Grubun ders programını kopyalanabilir metin olarak aç (WhatsApp'a gönder)">📋 Ders Programı</button>
       <button class="btn secondary" onclick="openGroupModal('${id}')" title="Grubu düzenle — grup detayı arka planda açık kalır">Düzenle</button>
-      <button class="btn secondary" onclick="createSecondPackage('group','${id}','${monthISO||''}')" title="Paket erken bittiyse: aynı üyelerle BAĞIMSIZ yeni paket kaydı (ayrı ödeme/ders; üye sayısı değişmez)">+ 2. Paket</button>
       ${monthISO ? `<button class="btn secondary" onclick="markGroupPackageExtended('${id}','${monthISO}', true)" title="Bu ay ödeme alınmadan paket devam ediyor (0 TL)">📌 Paket Uzadı (0 TL)</button>` : ''}
     </div>
     <h3>Üyeler <small style="font-weight:normal;color:var(--muted);font-size:12px;">— "Fiyat" sütununda her üyenin ücreti. Boşsa <b>➕ Fiyat</b> ile tanımla. Toplam, üyelerin tanımlı fiyatlarının toplamıdır.</small></h3>
@@ -10451,7 +10459,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.11-onizleme';
+const APP_VERSION = '2026.07.18.12-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
