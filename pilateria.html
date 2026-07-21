@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.21.26">
+<meta name="app-version" content="2026.07.21.27">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9891,6 +9891,37 @@ function sbSnapshotShadow(rows) {
   SB_TABLES.forEach(t => { __sbShadow[t] = {}; for (const id in rows[t]) __sbShadow[t][id] = JSON.stringify(rows[t][id]); });
 }
 
+// ===== v104 GARANTI KATMANLARI (Kerem): cihaz gunluk yedek halkasi + ikinci bulut (JSONBin) =====
+function __pilDailySnapshot() {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = 'pilateria_daily_' + day;
+    if (localStorage.getItem(key)) return;
+    const cur = localStorage.getItem('pilateria');
+    if (!cur) return;
+    try { const st = JSON.parse(cur); if (!(((st.members || []).length) || ((st.payments || []).length))) return; } catch(e) { return; } // bos hali gunluk yedege yazma
+    const mine = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_daily_') === 0) mine.push(k); }
+    mine.sort();
+    while (mine.length >= 5) localStorage.removeItem(mine.shift()); // en fazla 5 gun
+    try { localStorage.setItem(key, cur); }
+    catch(e) { while (mine.length) localStorage.removeItem(mine.shift()); try { localStorage.setItem(key, cur); } catch(e2) {} } // kota korumasi
+    try { __trace('📅 Cihaz günlük yedeği alındı: ' + day); } catch(e) {}
+  } catch(e) {}
+}
+async function __pilOffsiteDaily() {
+  try {
+    if (__sbRole !== 'owner') return;
+    if (typeof syncCfg === 'undefined' || !syncCfg || !syncCfg.bin || !syncCfg.key) return;
+    const day = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem('pilateria_offsite_day') === day) return;
+    if (!((state.members || []).length)) return; // bos hali ikinci buluta yazma
+    const body = JSON.stringify(Object.assign({}, state, { _updatedAt: new Date().toISOString(), _offsiteDaily: day }));
+    const r = await fetch('https://api.jsonbin.io/v3/b/' + syncCfg.bin, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncCfg.key }, body: body });
+    if (r.ok) { localStorage.setItem('pilateria_offsite_day', day); __trace('🛰️ İkinci bulut (JSONBin) günlük yedeği: ' + day); }
+    else { __trace('🛰️ İkinci bulut yedeği başarısız: HTTP ' + r.status); }
+  } catch(e) { try { __trace('🛰️ İkinci bulut yedeği hata: ' + (e && (e.message || e))); } catch(_) {} }
+}
 async function sbLoadAll() {
   if (!sbClient) return;
   setCloudDot && setCloudDot('syncing');
@@ -9974,6 +10005,7 @@ async function sbLoadAll() {
   __refreshUIInPlace();
   sbSubscribeAll();
   setCloudDot && setCloudDot('ok');
+  try { __pilOffsiteDaily(); } catch(e) {} // v104: gunde 1 kez ikinci buluta (JSONBin) tam yedek
 }
 
 async function sbForceMigrate() {
@@ -10052,6 +10084,22 @@ async function sbDiffPush() {
   setCloudDot && setCloudDot('syncing');
   const rows = sbStateToRows();
   let okAll = true; const __pushedSummary = []; const __pushErrors = [];
+  // v104 SILME SIGORTASI (push): tek seferde cok kayit silme girisimi = bozuk/bosalmis state suphesi.
+  // Engelle + ani yedek + 5sn sonra sunucudan tazele (yerel iyilesir). Kacis: window.__pilAllowMassDelete (5 dk).
+  let __delTotal = 0, __shadowTotal = 0; const __wipeTables = [];
+  for (const t of SB_TABLES) {
+    const __sh = __sbShadow[t] || {}; let __shN = 0, __dN = 0;
+    for (const id in __sh) { __shN++; if (!(id in rows[t])) __dN++; }
+    __shadowTotal += __shN; __delTotal += __dN;
+    if (__shN > 10 && __dN === __shN) __wipeTables.push(t);
+  }
+  const __resetOk = window.__pilAllowMassDelete && (Date.now() - window.__pilAllowMassDelete) < 300000;
+  const __massDelete = !__resetOk && ((__delTotal > 15 && __delTotal > __shadowTotal * 0.3) || __wipeTables.length > 0);
+  if (__massDelete) {
+    try { const __cur = localStorage.getItem('pilateria'); if (__cur) localStorage.setItem('pilateria_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {}
+    __trace('⛔ SİLME SİGORTASI (push): ' + __delTotal + ' kayıt silme girişimi ENGELLENDİ' + (__wipeTables.length ? ' (tablo boşaltma: ' + __wipeTables.join(',') + ')' : '') + ' — bulut KORUNDU, yerel sunucudan tazelenecek');
+    try { if (window.plToast) plToast('⛔ Toplu silme engellendi — bulut verileri KORUNDU'); } catch(e) {}
+  }
   for (const t of SB_TABLES) {
     const ups = [], dels = [], upJson = {};
     for (const id in rows[t]) {
@@ -10062,7 +10110,7 @@ async function sbDiffPush() {
       __sbVer[t][id] = __vv;
       ups.push({ id: id, data: Object.assign({}, rows[t][id], { _v: __vv }) }); upJson[id] = j;
     }
-    for (const id in (__sbShadow[t] || {})) if (!(id in rows[t])) dels.push(id);
+    if (!__massDelete) { for (const id in (__sbShadow[t] || {})) if (!(id in rows[t])) dels.push(id); } // v104: sigorta attiysa SILME gonderme
     if (ups.length) __pushedSummary.push(t+'['+ups.map(u=>u.id).slice(0,5).join(',')+(ups.length>5?'+':'')+']');
     if (dels.length) __pushedSummary.push('SİL '+t+'['+dels.slice(0,5).join(',')+']');
     try {
@@ -10072,6 +10120,7 @@ async function sbDiffPush() {
       dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
   }
+  if (__massDelete) { try { localStorage.removeItem(DIRTY_KEY); } catch(e) {} clearTimeout(sbDiffPush._healT); sbDiffPush._healT = setTimeout(function() { try { sbResync('mass-delete-guard'); } catch(e) {} }, 5000); } // v104: yerel bozulmus olabilir -> buluttan iyiles
   if (__pushedSummary.length) __trace((okAll?'▶ BULUTA gönderildi: ':'⚠ BULUTA gönderilemedi: ')+__pushedSummary.join(' | ')+(__pushErrors.length?('  ‹HATA› '+__pushErrors.join(' ; ')):''));
   if (okAll) { __sbLastPushAt = Date.now(); try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
   else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbFlushPush, 15000); }
@@ -10138,6 +10187,20 @@ function sbSubscribeAll() {
         __sbShadow[t] = __sbShadow[t] || {}; __sbVer[t] = __sbVer[t] || {};
         let __applyId = null;
         if (payload.eventType === 'DELETE') {
+          // v104 REALTIME SILME SIGORTASI: 10sn'de >12 DELETE = baska cihaz bulutu bosaltiyor olabilir.
+          // Sigorta atinca: ani yedek + sonraki TUM silmeler bu cihaza UYGULANMAZ (veri korunur).
+          if (window.__rtDelTripped) return;
+          const __dnow = Date.now();
+          window.__rtDelWin = (window.__rtDelWin || []).filter(function(ts) { return __dnow - ts < 10000; });
+          window.__rtDelWin.push(__dnow);
+          if (window.__rtDelWin.length > 12) {
+            window.__rtDelTripped = true;
+            try { const __cur = localStorage.getItem('pilateria'); if (__cur) localStorage.setItem('pilateria_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {}
+            __trace('⛔ REALTIME SİLME SİGORTASI ATTI: buluttan toplu silme algılandı — bu cihazdaki veriler KORUNDU (recover.html ile geri yüklenebilir)');
+            try { if (window.plToast) plToast('⛔ Toplu silme algılandı — bu cihazdaki veriler KORUNDU!'); } catch(e) {}
+            try { setCloudDot && setCloudDot('offline'); } catch(e) {}
+            return;
+          }
           if (oldId) { delete __sbShadow[t][oldId]; delete __sbVer[t][oldId]; __applyId = oldId; }
         } else if (row) {
           const __meta = Object.assign({}, row.data); const __inV = __meta._v || 0; delete __meta._v;
@@ -10712,7 +10775,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.21.26';
+const APP_VERSION = '2026.07.21.27';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
@@ -10813,6 +10876,7 @@ function init() {
     navigator.serviceWorker.register('sw.js').catch(err => console.log('[SW] kayıt hatası:', err));
   }
 }
+__pilDailySnapshot(); // v104: gunun ilk acilisinda cihaz-ici gunluk yedek (bulut/giris beklemez)
 init();
 </script>
 

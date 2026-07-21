@@ -133,7 +133,12 @@ let localBackups=[];
 function score(b){ return (b.at?Date.parse(b.at):0) + b.counts.members*1e6; }
 function renderLocal(){
  const box=document.getElementById('local-list'); box.innerHTML=''; localBackups=[];
- for(const spec of LOCAL_KEYS){
+ const ALL=LOCAL_KEYS.slice();
+ for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
+   if(k&&/^pilateria_daily_\d{4}-\d{2}-\d{2}$/.test(k)) ALL.push({key:k,label:'Cihaz günlük yedeği ('+k.slice(-10)+')'});
+   if(k==='pilateria_mass_delete_backup') ALL.push({key:k,label:'⛔ Toplu silme anı otomatik yedeği'});
+ }
+ for(const spec of ALL){
    const raw=localStorage.getItem(spec.key); if(!raw) continue;
    const p=parseState(raw); if(!p||!p.state) continue;
    localBackups.push({...spec, ...p, counts:cnt(p.state)});
