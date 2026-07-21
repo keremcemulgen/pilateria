@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.21.27">
+<meta name="app-version" content="2026.07.21.28">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1735,6 +1735,20 @@
     </div>
     <div class="note-block">
       Veriler bu tarayıcıda saklanır. Farklı cihaz veya tarayıcı temizliğinde kaybolmaması için ara sıra <b>Yedek İndir</b> ile JSON dosyası al, bulut depolama (iCloud/Drive) veya e-posta ile kendine gönder.
+    </div>
+  </div>
+
+  <div class="card" id="backup-panel-card">
+    <h2>🛡️ Yedekler &amp; Kurtarma</h2>
+    <div id="backup-status" style="font-size:13px;line-height:1.9;">Durum yükleniyor…</div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px;">
+      <button class="btn secondary" onclick="refreshBackupPanel()">🔄 Durumu Yenile</button>
+      <button class="btn" id="backup-now-btn" onclick="takeCloudBackupNow()">📸 Şimdi Bulut Yedeği Al</button>
+      <a class="btn secondary" href="recover.html" target="_blank" rel="noopener">🛟 Acil Kurtarma Ekranı</a>
+    </div>
+    <div id="backup-cloud-list" style="margin-top:10px;"></div>
+    <div class="note-block">
+      Gece 00:00'da bulut yedeği OTOMATİK alınır (son 30 gün + ay başları 400 güne kadar). Her cihazda ayrıca son 5 günün yerel yedeği ve günde 1 kez ikinci bulut (JSONBin) kopyası tutulur. Uygulama hiç açılamazsa acil ekran: <b>keremcemulgen.github.io/pilateria/recover.html</b>
     </div>
   </div>
 </section>
@@ -8784,6 +8798,7 @@ function renderReports() {
 
 // ========== SETTINGS ==========
 function renderSettings() {
+  try { refreshBackupPanel(); } catch(e) {} // v105: yedek paneli durumu
   const s = state.settings;
   document.getElementById('set-reformers').value = s.reformers;
   document.getElementById('set-open').value = s.open;
@@ -9922,6 +9937,89 @@ async function __pilOffsiteDaily() {
     else { __trace('🛰️ İkinci bulut yedeği başarısız: HTTP ' + r.status); }
   } catch(e) { try { __trace('🛰️ İkinci bulut yedeği hata: ' + (e && (e.message || e))); } catch(_) {} }
 }
+// ===== v105 YEDEK PANELI (Ayarlar > Yedekler & Kurtarma) =====
+async function refreshBackupPanel() {
+  const stEl = document.getElementById('backup-status');
+  if (!stEl) return;
+  const esc = (typeof escapeHtml === 'function') ? escapeHtml : function(x) { return String(x == null ? '' : x); };
+  const ring = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_daily_') === 0) ring.push(k.slice(-10)); } } catch(e) {}
+  ring.sort();
+  let offsite = '—'; try { offsite = localStorage.getItem('pilateria_offsite_day') || '—'; } catch(e) {}
+  let preCloud = '—'; try { const r = localStorage.getItem('pilateria_pre_cloud_backup'); if (r) preCloud = String(JSON.parse(r).at || '').slice(0, 16).replace('T', ' '); } catch(e) {}
+  const rows = [
+    '📱 Bu cihazdaki günlük yedekler: <b>' + (ring.length ? ring.map(esc).join(', ') : 'henüz yok') + '</b>',
+    '⤵️ Son açılış-öncesi yedeği: <b>' + esc(preCloud) + '</b>',
+    '🛰️ İkinci bulut (JSONBin) son gönderim: <b>' + esc(offsite) + '</b>'
+  ];
+  const listEl = document.getElementById('backup-cloud-list');
+  const nowBtn = document.getElementById('backup-now-btn');
+  if (nowBtn) { nowBtn.disabled = (__sbRole !== 'owner'); nowBtn.title = (__sbRole !== 'owner') ? 'Yalnız sahip hesabı' : ''; }
+  if (!sbClient || !__sbSession) {
+    rows.push('🌩️ Bulut gece yedekleri: <i>görmek için giriş yap</i>');
+    stEl.innerHTML = rows.join('<br>');
+    if (listEl) listEl.innerHTML = '';
+    return;
+  }
+  stEl.innerHTML = rows.join('<br>') + '<br>🌩️ Bulut gece yedekleri yükleniyor…';
+  try {
+    const r = await sbClient.from('daily_backups').select('id,created_at').order('id', { ascending: false }).limit(10);
+    if (r && r.error) throw new Error(r.error.message || 'okuma hatası');
+    const list = (r && r.data) || [];
+    rows.push('🌩️ Son bulut gece yedeği: <b>' + (list.length ? (esc(list[0].id) + ' (' + esc(String(list[0].created_at || '').slice(11, 16)) + ')') : 'henüz yok') + '</b> — kayıtlı gün: ' + list.length);
+    stEl.innerHTML = rows.join('<br>');
+    if (listEl) {
+      const owner = (__sbRole === 'owner');
+      listEl.innerHTML = list.length ? ('<div class="table-wrap"><table><thead><tr><th>Bulut Yedeği</th><th>Saat</th>' + (owner ? '<th>İşlem</th>' : '') + '</tr></thead><tbody>' +
+        list.map(function(b) { return '<tr><td>' + esc(b.id) + '</td><td>' + esc(String(b.created_at || '').slice(11, 16)) + '</td>' + (owner ? ('<td><button class="btn small secondary" onclick="restoreDailyBackup(&quot;' + esc(b.id) + '&quot;)">Bu güne dön (birleştir)</button></td>') : '') + '</tr>'; }).join('') +
+        '</tbody></table></div>') : '';
+    }
+  } catch(e) {
+    rows.push('🌩️ Bulut gece yedekleri okunamadı: ' + esc(e && (e.message || e)));
+    stEl.innerHTML = rows.join('<br>');
+    if (listEl) listEl.innerHTML = '';
+  }
+}
+async function takeCloudBackupNow() {
+  if (__sbRole !== 'owner') { alert('Bu işlem yalnız sahip hesabıyla yapılır.'); return; }
+  if (!sbClient) { alert('Bulut bağlantısı yok.'); return; }
+  try {
+    const r = await sbClient.rpc('pilateria_take_backup');
+    if (r && r.error) throw new Error(r.error.message || 'rpc hatası');
+    if (window.plToast) plToast('✓ Bulut yedeği alındı: ' + ((r && r.data) || ''));
+    __trace('📸 ELLE bulut yedeği alındı: ' + ((r && r.data) || ''));
+  } catch(e) { alert('Yedek alınamadı: ' + (e && (e.message || e))); }
+  try { refreshBackupPanel(); } catch(e) {}
+}
+function restoreDailyBackup(day) {
+  requireAdminVerify('Bulut yedeğinden geri dön (' + day + ')', function() { __restoreDailyBackupNow(day); });
+}
+async function __restoreDailyBackupNow(day) {
+  if (__sbRole !== 'owner') { alert('Bu işlem yalnız sahip hesabıyla yapılır.'); return; }
+  try {
+    const r = await sbClient.from('daily_backups').select('snapshot').eq('id', day).single();
+    if (r && r.error) throw new Error(r.error.message || 'yedek okunamadı');
+    const snap = (r && r.data && r.data.snapshot) || null;
+    if (!snap) throw new Error('yedek boş');
+    const cnt = function(t) { return (snap[t] || []).length; };
+    const ok = await plConfirm('“' + day + '” bulut yedeği:\n' + cnt('members') + ' üye / ' + cnt('groups') + ' grup / ' + cnt('lessons') + ' ders / ' + cnt('payments') + ' ödeme\n\nBu yedek MEVCUT verilerle BİRLEŞTİRİLEREK geri yüklenecek (aynı kayıtlar o günkü haline döner, hiçbir kayıt SİLİNMEZ). Devam edilsin mi?', 'Evet, geri yükle');
+    if (!ok) return;
+    try { (snap.settings || []).forEach(function(row) { if (row && row.id === 'singleton' && row.data) row.data._pinHash = state._pinHash; }); } catch(e) {} // PIN korunur
+    let n = 0;
+    for (const t of SB_TABLES) {
+      const arr = (snap[t] || []).filter(function(x) { return x && x.id != null; });
+      for (let i = 0; i < arr.length; i += 100) {
+        const part = arr.slice(i, i + 100);
+        const rr = await sbClient.from(t).upsert(part);
+        if (rr && rr.error) throw new Error(t + ': ' + (rr.error.message || '?'));
+        n += part.length;
+      }
+    }
+    if (window.plToast) plToast('✓ ' + n + ' kayıt geri yüklendi — eşitleniyor…');
+    __trace('YEDEKTEN DÖNÜŞ: ' + day + ' → ' + n + ' kayıt upsert (silme yok)');
+    setTimeout(function() { try { sbResync('backup-restore'); } catch(e) {} }, 1200);
+  } catch(e) { alert('Geri yükleme hatası: ' + (e && (e.message || e))); }
+}
 async function sbLoadAll() {
   if (!sbClient) return;
   setCloudDot && setCloudDot('syncing');
@@ -10775,7 +10873,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.21.27';
+const APP_VERSION = '2026.07.21.28';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
