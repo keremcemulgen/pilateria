@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.18.25">
+<meta name="app-version" content="2026.07.21.26">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -9926,6 +9926,33 @@ async function sbLoadAll() {
     try { if (window.plToast) plToast('⚠️ Bulut boş görünüyor — verilerin KORUNDU, silinmedi. Ayarlar’dan Buluta Taşı.'); } catch(e){}
     return;
   }
+  // v103 (Kerem, VERI KURTARMA KALKANI): NORMAL yukleme (bulut -> cihaz) cihazdaki veriyi EZMEDEN once:
+  // (a) cihaz halini TEK SLOT yedekle (pilateria_pre_cloud_backup) -> recover.html'de gorunur/geri yuklenir.
+  // (b) cihaz buluttan DAHA YENI gorunuyorsa EZME; once BIRLESTIRME teklif et (upsert, silme yok).
+  try {
+    if ((state.members || []).length) {
+      const __curRaw = localStorage.getItem('pilateria');
+      if (__curRaw) localStorage.setItem('pilateria_pre_cloud_backup', JSON.stringify({ at: new Date().toISOString(), state: __curRaw }));
+    }
+  } catch(e){}
+  try {
+    const __cloudSt = sbRowsToState(JSON.parse(JSON.stringify(all)));
+    const __c = function(st){ return { m:(st.members||[]).length, l:(st.lessons||[]).length, p:(st.payments||[]).length }; };
+    const __mx = function(st){ return (st.payments||[]).map(function(p){ return (p && p.date) || ''; }).sort().slice(-1)[0] || ''; };
+    const __L = __c(state), __C = __c(__cloudSt);
+    const __localNewer = (__L.p > __C.p) || (__L.l > __C.l) || (__L.m > __C.m) || (__mx(state) > __mx(__cloudSt));
+    if (__localNewer && __sbRole === 'owner') {
+      const __ok = await plConfirm('Bu cihazda buluttan DAHA YENİ görünen veriler var.\n\nCihaz: '+__L.m+' üye / '+__L.l+' ders / '+__L.p+' ödeme\nBulut: '+__C.m+' üye / '+__C.l+' ders / '+__C.p+' ödeme\n\nCihazdaki veriler bulutla BİRLEŞTİRİLSİN mi? (Hiçbir kayıt silinmez)', 'Evet, birleştir');
+      if (__ok) {
+        __trace('AÇILIŞ: cihaz buluttan YENİ → BİRLEŞTİRİLDİ (upsert, silme yok)');
+        await sbMigrateLocal();
+        try { save(); } catch(e){}
+        try { __refreshUIInPlace(); } catch(e){}
+        return;
+      }
+      __trace('AÇILIŞ: cihaz yeni görünüyordu, kullanıcı BULUT halini seçti (cihaz hali pre_cloud_backup yedeğinde)');
+    }
+  } catch(e) { console.error('[sb] v103 yeni-cihaz kontrolü', e); }
   // v47 VERI GUVENLIGI: yenilemeden once gonderilememis (dirty) yerel degisiklikler VARSA koru + gonder
   __trace('AÇILIŞ: sunucudan yükleme'+(( (typeof isDirty==='function') && isDirty())?' (yerel gönderilmemiş var)':''));
   const __wasDirty = (typeof isDirty === 'function') && isDirty();
@@ -10685,7 +10712,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.18.25';
+const APP_VERSION = '2026.07.21.26';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

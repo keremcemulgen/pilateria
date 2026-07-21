@@ -20,7 +20,7 @@ setTimeout(async ()=>{ try {
     window.setCloudDot=function(){}; window.plToast=function(){}; window.__trace=function(){};
     window.__sbHarvestVer=function(){}; window.sbSnapshotShadow=function(){};
     window.__sbFreshenFromJsonbin=async function(){}; // JSONBin yok
-    window.__sbRole='owner';
+    __sbRole='owner'; window.__sbRole='owner'; // v103 duzeltme: __sbRole 'let' -> CIPLAK atama sart (window gorunmez)
     window.isDirty=function(){return false;};
   `);
   const seedData = ()=> w.eval(`
@@ -32,7 +32,7 @@ setTimeout(async ()=>{ try {
   `);
   const mockSb = (rowsByTable)=> w.eval(
     "window.__ROWS="+JSON.stringify(rowsByTable)+";"+
-    "window.sbClient={ from:function(tbl){ return {"+
+    "sbClient = window.sbClient={ from:function(tbl){ return {"+  // v103 duzeltme: sbClient 'let' -> CIPLAK atama sart
     "  select:function(){ return { order:async function(){ return { data:(window.__ROWS[tbl]||[]), error:null }; } }; },"+
     "  upsert:async function(){ return { error:null }; }"+
     "}; } };"
