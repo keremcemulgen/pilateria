@@ -23,9 +23,10 @@ setTimeout(function(){try{
   t("diger TUM Ayarlar kartlari gizli (bulut/senkron/paket-tanimi/PIN/veri)", hiddenOthers);
   t("vadesi gecen (overdue-card) gizli", d.getElementById('overdue-card').style.display==='none');
   // bulut senkron karti gizli mi (baslik ile)
-  // v.36: Eski JSONBin "Bulut Senkron" karti (Master Key / Bin ID) TAMAMEN KALDIRILDI — gizli degil, yok.
-  var cloudGone=w.eval("!Array.from(document.querySelectorAll('#page-settings > .card')).some(c=>/JSONBin|Master Key|Bin ID/.test(c.textContent))");
-  t("Eski JSONBin Bulut Senkron karti KALDIRILDI", cloudGone);
+  // v.36: Eski JSONBin "Bulut Senkron" AYAR karti (Master Key / Bin ID giris alanlari) TAMAMEN KALDIRILDI — gizli degil, yok.
+  // v105 not: Yedek panelinin BILGI metninde "JSONBin" kelimesi gecebilir (yapilandirma degil); guard gercek amacina daraltildi.
+  var cloudGone=w.eval("!Array.from(document.querySelectorAll('#page-settings > .card')).some(c=>/Master Key|Bin ID/.test(c.textContent))");
+  t("Eski JSONBin Bulut Senkron AYAR karti KALDIRILDI (Master Key/Bin ID yok)", cloudGone);
 
   console.log('[2] Personel: openPaymentModal ENGELLI (odeme alamaz)');
   w.eval("document.getElementById('mp-id').value='SENTINEL';");
