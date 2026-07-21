@@ -9927,6 +9927,17 @@ async function sbLoadAll() {
     const ok = await plConfirm('Bulut veritabanı boş. Bu cihazdaki TÜM veriler (üye, ders, ödeme...) buluta taşınsın mı?\n\nBu tek seferlik kurulum adımıdır.', 'Evet, taşı');
     if (ok) { await sbMigrateLocal(); return; }
   }
+  // v65 ACIL VERI KAYBI KORUMASI (Kerem): bulut BOS dondu ama cihazda veri VAR -> state'i ASLA bosaltma/
+  // save etme. Onceki davranis: bulut boskeN 'buluta tasi?' reddedilince/atlaninca asagida state=sbRowsToState(
+  // bos) + save() calisip HEM YERELI HEM BULUTU eziyordu ('once gorunup sonra sifirlaniyor'). Artik yerel korunur.
+  if (total === 0 && (state.members || []).length > 0) {
+    window.__pilSuppressDirty = false;
+    __trace('AÇILIŞ: bulut BOŞ + cihazda veri VAR → YEREL KORUNDU (otomatik silme engellendi). Ayarlar → Buluta Taşı ile geri yükle.');
+    try { sbSubscribeAll(); } catch(e){}
+    setCloudDot && setCloudDot('offline');
+    try { if (window.plToast) plToast('⚠️ Bulut boş görünüyor — verilerin KORUNDU, silinmedi. Ayarlar’dan Buluta Taşı.'); } catch(e){}
+    return;
+  }
   // v47 VERI GUVENLIGI: yenilemeden once gonderilememis (dirty) yerel degisiklikler VARSA koru + gonder
   __trace('AÇILIŞ: sunucudan yükleme'+(( (typeof isDirty==='function') && isDirty())?' (yerel gönderilmemiş var)':''));
   const __wasDirty = (typeof isDirty === 'function') && isDirty();
