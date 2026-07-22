@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.21.28">
+<meta name="app-version" content="2026.07.22.29">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2449,6 +2449,25 @@ function applyV10MigrationToState(s) {
       if (__before > 0 && l.memberIds.length === 0) l.status = 'cancelled';
     });
   } catch(e) { try { console.error('[MIG] roster reconcile', e); } catch(_) {} }
+  // v106 (Kerem): OLU DERS SUPURMESI — kimsesi kalmamis dersler takvimde durmasin. Idempotent.
+  // (a) IPTAL + uye listesi BOS -> SIL (gurultu; icinde uye olan iptaller TARIHSEL, kalir).
+  // (b) PLANLI bireysel + BOS -> SIL. (c) PLANLI grup + BOS + o ayin AKTIF kadrosu da BOS -> SIL
+  //     (bilinmeyen uye id'leri KORUNUR: senkron sirasi guvenligi — roster keepUnknown=true).
+  try {
+    s.lessons = (s.lessons || []).filter(l => {
+      if (!l) return false;
+      const st0 = l.status || 'planned';
+      const emptyM = !Array.isArray(l.memberIds) || l.memberIds.length === 0;
+      if (!emptyM) return true;
+      if (st0 === 'cancelled') return false;
+      if (st0 !== 'planned') return true;
+      if (!l.groupId) return false;
+      const gg = (s.groups || []).find(x => x && x.id === l.groupId);
+      if (!gg) return true;
+      const __pm = l.packageMonth || String(l.date || '').slice(0, 7);
+      return activeGroupRosterForMonth(gg, __pm, s, true).length > 0;
+    });
+  } catch(e) { try { console.error('[MIG] olu ders supurme', e); } catch(_) {} }
   // v58: %0 hoca orani temizligi — 0 'tanimsiz' demektir (default %30'a duser). Idempotent.
   try {
     const __isZeroRate = v => v !== null && v !== undefined && v !== '' && isFinite(+v) && +v === 0;
@@ -4445,14 +4464,25 @@ function removeMemberFromMonth(memberId, monthISO) {
   });
   m.archivePeriods.push({ from: monthISO, to: null });
   setMemberMonthly(memberId, monthISO, { enrolled: false });
-  // monthISO ve SONRASININ planli grup derslerinden cikar (yapilmis/iptal dersler TARIHSEL — dokunulmaz)
+  // monthISO ve SONRASININ planli derslerinden cikar (yapilmis/iptal dersler TARIHSEL — dokunulmaz)
   state.lessons.forEach(l => {
     if (l.status !== 'planned') return; // v42: hem GRUP hem BIREYSEL planli dersler temizlenir
     const __pm = l.packageMonth || (l.date||'').slice(0,7);
     if (__pm >= monthISO && (l.memberIds||[]).includes(memberId)) {
       l.memberIds = (l.memberIds||[]).filter(x => x !== memberId);
-      if (!l.groupId && l.memberIds.length === 0) l.status = 'cancelled'; // bos kalan bireysel planli ders iptal olur
     }
+  });
+  // v106 (Kerem): BOSALAN planli dersler TAKVIMDEN KALKAR — bireysel: SILINIR;
+  // grup: o ayin AKTIF kadrosu da bosaldiysa SILINIR (kadroda aktif kalan varsa ders yasar).
+  state.lessons = state.lessons.filter(l => {
+    if (!l || l.status !== 'planned') return true;
+    const __pm = l.packageMonth || (l.date||'').slice(0,7);
+    if (__pm < monthISO) return true;
+    if ((l.memberIds||[]).length) return true;
+    if (!l.groupId) return false;
+    const gg = state.groups.find(x => x && x.id === l.groupId);
+    if (!gg) return true;
+    return activeGroupRosterForMonth(gg, __pm, state, true).length > 0;
   });
   save();
   if (typeof renderMembers === 'function') renderMembers();
@@ -5333,6 +5363,14 @@ function syncGroupLessonsToRoster(groupId, fromMonth) {
     updated++;
     if (mids.length > 0 && mids.length > capacityLeftFor(l.date, l.time, lessonDuration(l), l.id)) over.push(`${fmtDate(l.date)} ${l.time}`);
   });
+  // v106: bu grubun BOSALAN planli dersleri (o ay aktif kadro da BOS) SILINIR — takvimde '0/N' hayalet kalmaz.
+  state.lessons = state.lessons.filter(l => {
+    if (!l || l.groupId !== groupId || l.status !== 'planned') return true;
+    const __pm2 = l.packageMonth || (l.date||'').slice(0,7);
+    if (__pm2 < fm) return true;
+    if ((l.memberIds||[]).length) return true;
+    return activeGroupRosterForMonth(g, __pm2, state, true).length > 0;
+  });
   return { updated, over };
 }
 function assignMemberToSlot(memberId, groupId, slotIndex) {
@@ -5351,6 +5389,9 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
     while (out.length > 0 && out[out.length-1] === '') out.pop();
     return out;
   });
+  // v106 (Kerem): yeni gelen uye derslere KATILDIGI TARIHTEN itibaren yazilir — onceki dersler tiksiz kalir.
+  { if (!g.memberJoinDates) g.memberJoinDates = {};
+    g.memberJoinDates[memberId] = (__ctxAy === currentMonth()) ? todayISO() : (__ctxAy + '-01'); }
   __autoNameAfterRosterChange(g, __ctxAy); // v41: ad AY BAZLI guncellenir
   { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId, __ctxAy); }
   setMemberMonthly(memberId, __ctxAy, { enrolled: true }); // v35: gruba eklenen uye o ay ENROLLED — pasiften geri ekleme slotu doldurur
@@ -7589,16 +7630,22 @@ function renderGroupLessonMembers(l) {
   const isPlanned = (l.status || 'planned') === 'planned';
   const present = isPlanned ? new Set(__applyRosterOverrides(roster, l, g)) : new Set(l.memberIds || []);
   const ids = roster.slice();
+  // v106 (Kerem): o AYIN kadro slotlarinda olup PASIFE ALINMIS (ayrilmis) uyeler LISTEDE KALIR — tiksiz + 'ayrıldı' rozeti.
+  const __pmL = l.packageMonth || (l.date || '').slice(0, 7);
+  const __slotIds = (resolveGroupMembersForMonth(g, __pmL) || []).filter(Boolean);
+  // bilinmeyen id (uye kaydi henuz senkron olmadi) UI'da GIZLI kalir (v57 kanonu) — yalniz kayitli uyeler eklenir
+  __slotIds.forEach(mid => { if (!ids.includes(mid) && (state.members || []).find(x => x && x.id === mid)) ids.push(mid); });
   if (!isPlanned) (l.memberIds || []).forEach(mid => { if (!ids.includes(mid)) ids.push(mid); });
   if (!ids.length) { host.innerHTML = '<div style="font-size:12px;color:var(--muted);">Grubun bu ay kadrosu boş.</div>'; updateGroupLessonMemberCount(); return; }
   host.innerHTML = ids.map(mid => {
     const m = state.members.find(x => x.id === mid);
     const nm = m ? (m.name || mid) : mid;
     const checked = present.has(mid);
-    const outside = !roster.includes(mid);
+    const left = __slotIds.includes(mid) && !roster.includes(mid); // v106: o ay slotta ama artik aktif degil = AYRILDI
+    const outside = !left && !roster.includes(mid);
     return `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-weight:normal;">`
       + `<input type="checkbox" class="gl-mc" value="${mid}" ${checked ? 'checked' : ''} style="width:auto" onchange="updateGroupLessonMemberCount()">`
-      + `<span>${escapeHtml(nm)}</span>${outside ? ' <span class="badge warn" style="font-size:10px;">kadro dışı</span>' : ''}</label>`;
+      + `<span>${escapeHtml(nm)}</span>${left ? ' <span class="badge" style="font-size:10px;background:var(--danger);color:#fff;">ayrıldı</span>' : ''}${outside ? ' <span class="badge warn" style="font-size:10px;">kadro dışı</span>' : ''}</label>`;
   }).join('');
   updateGroupLessonMemberCount();
 }
@@ -10873,7 +10920,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.21.28';
+const APP_VERSION = '2026.07.22.29';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

@@ -33,11 +33,12 @@ setTimeout(() => { try {
     state.groups.push({id:'gr',name:autoGroupName(['r1','r2']),size:3,memberIds:['r1','r2'],defaultInstructorId:'h1',defaultPackageId:'',defaultTime:'10:00',defaultDays:[2],
       packages:[{month:'2026-07',startDate:'2026-07-01',sessions:8,price:99999,status:'active'}],rescheduleUsed:0,cancelUsed:0,customTotalPrice:77777,monthlyNotes:{}});
     // dersler: gecmis Haziran (completed) + Haziran paketi planli + Temmuz planli x2
+    // v106: planli Temmuz dersleri AY SONU tarihli — yeni uyenin KATILIM TARIHI (bugun) hangi gun olursa olsun sonrasinda kalirlar
     state.lessons.push(
       {id:'L-old',date:'2026-06-10',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-06',status:'completed',note:''},
       {id:'L-junP',date:'2026-07-02',time:'11:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-06',status:'planned',note:''},
-      {id:'L-jul1',date:'2026-07-21',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-07',status:'planned',note:''},
-      {id:'L-jul2',date:'2026-07-28',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-07',status:'planned',note:''}
+      {id:'L-jul1',date:'2026-07-30',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-07',status:'planned',note:''},
+      {id:'L-jul2',date:'2026-07-31',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-07',status:'planned',note:''}
     );
     window.S = () => state;
   `);
@@ -79,8 +80,8 @@ setTimeout(() => { try {
   w.eval(`
     state.groups.push({id:'gbig',name:'BIG',size:4,memberIds:['r2','r4'],defaultInstructorId:'h1',defaultPackageId:'',defaultTime:'',defaultDays:[],packages:[],rescheduleUsed:0,cancelUsed:0,monthlyNotes:{}});
     state.lessons.push(
-      {id:'L-oth',date:'2026-07-21',time:'10:00',durationMin:45,instructorId:'h1',size:4,memberIds:['x1','x2','x3','x4'],groupId:'',packageMonth:'2026-07',status:'planned',note:''},
-      {id:'L-big',date:'2026-07-21',time:'10:15',durationMin:45,instructorId:'h1',size:4,memberIds:['r2','r4'],groupId:'gbig',packageMonth:'2026-07',status:'planned',note:''}
+      {id:'L-oth',date:'2026-07-31',time:'10:00',durationMin:45,instructorId:'h1',size:4,memberIds:['x1','x2','x3','x4'],groupId:'',packageMonth:'2026-07',status:'planned',note:''},
+      {id:'L-big',date:'2026-07-31',time:'10:15',durationMin:45,instructorId:'h1',size:4,memberIds:['r2','r4'],groupId:'gbig',packageMonth:'2026-07',status:'planned',note:''}
     );
   `);
   alerts.length = 0;

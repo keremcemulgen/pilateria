@@ -40,3 +40,5 @@ done
 echo "======================================"
 echo "DOSYA:$NF OK:$TOTOK FAIL:$TOTFAIL"
 [ -z "$PROB" ] && echo "TEMIZ (0 FAIL)" || echo -e "SORUNLU:$PROB"
+# v106: FAIL varsa cikis kodu 1 — push zincirleri sahte-yesil gecemez
+[ "$TOTFAIL" -eq 0 ]
