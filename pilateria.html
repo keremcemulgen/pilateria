@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.23.33">
+<meta name="app-version" content="2026.07.23.34">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2835,6 +2835,18 @@ function memberRemainingForMonth(memberId, monthISO){
 // v59 KANON (Kerem): UYE SAYISI = benzersiz KISI sayisi. 2.paket klonu (secondOfMember) ayni kisidir,
 // hicbir sayacta ikinci kisi olarak SAYILMAZ (listede satiri gorunur, yonetilir — sadece sayima katilmaz).
 function personIdOf(memberId){ const m = state.members.find(x => x.id === memberId); return (m && m.secondOfMember) || memberId; }
+// v111 (Kerem): odemede gorunen paket = UYENIN O AY ALDIGI paket; kayit damgasi yalniz YEDEK.
+function memberPkgIdForMonth(memberId, ay) {
+  const m = state.members.find(x => x.id === memberId);
+  if (!m) return '';
+  return ((m.monthly && ay && m.monthly[ay] && m.monthly[ay].packageId) || m.defaultPackageId || '');
+}
+function paymentPkgLabel(p) {
+  const ay = (p && (p.packageMonth || String(p.date || '').slice(0, 7))) || '';
+  const pid = memberPkgIdForMonth(p && p.memberId, ay);
+  const pt = pid ? (state.packageTypes || []).find(x => x.id === pid) : null;
+  return (pt && pt.name) || (p && p.pkgName) || '';
+}
 function paymentMonthOf(p){ return (p && (p.packageMonth || String(p.date||'').slice(0,7))) || ''; }
 // v110 (Kerem) TAKSIT KANONU: ayni ay paketine COK odeme olur; TOPLAM tanimli fiyati ASAMAZ.
 function memberPaidTowardsMonth(memberId, groupId, monthISO, excludePayId) {
@@ -5718,7 +5730,7 @@ function openMemberDetail(id) {
     </details>
     <details open><summary>${ctxAy} Ödemeleri (${payments.length}) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— üstüne tıkla: düzenle/sil</span></summary>
       ${payments.length ? '<div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Paket Ayı</th><th>Paket</th><th>Ders</th><th>Tutar</th><th>Yöntem</th><th>İşlem</th></tr></thead><tbody>' +
-        payments.map(p=>`<tr style="cursor:pointer" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');"><td>${fmtDate(p.date)}</td><td>${escapeHtml(p.packageMonth||'—')}</td><td>${escapeHtml(p.pkgName||'')}</td><td>${p.sessions}</td><td><b>${money(p.amount)} ₺</b></td><td>${escapeHtml(p.method||'—')}</td><td onclick="event.stopPropagation()"><button class="btn small secondary" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');" title="Düzenle">✏️</button> <button class="btn small danger" onclick="quickDeletePayment('${p.id}','${id}')" title="Sil">🗑</button></td></tr>`).join('') + '</tbody></table></div>' : '<div class="empty">Bu ay ödeme kaydı yok.</div>'}
+        payments.map(p=>`<tr style="cursor:pointer" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');"><td>${fmtDate(p.date)}</td><td>${escapeHtml(p.packageMonth||'—')}</td><td>${escapeHtml(paymentPkgLabel(p))}</td><td>${p.sessions}</td><td><b>${money(p.amount)} ₺</b></td><td>${escapeHtml(p.method||'—')}</td><td onclick="event.stopPropagation()"><button class="btn small secondary" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');" title="Düzenle">✏️</button> <button class="btn small danger" onclick="quickDeletePayment('${p.id}','${id}')" title="Sil">🗑</button></td></tr>`).join('') + '</tbody></table></div>' : '<div class="empty">Bu ay ödeme kaydı yok.</div>'}
     </details>
     <details><summary>🗂 Tüm Geçmiş (${allPayments.length} ödeme · ${allLessons.length} ders) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— diğer ayların kayıtları burada, listelere karışmaz</span></summary>
       ${allPayments.length ? '<div class="table-wrap"><table><thead><tr><th>Ay</th><th>Tarih</th><th>Tutar</th><th>Yöntem</th></tr></thead><tbody>' + allPayments.map(p=>`<tr style="cursor:pointer" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');"><td><b>${escapeHtml(p.packageMonth||String(p.date||'').slice(0,7))}</b></td><td>${fmtDate(p.date)}</td><td><b>${money(p.amount)} ₺</b></td><td>${escapeHtml(p.method||'—')}</td></tr>`).join('') + '</tbody></table></div>' : ''}
@@ -5809,7 +5821,7 @@ async function togglePaidTick(memberId, groupId, ev, monthAy) {
   if (existing.length > 0 && __defPrice > 0 && __paidSum < __defPrice - 0.005) {
     const __kal = Math.round((__defPrice - __paidSum) * 100) / 100;
     if (!confirm(`"${m.name}" ${ay}: ${money(__paidSum)} ₺ ödendi, kalan ${money(__kal)} ₺.\n\nKalanı da ÖDENDİ olarak kaydedeyim mi?\n(Vazgeç = değişiklik yok; taksitler Ödemeler sayfasından da girilebilir)`)) return;
-    const __pk0 = (isGroup && g && g.defaultPackageId ? state.packageTypes.find(p=>p.id===g.defaultPackageId) : null) || state.packageTypes[0] || { price: __kal, sessions: 8 };
+    const __pk0 = (function(){ const pid = memberPkgIdForMonth(memberId, ay); return (pid && state.packageTypes.find(p=>p.id===pid)) || (isGroup && g && g.defaultPackageId ? state.packageTypes.find(p=>p.id===g.defaultPackageId) : null) || state.packageTypes[0] || { price: __kal, sessions: 8 }; })(); // v111: uye-oncelikli
     const __rec2 = buildPaymentRecord('', memberId, groupId||'', todayISO(), __pk0, +__pk0.sessions||8, __kal, __kal, 'Nakit', '', '', 'Tik ile kalan tahsil', false);
     __rec2.autoTick = true; __rec2.packageMonth = ay;
     state.payments.push(__rec2);
@@ -5829,7 +5841,9 @@ async function togglePaidTick(memberId, groupId, ev, monthAy) {
   } else {
     // Ödeme yok → ÖNCE üyenin tanımlı fiyatına bak, yoksa kullanıcıdan iste
     let pkgObj = null;
-    if (isGroup && g && g.defaultPackageId) {
+    const __memberPid = memberPkgIdForMonth(memberId, ay); // v111: ONCE uyenin o ayki paketi
+    if (__memberPid) pkgObj = state.packageTypes.find(p => p.id === __memberPid);
+    if (!pkgObj && isGroup && g && g.defaultPackageId) {
       pkgObj = state.packageTypes.find(p => p.id === g.defaultPackageId);
     }
     if (!pkgObj) pkgObj = state.packageTypes[0];
@@ -7684,7 +7698,7 @@ function openGroupDetail(id, monthISO) {
       ${groupPayments.length ? '<div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Üye</th><th>Paket</th><th>Tutar</th><th>Yöntem</th></tr></thead><tbody>' +
         groupPayments.map(p=>{
           const kdvInfo = (p.method==='IBAN' && p.kdv) ? `<br><small style="color:var(--muted)">net ${money(p.net)} + KDV ${money(p.kdv)}</small>` : '';
-          return `<tr><td>${fmtDate(p.date)}</td><td>${memberName(p.memberId)}</td><td>${p.pkgName}</td><td><b>${money(p.amount)} ₺</b>${kdvInfo}</td><td>${p.method||'—'}</td></tr>`;
+          return `<tr><td>${fmtDate(p.date)}</td><td>${memberName(p.memberId)}</td><td>${escapeHtml(paymentPkgLabel(p))}</td><td><b>${money(p.amount)} ₺</b>${kdvInfo}</td><td>${p.method||'—'}</td></tr>`;
         }).join('') + '</tbody></table></div>' : '<div class="empty">Kayıt yok.</div>'}
     </details>
     <details open style="margin-top:8px;"><summary>📅 Grup Dersleri (${groupLessons.length}) — tıklayarak düzenle</summary>
@@ -8749,7 +8763,8 @@ function saveGroupPaymentAll() {
   if (!confirm(__cmsg)) return;
   for (const mid of __targetMids) {
     const __amt = __amtByMid[mid] || 0;
-    const rec = buildPaymentRecord('', mid, groupId, date, pkgObj, sessions, listPrice, __amt, method, campaignId, campaignName, note, false);
+    const __mPkg = (function(){ const pid = memberPkgIdForMonth(mid, packageMonth); return (pid && state.packageTypes.find(p=>p.id===pid)) || pkgObj; })(); // v111: uyenin kendi paketi
+    const rec = buildPaymentRecord('', mid, groupId, date, __mPkg, sessions, listPrice, __amt, method, campaignId, campaignName, note, false);
     rec.packageMonth = packageMonth;
     state.payments.push(rec);
     if (isMemberArchived(mid)) unarchiveMember(mid);
@@ -8814,7 +8829,7 @@ function renderPayments() {
     return `<tr>
       <td data-label="Tarih">${fmtDate(p.date)}${(()=>{ const __pm=paymentMonthOf(p); return (__pm && __pm!==String(p.date||'').slice(0,7)) ? ' <span class="badge" style="background:#eef2f7;color:#3a4a5a;font-size:10px;" title="Odeme bu paketin ayina sayilir">📦 '+(typeof __shortMonth==='function'?__shortMonth(__pm):__pm)+'</span>' : ''; })()}</td>
       <td data-label="Üye" class="card-title">${memberName(p.memberId)}${groupCell}</td>
-      <td data-label="Paket">${escapeHtml(p.pkgName||'')}<br><small style="color:var(--muted)">${(p.sessions!==undefined&&p.sessions!==null&&p.sessions!=='')?p.sessions+' ders':''}${(p.size!==undefined&&p.size!==null&&p.size!=='')?(p.sessions?' · ':'')+p.size+' kişilik':''}</small></td>
+      <td data-label="Paket">${escapeHtml(paymentPkgLabel(p))}<br><small style="color:var(--muted)">${(p.sessions!==undefined&&p.sessions!==null&&p.sessions!=='')?p.sessions+' ders':''}${(p.size!==undefined&&p.size!==null&&p.size!=='')?(p.sessions?' · ':'')+p.size+' kişilik':''}</small></td>
       <td data-label="Kampanya">${campCell}</td>
       <td data-label="Tutar">${amtCell}</td>
       <td data-label="Yöntem">${methodBadge}</td>
@@ -11062,7 +11077,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.23.33';
+const APP_VERSION = '2026.07.23.34';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
