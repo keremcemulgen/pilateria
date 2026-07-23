@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.23.32">
+<meta name="app-version" content="2026.07.23.33">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2836,6 +2836,24 @@ function memberRemainingForMonth(memberId, monthISO){
 // hicbir sayacta ikinci kisi olarak SAYILMAZ (listede satiri gorunur, yonetilir — sadece sayima katilmaz).
 function personIdOf(memberId){ const m = state.members.find(x => x.id === memberId); return (m && m.secondOfMember) || memberId; }
 function paymentMonthOf(p){ return (p && (p.packageMonth || String(p.date||'').slice(0,7))) || ''; }
+// v110 (Kerem) TAKSIT KANONU: ayni ay paketine COK odeme olur; TOPLAM tanimli fiyati ASAMAZ.
+function memberPaidTowardsMonth(memberId, groupId, monthISO, excludePayId) {
+  return (state.payments || []).reduce((a, p) => {
+    if (!p || p.memberId !== memberId) return a;
+    if ((p.groupId || '') !== (groupId || '')) return a;
+    if ((p.packageMonth || String(p.date || '').slice(0, 7)) !== monthISO) return a;
+    if (excludePayId && p.id === excludePayId) return a;
+    return a + (+p.amount || 0);
+  }, 0);
+}
+function paymentCapCheck(memberId, groupId, monthISO, newAmount, excludePayId) {
+  const defined = +memberMonthlyTotalPrice(memberId, monthISO) || 0;
+  const paid = memberPaidTowardsMonth(memberId, groupId, monthISO, excludePayId);
+  if (defined <= 0) return { ok: true, defined: 0, paid, kalan: null };
+  const kalan = Math.max(0, Math.round((defined - paid) * 100) / 100);
+  const ok = (paid + (+newAmount || 0)) <= defined + 0.005;
+  return { ok, defined, paid, kalan };
+}
 function memberPaidInMonth(memberId, monthISO){
   const ay = monthISO || currentMonth();
   return state.payments.some(pp => pp.memberId===memberId && ((pp.packageMonth || String(pp.date||'').slice(0,7)) === ay));
@@ -5074,9 +5092,11 @@ function renderMembers() {
     if (r.isEmpty) {
       isPaid = false; // BOŞ slotlar pay-ok/pay-due almasın
     } else if (r.type === 'group') {
-      isPaid = r.groupFullyPaid || (+r.paid || 0) > 0;
+      const __own = +r.ownPrice || 0; // v110: TAKSIT — yesil ancak TAM odeyince (kismi sari kalir)
+      isPaid = r.groupFullyPaid || (__own > 0 ? ((+r.paid || 0) >= __own - 0.005) : (+r.paid || 0) > 0);
     } else {
-      isPaid = (+r.paid || 0) > 0;
+      const __own = +r.totalPrice || 0; // v110
+      isPaid = __own > 0 ? ((+r.paid || 0) >= __own - 0.005) : (+r.paid || 0) > 0;
     }
     if (!r.isEmpty) rowClasses.push(isPaid ? 'pay-ok' : 'pay-due');
     const rowClass = rowClasses.join(' ');
@@ -5783,6 +5803,19 @@ async function togglePaidTick(memberId, groupId, ev, monthAy) {
   const ay = monthAy || ((document.getElementById('member-month')||{}).value || '') || currentMonth();
   const __payAyOf = pp => (pp.packageMonth || (pp.date ? String(pp.date).slice(0,7) : ''));
   const existing = state.payments.filter(p => p.memberId===memberId && (isGroup ? p.groupId===groupId : !p.groupId) && __payAyOf(p) === ay);
+  // v110 (Kerem): KISMEN odenmisse tik = KALANI tahsil et (taksit tamamlama). Tam odenmiste eski davranis.
+  const __paidSum = existing.reduce((a,p)=>a+(+p.amount||0),0);
+  const __defPrice = +memberMonthlyTotalPrice(memberId, ay) || 0;
+  if (existing.length > 0 && __defPrice > 0 && __paidSum < __defPrice - 0.005) {
+    const __kal = Math.round((__defPrice - __paidSum) * 100) / 100;
+    if (!confirm(`"${m.name}" ${ay}: ${money(__paidSum)} ₺ ödendi, kalan ${money(__kal)} ₺.\n\nKalanı da ÖDENDİ olarak kaydedeyim mi?\n(Vazgeç = değişiklik yok; taksitler Ödemeler sayfasından da girilebilir)`)) return;
+    const __pk0 = (isGroup && g && g.defaultPackageId ? state.packageTypes.find(p=>p.id===g.defaultPackageId) : null) || state.packageTypes[0] || { price: __kal, sessions: 8 };
+    const __rec2 = buildPaymentRecord('', memberId, groupId||'', todayISO(), __pk0, +__pk0.sessions||8, __kal, __kal, 'Nakit', '', '', 'Tik ile kalan tahsil', false);
+    __rec2.autoTick = true; __rec2.packageMonth = ay;
+    state.payments.push(__rec2);
+    save(); renderMembers(); renderPayments(); renderDashboard(); renderGroups(); refreshGroupDetailIfOpen();
+    return;
+  }
   if (existing.length > 0) {
     // Zaten ödemesi var → kaldır (yalnızca otomatik tik ile yaratılmışsa hemen sil, manuel ödeme varsa onay iste)
     const allAuto = existing.every(p => p.autoTick);
@@ -8611,14 +8644,24 @@ function savePayment() {
   if (amount === 0) {
     if (!confirm('⚠️ Tutar 0 ₺ olarak kaydedilecek. Doğru mu?')) return;
   }
-  // v18: Ayni uyeye ayni paket ayi icin IKINCI odeme kaydi acilamaz (mukerrer engeli)
-  if (!id) {
-    const __dupMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
-    const __dup = state.payments.find(pp => pp.memberId === memberId && (pp.groupId||'') === (groupId||'') && (pp.packageMonth || String(pp.date||'').slice(0,7)) === __dupMonth); // v22: 2. paket (farkli grup kaydi) ayri sayilir
-    if (__dup) {
-      const __dm = state.members.find(x=>x.id===memberId);
-      alert(`⛔ ${(__dm&&__dm.name)||'Üye'} için ${__dupMonth} ayında zaten ${money(__dup.amount)} ₺ ödeme kaydı var.\n\nAynı ay için ikinci ödeme alınamaz. Tutarı düzeltmek istersen mevcut kaydı üye detayındaki Ödeme Geçmişi'nden açıp düzenle.`);
-      return;
+  // v110 (Kerem): TAKSIT SERBEST, TANIMLI FIYAT ASILAMAZ. Fiyat tanimsizsa eski mukerrer korumasi surer.
+  {
+    const __pmMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
+    const __cap = paymentCapCheck(memberId, groupId, __pmMonth, amount, id || '');
+    if (__cap.defined > 0) {
+      if (!__cap.ok) {
+        const __dm = state.members.find(x=>x.id===memberId);
+        markInvalid('mp-amount', 'Tanımlı fiyat aşılıyor');
+        alert(`⛔ ${(__dm&&__dm.name)||'Üye'} — ${__pmMonth} paketi ${money(__cap.defined)} ₺.\nŞimdiye kadar ödenen: ${money(__cap.paid)} ₺.\nEn fazla ${money(__cap.kalan)} ₺ daha alınabilir (taksit toplamı tanımlı fiyatı aşamaz).`);
+        return;
+      }
+    } else if (!id) {
+      const __dup = state.payments.find(pp => pp.memberId === memberId && (pp.groupId||'') === (groupId||'') && (pp.packageMonth || String(pp.date||'').slice(0,7)) === __pmMonth);
+      if (__dup) {
+        const __dm = state.members.find(x=>x.id===memberId);
+        alert(`⛔ ${(__dm&&__dm.name)||'Üye'} için ${__pmMonth} ayında zaten ${money(__dup.amount)} ₺ ödeme var ve üyenin TANIMLI fiyatı yok.\n\nTaksitli tahsilat için önce üyeye aylık fiyat tanımla — taksitler tanımlı fiyata kadar serbest olur.`);
+        return;
+      }
     }
   }
   const partial = !!(document.getElementById('mp-prorate') && document.getElementById('mp-prorate').checked);
@@ -8680,21 +8723,33 @@ function saveGroupPaymentAll() {
   if (isNaN(amount) || amount < 0) { markInvalid('mp-amount', 'Geçersiz tutar'); errs++; }
   if (errs) { alert(`${errs} zorunlu alan eksik. Kırmızı ile işaretli alanları kontrol et.`); return; }
   const packageMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
-  // v18: Bu ay zaten odemesi olan uyeler ATLANIR (mukerrer engeli)
-  const __dupNames = [], __targetMids = [];
+  // v110 (Kerem): TAKSIT KANONU — uye bazinda KALANLA sinirla; tam odemis uye atlanir; fiyat tanimsizsa eski mukerrer kurali.
+  const __dupNames = [], __targetMids = [], __adjNotes = [], __amtByMid = {};
   for (const mid of (g.memberIds||[])) {
     if (!mid) continue;
-    const __d = state.payments.find(pp => pp.memberId === mid && (pp.groupId||'') === (groupId||'') && (pp.packageMonth || String(pp.date||'').slice(0,7)) === packageMonth); // v22: grup-bazli
-    if (__d) { const __m = state.members.find(x=>x.id===mid); __dupNames.push((__m&&__m.name)||mid); }
-    else __targetMids.push(mid);
+    const __m = state.members.find(x=>x.id===mid);
+    const __cap = paymentCapCheck(mid, groupId, packageMonth, amount, '');
+    if (__cap.defined > 0) {
+      if (__cap.kalan <= 0.005) { __dupNames.push(((__m&&__m.name)||mid) + ' (tam ödendi)'); continue; }
+      const __use = Math.min(+amount || 0, __cap.kalan);
+      if (__use < (+amount || 0) - 0.005) __adjNotes.push(((__m&&__m.name)||mid) + ': ' + money(__use) + ' ₺ (kalanla sınırlandı)');
+      __amtByMid[mid] = __use; __targetMids.push(mid);
+    } else {
+      const __d = state.payments.find(pp => pp.memberId === mid && (pp.groupId||'') === (groupId||'') && (pp.packageMonth || String(pp.date||'').slice(0,7)) === packageMonth);
+      if (__d) { __dupNames.push(((__m&&__m.name)||mid) + ' (fiyat tanımsız, kaydı var)'); continue; }
+      __amtByMid[mid] = +amount || 0; __targetMids.push(mid);
+    }
   }
-  if (!__targetMids.length) { alert(`⛔ ${packageMonth} ayında grubun tüm üyelerinin zaten ödeme kaydı var. İkinci ödeme alınamaz.`); return; }
-  let __cmsg = `"${groupDisplayName(g, (document.getElementById('mp-pkg-month')||{}).value || currentMonth())}" grubunda ${__targetMids.length} üye için kişi başı ${money(amount)} ₺ ödeme kaydı açılacak (toplam ${money(amount*__targetMids.length)} ₺).`;
-  if (__dupNames.length) __cmsg += `\n\n⚠️ Bu ay zaten ödemesi olduğu için ATLANACAKLAR:\n  • ${__dupNames.join('\n  • ')}`;
+  if (!__targetMids.length) { alert(`⛔ ${packageMonth} ayında ödeme alınabilecek üye yok (hepsi tam ödemiş ya da kayıtlı).`); return; }
+  const __totAll = __targetMids.reduce((a, mid) => a + (__amtByMid[mid] || 0), 0);
+  let __cmsg = `"${groupDisplayName(g, (document.getElementById('mp-pkg-month')||{}).value || currentMonth())}" grubunda ${__targetMids.length} üye için ödeme kaydı açılacak (toplam ${money(__totAll)} ₺).`;
+  if (__adjNotes.length) __cmsg += `\n\n💡 Kalanla sınırlananlar:\n  • ${__adjNotes.join('\n  • ')}`;
+  if (__dupNames.length) __cmsg += `\n\n⚠️ ATLANACAKLAR:\n  • ${__dupNames.join('\n  • ')}`;
   __cmsg += '\n\nDevam?';
   if (!confirm(__cmsg)) return;
   for (const mid of __targetMids) {
-    const rec = buildPaymentRecord('', mid, groupId, date, pkgObj, sessions, listPrice, amount, method, campaignId, campaignName, note, false);
+    const __amt = __amtByMid[mid] || 0;
+    const rec = buildPaymentRecord('', mid, groupId, date, pkgObj, sessions, listPrice, __amt, method, campaignId, campaignName, note, false);
     rec.packageMonth = packageMonth;
     state.payments.push(rec);
     if (isMemberArchived(mid)) unarchiveMember(mid);
@@ -11007,7 +11062,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.23.32';
+const APP_VERSION = '2026.07.23.33';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
