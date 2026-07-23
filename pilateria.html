@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.22.31">
+<meta name="app-version" content="2026.07.23.32">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -340,12 +340,12 @@
   /* Ödeme durumu renklendirmesi: sarı = ödeme yapmamış, yeşil = yapmış */
   #members-table tr.pay-due td { background: #FFF8E1; }           /* sarı — ödeme bekleniyor */
   #members-table tr.pay-ok  td { background: #E8F5E9; }           /* yeşil — ödeme alındı */
-  /* Grup adı hücresi her zaman kendi tonunda kalsın */
-  #members-table tr.pay-due td.grp-name-cell,
-  #members-table tr.pay-ok  td.grp-name-cell { background: #F3E6C7; }
-  /* Grup toplam/kalan birleşmiş hücreleri de kendi tonunda */
-  #members-table tr.pay-due td.grp-merge,
-  #members-table tr.pay-ok  td.grp-merge { background: #FBF5E7; }
+  /* v109 (Kerem): grup adi + birlesik hucreler SABIT renk — ilk satirin (bos-kirmizi/yesil/hover) rengini ASLA almaz */
+  #members-table td.grp-name-cell { background: #F3E6C7 !important; }
+  #members-table td.grp-merge { background: #FBF5E7 !important; }
+  /* v109: grubun TUM uyeleri odedi -> grup KOMPLE yesil (bireysel odenmis yesiliyle ayni) */
+  #members-table td.grp-name-cell.grp-all-paid,
+  #members-table td.grp-merge.grp-all-paid { background: #E8F5E9 !important; }
   /* Hover: tüm renkler biraz koyulaşsın */
   #members-table tr.pay-due:hover td { background: #FFF1B8; }
   #members-table tr.pay-ok:hover  td { background: #D4EDD6; }
@@ -4814,9 +4814,13 @@ function buildMemberRows(monthISO) {
       });
       const latestPay = memberPayments.sort((a,b)=>b.date.localeCompare(a.date))[0];
       const paid = memberPayments.reduce((a,b)=>a+(+b.amount||0),0);
-      // Aylık paket başlangıç (override → o ayın ilk dersi → ödemesi → fallback joinDate)
+      // v109 (Kerem): GRUP uyesinin paket penceresi = GRUBUN penceresi — TUM uyelerde AYNI tarih.
+      // Oncelik: uyenin ELLE override'i -> grubun o ay paket baslangici -> grubun o ayin (pm) ilk dersi -> uyenin odemesi.
+      const __ovStart = monthISO ? (((getMemberMonthlyOverride(mid, monthISO)) || {}).packageStartDate || '') : '';
+      const __gPkgStart = monthISO ? (((((g.packages || []).find(pp => pp && pp.month === monthISO))) || {}).startDate || '') : '';
+      const __gFirstLesson = monthISO ? (((state.lessons.filter(l => l && l.groupId === g.id && l.status !== 'cancelled' && ((l.packageMonth || String(l.date || '').slice(0, 7)) === monthISO) && l.date).sort((a, b) => a.date.localeCompare(b.date))[0]) || {}).date || '') : '';
       const memberStart = monthISO
-        ? (memberMonthlyPackageStart(mid, monthISO) || (latestPay ? latestPay.date : ''))
+        ? (__ovStart || __gPkgStart || __gFirstLesson || (latestPay ? latestPay.date : ''))
         : (m.joinDate || g.packageStartDate || (latestPay ? latestPay.date : ''));
       const pkgDays = state.settings.groupPackageDays || 30;
       const memberEnd = memberStart ? addDaysISO(memberStart, pkgDays-1) : '';
@@ -5088,7 +5092,7 @@ function renderMembers() {
         const subLabel = filled < total
           ? `<span style="color:#c62828;font-weight:600;">${filled}/${total} dolu</span>`
           : `${total} kişi`;
-        groupNameCell = `<td class="grp-name-cell" rowspan="${rs}" style="cursor:pointer;" onclick="event.stopPropagation();openGroupDetail('${r.groupId}')" title="Grup detayına git"><div class="grp-name-inner"><div class="grp-name-title">👯 ${r.groupName}</div><div class="grp-name-sub">${subLabel}</div></div></td>`;
+        groupNameCell = `<td class="grp-name-cell${r.groupFullyPaid ? ' grp-all-paid' : ''}" rowspan="${rs}" style="cursor:pointer;" onclick="event.stopPropagation();openGroupDetail('${r.groupId}')" title="Grup detayına git"><div class="grp-name-inner"><div class="grp-name-title">👯 ${r.groupName}</div><div class="grp-name-sub">${subLabel}</div></div></td>`;
       } else {
         groupNameCell = '';
       }
@@ -5103,19 +5107,19 @@ function renderMembers() {
         const rs = r.groupMemberCount || 1;
         const grpTotalDisplay = r.totalPrice ? money(r.totalPrice)+' ₺' : '<span style="color:#c62828;">üye fiyatı yok</span>';
         const grpHint = r.totalPrice ? '' : '<br><small style="color:#e65100;font-size:10px;">Grup detayından her üyeye fiyat ata</small>';
-        totalCell = `<td class="grp-merge" rowspan="${rs}" style="cursor:pointer;" onclick="event.stopPropagation();openGroupDetail('${r.groupId}')" title="Grup detayını aç → her üyeye fiyat ata"><span class="grp-merge-label">Grup Toplamı</span>${grpTotalDisplay}${grpHint}</td>`;
+        totalCell = `<td class="grp-merge${r.groupFullyPaid ? ' grp-all-paid' : ''}" rowspan="${rs}" style="cursor:pointer;" onclick="event.stopPropagation();openGroupDetail('${r.groupId}')" title="Grup detayını aç → her üyeye fiyat ata"><span class="grp-merge-label">Grup Toplamı</span>${grpTotalDisplay}${grpHint}</td>`;
         // Grup geneli toplam ödeme — tek kişi üzerinde değil, grubun tamamına ait gösterilir
         const paidDisplay = (+r.groupPaid || 0) > 0
           ? `<b style="color:var(--ok)">${money(r.groupPaid)} ₺</b>`
           : '<span style="color:var(--bad);font-weight:600;">—</span>';
-        paidCell = `<td class="grp-merge" rowspan="${rs}"><span class="grp-merge-label">Grup Ödenen</span>${paidDisplay}</td>`;
+        paidCell = `<td class="grp-merge${r.groupFullyPaid ? ' grp-all-paid' : ''}" rowspan="${rs}"><span class="grp-merge-label">Grup Ödenen</span>${paidDisplay}</td>`;
         // Kalan ödeme gösterimi
         const remDisplay = (r.remaining === '' || r.remaining === undefined || r.remaining === null)
           ? '<span style="color:#8a8573">—</span>'
           : r.remaining > 0
             ? `<span style="color:var(--bad)">${money(r.remaining)} ₺</span>`
             : `<span style="color:var(--ok)">0</span>`;
-        remainingCell = `<td class="grp-merge" rowspan="${rs}"><span class="grp-merge-label">Grup Kalan</span>${remDisplay}</td>`;
+        remainingCell = `<td class="grp-merge${r.groupFullyPaid ? ' grp-all-paid' : ''}" rowspan="${rs}"><span class="grp-merge-label">Grup Kalan</span>${remDisplay}</td>`;
       } else {
         totalCell = paidCell = remainingCell = ''; // rowspan hücreleri ilk satırdan uzanıyor
       }
@@ -11003,7 +11007,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.22.31';
+const APP_VERSION = '2026.07.23.32';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
