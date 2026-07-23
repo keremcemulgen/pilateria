@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.22.30">
+<meta name="app-version" content="2026.07.22.31">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2775,7 +2775,21 @@ function sessionsFinishState(ownerType, ownerId, ay) {
     else { if (l.groupId) return; if (!(l.memberIds || []).includes(ownerId)) return; }
     if (l.status === 'planned') planned++; else done++;
   });
-  return { quota, done, planned, remaining: Math.max(0, quota - done - planned), trulyFinished: done >= quota };
+  const __closed = !!__pkgClosedEarlyLesson(ownerType, ownerId, ay); // v108
+  const __rawRem = Math.max(0, quota - done - planned);
+  return { quota, done, planned, remaining: __closed ? 0 : __rawRem, keptRights: __closed ? __rawRem : 0,
+    closedEarly: __closed, trulyFinished: done >= quota || (__closed && planned === 0) };
+}
+// v108 (Kerem): ⭐ elle SON DERS isaretli paket ERKEN KAPANMISTIR — kalan hak/para ISLETMEYE.
+function __pkgClosedEarlyLesson(ownerType, ownerId, ay) {
+  if (!ownerId || !ay) return null;
+  return (state.lessons || []).find(l => {
+    if (!l || l.isLastOfPackage !== true || l.status === 'cancelled') return false;
+    const pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (pm !== ay) return false;
+    if (ownerType === 'group') return l.groupId === ownerId;
+    return !l.groupId && (l.memberIds || []).includes(ownerId);
+  }) || null;
 }
 function sessionQuotaFor(ownerType, ownerId, monthISO){
   const ay = monthISO || currentMonth();
@@ -2804,6 +2818,7 @@ function sessionsUsedFor(ownerType, ownerId, monthISO){
   }).length;
 }
 function sessionsRemainingFor(ownerType, ownerId, monthISO){
+  if (__pkgClosedEarlyLesson(ownerType, ownerId, monthISO)) return 0; // v108: erken kapandi — kalan hak ISLETMEYE
   return Math.max(0, sessionQuotaFor(ownerType, ownerId, monthISO) - sessionsUsedFor(ownerType, ownerId, monthISO));
 }
 // Bir uyenin O AYKI kalan dersi: grup uyesiyse GRUBUN kalani (tek birim), degilse bireysel.
@@ -5619,7 +5634,7 @@ function openMemberDetail(id) {
   const payMonthOf = pp => (pp.packageMonth || (pp.date ? String(pp.date).slice(0,7) : ''));
   const lesMonthOf = ll => (ll.packageMonth || String(ll.date||'').slice(0,7));
   const allPayments = state.payments.filter(p=>p.memberId===id).sort((a,b)=>b.date.localeCompare(a.date));
-  const allLessons = state.lessons.filter(l=>(l.memberIds||[]).includes(id)).sort((a,b)=> (b.date+b.time).localeCompare(a.date+a.time));
+  const allLessons = state.lessons.filter(l=>(l.memberIds||[]).includes(id)).sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time)); // v108 (Kerem): EN ESKI ders ustte (grup detay/toplu listeyle ayni)
   const payments = allPayments.filter(p => payMonthOf(p) === ctxAy);
   const lessons = allLessons.filter(l => lesMonthOf(l) === ctxAy);
   const bought = payments.reduce((a,b)=>a+(+b.sessions||0),0);
@@ -5642,7 +5657,7 @@ function openMemberDetail(id) {
   const html = `
     ${navBar}
     <div class="grid-stats">
-      <div class="stat blue"><div class="label">Kalan Ders (${ctxAy})</div><div class="value">${remCanon}</div></div>
+      <div class="stat blue"><div class="label">Kalan Ders (${ctxAy})</div><div class="value">${remCanon}</div>${(function(){try{const f=sessionsFinishState('member',id,ctxAy);return f.closedEarly?`<div style="font-size:9.5px;color:var(--warn);margin-top:2px;">⭐ ${f.keptRights} hak işletmeye</div>`:''}catch(e){return ''}})()}</div>
       <div class="stat ok"><div class="label">Yapılan Ders (${ctxAy})</div><div class="value">${doneCount}</div></div>
       <div class="stat warn"><div class="label">Ödeme (${ctxAy}) ₺</div><div class="value">${money(totalPaid)}</div></div>
     </div>
@@ -7603,7 +7618,7 @@ function openGroupDetail(id, monthISO) {
     ${pkgExtendedBanner}
     <div class="grid-stats">
       <div class="stat blue"><div class="label">Üye</div><div class="value">${members.length}/${g.size}</div></div>
-      <div class="stat ok"><div class="label">Kalan Ders</div><div class="value">${sessionsRemainingFor('group', id, monthISO || currentMonth())}</div><div style="font-size:9.5px;color:var(--muted);margin-top:2px;">hak: ${sessionQuotaFor('group', id, monthISO || currentMonth())} · <a href="#" onclick="event.preventDefault();editGroupSessions('${id}','${monthISO||currentMonth()}')" style="color:var(--acc);">düzenle</a></div></div>
+      <div class="stat ok"><div class="label">Kalan Ders</div><div class="value">${sessionsRemainingFor('group', id, monthISO || currentMonth())}</div><div style="font-size:9.5px;color:var(--muted);margin-top:2px;">hak: ${sessionQuotaFor('group', id, monthISO || currentMonth())} · <a href="#" onclick="event.preventDefault();editGroupSessions('${id}','${monthISO||currentMonth()}')" style="color:var(--acc);">düzenle</a>${(function(){try{const f=sessionsFinishState('group',id,monthISO||currentMonth());return f.closedEarly?` · <b style="color:var(--warn)">⭐ ${f.keptRights} hak işletmeye</b>`:''}catch(e){return ''}})()}</div></div>
       <div class="stat warn"><div class="label">Toplam Ders${monthISO?' (Ay)':''}</div><div class="value">${groupLessons.length}</div></div>
       <div class="stat"><div class="label">Grup Toplam Ücreti${missingPriceCount?' ⚠️':''}</div><div class="value">${money(groupTotalComputed)} ₺</div>${missingPriceCount?`<div style="font-size:10px;color:#c62828;margin-top:2px;">${missingPriceCount} üye fiyatsız</div>`:''}</div>
       <div class="stat"><div class="label">Toplanan${monthISO?' (Ay)':''}</div><div class="value">${money(totalRevenue)} ₺</div></div>
@@ -8075,6 +8090,21 @@ function saveBatchDates() {
     if (l.packageMonth) return l.packageMonth === packageMonth;
     return (l.date||'').startsWith(packageMonth);
   });
+  // v108 (Kerem): ⭐ SON DERSTEN SONRAKI planli satirlar paketten DUSER (kalan hak/para ISLETMEYE).
+  // Yapilmis/yanan/iptal satirlar TARIHSEL KAYIT — dokunulmaz.
+  let __afterLastDropped = 0;
+  { const __lastR = __batchDatesRows.find(r => r && r.last && r.date);
+    if (__lastR) {
+      const __key = __lastR.date + ' ' + (__lastR.time || '');
+      __batchDatesRows = __batchDatesRows.filter(r => {
+        if (!r || r === __lastR) return true;
+        if (!r.date) return true;
+        if ((r.status || 'planned') !== 'planned') return true;
+        const drop = (r.date + ' ' + (r.time || '')) > __key;
+        if (drop) __afterLastDropped++;
+        return !drop;
+      });
+    } }
   const modalLessonIds = new Set(__batchDatesRows.filter(r => r.lessonId).map(r => r.lessonId));
   const idsToRemove = existingPkgLessons.filter(l => !modalLessonIds.has(l.id)).map(l => l.id);
   // v18: KAPASITE ON-KONTROLU — hicbir sey yazilmadan tum satirlar simule edilir (45dk/5 makine kurali).
@@ -8158,7 +8188,7 @@ function saveBatchDates() {
   autoCompletePackages();
   save();
   closeModal('modal-batch-dates');
-  alert(`✓ ${created} yeni ders, ${updated} güncellendi${removed?`, ${removed} silindi`:''}.`);
+  alert(`✓ ${created} yeni ders, ${updated} güncellendi${removed?`, ${removed} silindi`:''}.${__afterLastDropped?` ⭐ Son dersten sonraki ${__afterLastDropped} planlı ders paketten düştü — hakları işletmeye kaldı.`:''}`);
   if (typeof renderCalendar === 'function') renderCalendar();
   if (typeof renderDashboard === 'function') renderDashboard();
   if (typeof renderMembers === 'function') renderMembers();
@@ -10973,7 +11003,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.22.30';
+const APP_VERSION = '2026.07.22.31';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
