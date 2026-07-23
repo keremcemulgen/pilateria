@@ -37,20 +37,26 @@ setTimeout(()=>{ try {
   t('grup Temmuz kalan = 2', w.sessionsRemainingFor('group','g1','2026-07')===2, w.sessionsRemainingFor('group','g1','2026-07'));
   t('ownerUnfinishedMonths Temmuz doner', w.ownerUnfinishedMonths('group','g1').includes('2026-07'));
 
-  console.log('[2] AGUSTOS bos hucreden ders ac -> grup sec -> AKILLI paket ayi Temmuz gelir');
+  console.log('[2] v107 KANON: AGUSTOS hucresinden grup sec -> paket ayi AGUSTOS (dersin ayi); sarkan ELLE + IPUCU');
   w.openLessonModal(null, '2026-08-03', '10:00'); // agustos bos hucre
   w.applyGroupToLesson('g1');
   const pmVal = d.getElementById('ml-pkg-month').value;
-  t('paket ayi secici Temmuz secili (sarkan)', pmVal==='2026-07', pmVal);
+  t('paket ayi secici AGUSTOS secili (dersin ayi — otomatik sarkan YOK)', pmVal==='2026-08', pmVal);
   const optsText = d.getElementById('ml-pkg-month').innerHTML;
-  t('Temmuz secenegi "ders kalan" isaretli', /Temmuz.*ders kalan/i.test(optsText) || /2026-07[^<]*ders kalan/i.test(optsText), 'isaret yok');
+  t('Temmuz secenegi "ders kalan" isaretli (elle secim icin)', /Temmuz.*ders kalan/i.test(optsText) || /2026-07[^<]*ders kalan/i.test(optsText), 'isaret yok');
+  const hintEl = d.getElementById('ml-pkg-hint');
+  t('SARKAN IPUCU gorunur (Tem paketinde kalan var)', !!hintEl && hintEl.style.display!=='none' && /kalm/.test(hintEl.textContent), hintEl&&hintEl.textContent);
+
+  console.log('[2b] Kullanici SARKAN icin Temmuzu ELLE secer');
+  d.getElementById('ml-pkg-month').value='2026-07';
+  w.onLessonPkgMonthChange();
 
   console.log('[3] Uyeler Temmuz kadrosuyla listeleniyor (agustos bos olsa da)');
   const rosterHtml = d.getElementById('ml-members').innerHTML;
   t('AYSE listede (Temmuz kadrosu)', rosterHtml.includes('AYSE'));
   t('BANU listede', rosterHtml.includes('BANU'));
 
-  console.log('[4] Dersi kaydet -> TEMMUZ paketine sayilir (agustos degil)');
+  console.log('[4] Dersi kaydet -> TEMMUZ paketine sayilir (elle secim kazandi)');
   d.getElementById('ml-date').value='2026-08-03';
   d.getElementById('ml-time').value='10:00';
   d.getElementById('ml-instructor').value='h1';

@@ -38,7 +38,8 @@ setTimeout(()=>{ try {
   console.log('[2] ders modali grup dropdown paket ayini gosterir');
   w.openLessonModal(null, yil+'-08-05', '10:00');
   const gopts = d.getElementById('ml-group-select').innerHTML;
-  t('grup dropdown "Tem: 2 kalan" yaziyor', /Tem: 2 kalan/.test(gopts), 'dropdownda ay yok');
+  // v107: etiket DERSIN AYINI esas alir + onceki aydan sarkan kalani ayrica soyler
+  t('grup dropdown "Ağu: 8 kalan · Tem 2 sarkan" yaziyor', /Ağu: 8 kalan/.test(gopts) && /Tem 2 sarkan/.test(gopts), gopts.slice(0,160));
 
   console.log('[3] toplu ders girme DURUM secici var + yukleme/kayit');
   w.openBatchDates('g1', yil+'-07');
