@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.23.35">
+<meta name="app-version" content="2026.07.23.36">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2303,6 +2303,8 @@ function load() {
 }
 function save() {
   try {
+    // v113 TARIH KANONU: yalniz GERCEK kullanici duzenlemesi damgalanir (senkron-uygulama yazimi degil).
+    if (!window.__pilSuppressDirty && !__sbApplying) state._lastLocalEditAt = Date.now();
     sanitizeStateText(state); // v21 GÜVENLİK: her kalici yazimdan once metinleri temizle
     localStorage.setItem('pilateria', JSON.stringify(state));
     markDirtyAndSchedulePush(); // v27 OTOMATİK SENKRON
@@ -10277,7 +10279,14 @@ async function sbLoadAll() {
     const __idsOf = function(arr){ const st2 = new Set(); (arr||[]).forEach(function(x){ if (x && x.id) st2.add(x.id); }); return st2; };
     const __hasMissing = function(locArr, cloudSet){ return (locArr||[]).some(function(x){ return x && x.id && !cloudSet.has(x.id); }); };
     const __cmIds = __idsOf(__cloudSt.members), __cpIds = __idsOf(__cloudSt.payments);
-    const __localNewer = __hasMissing(state.members, __cmIds) || __hasMissing(state.payments, __cpIds) || (__mx(state) > __mx(__cloudSt));
+    // v113 (Kerem): TARIH KANONU — karar ICERIKLE degil ZAMANLA. Bulut, cihazin son yerel duzenlemesinden
+    // SONRA yazilmissa (uye/odeme silinmesi dahil) BULUT esastir, soru sorulmaz. Yalniz cihazda buluttan
+    // SONRAYA ait (gonderilmemis) duzenleme + fark kaniti varsa sorulur.
+    let __cloudMaxV = 0;
+    try { for (const __t in all) { const __tab = all[__t] || {}; for (const __rid in __tab) { const __dv = __tab[__rid] && __tab[__rid]._v; if (__dv && __dv > __cloudMaxV) __cloudMaxV = __dv; } } } catch(e) {}
+    const __tsNewer = (+state._lastLocalEditAt || 0) > (__cloudMaxV + 60000); // 60 sn cihaz-saati toleransi
+    const __evidence = __hasMissing(state.members, __cmIds) || __hasMissing(state.payments, __cpIds) || (__mx(state) > __mx(__cloudSt));
+    const __localNewer = __tsNewer && __evidence;
     if (__localNewer && __sbRole === 'owner') {
       const __ok = await plConfirm('Bu cihazda buluttan DAHA YENİ görünen veriler var.\n\nCihaz: '+__L.m+' üye / '+__L.l+' ders / '+__L.p+' ödeme\nBulut: '+__C.m+' üye / '+__C.l+' ders / '+__C.p+' ödeme\n\nCihazdaki veriler bulutla BİRLEŞTİRİLSİN mi? (Hiçbir kayıt silinmez)', 'Evet, birleştir');
       if (__ok) {
@@ -11098,7 +11107,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.23.35';
+const APP_VERSION = '2026.07.23.36';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

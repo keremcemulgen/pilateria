@@ -39,7 +39,7 @@
  <h1>🛟 Pilateria — Yedek Kurtarma</h1>
  <div class="sub">Bu ekran uygulamayı <b>çalıştırmaz</b>; yalnızca bu cihazda saklı yedekleri okur. Hiçbir veri kendiliğinden silinmez veya değişmez. Bir yedeği buluta yüklemek için aşağıda giriş yapman gerekir.</div>
 
- <div class="note note-warn">Bu telefonda hâlâ “bu sabahki” verin duruyorsa, aşağıda <b>en güncel tarihli</b> ve <b>en çok kayıt</b> içeren yedeği seç, giriş yap ve <b>“Buluta Yükle”</b> de. En dolu/yeni yedek yeşil çerçeveyle işaretlenir.</div>
+ <div class="note note-warn">Yedekler <b>tarihe göre YENİDEN ESKİYE</b> sıralıdır — kayıt sayısına aldanma: veri, silme işlemleri yüzünden bir gün öncekinden AZ olabilir; doğru ölçü <b>TARİH</b>tir. Geri dönmek istediğin güne ait yedeği seç, giriş yap ve <b>“Buluta Yükle”</b> de. En yeni tarihli yedek yeşil çerçeveyle işaretlenir.</div>
 
  <h2>📱 Bu cihazdaki yedekler</h2>
  <div id="local-list"></div>
@@ -130,26 +130,31 @@ const LOCAL_KEYS=[
  {key:'pilateria_pre_resync_backup', label:'Eşitleme öncesi yedek'},
 ];
 let localBackups=[];
-function score(b){ return (b.at?Date.parse(b.at):0) + b.counts.members*1e6; }
 function renderLocal(){
  const box=document.getElementById('local-list'); box.innerHTML=''; localBackups=[];
+ // v113 (Kerem): TARIH KANONU — yedekler TARIHE gore YENIDEN ESKIYE; 'kayit sayisi' olcut DEGIL (silme mesru).
  const ALL=LOCAL_KEYS.slice();
  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
-   if(k&&/^pilateria_daily_\d{4}-\d{2}-\d{2}$/.test(k)) ALL.push({key:k,label:'Cihaz günlük yedeği ('+k.slice(-10)+')'});
+   const dm=k&&k.match(/^pilateria_daily_(\d{4}-\d{2}-\d{2})$/);
+   if(dm) ALL.push({key:k,label:'Cihaz günlük yedeği',dayAt:dm[1]+'T00:00:00'});
    if(k==='pilateria_mass_delete_backup') ALL.push({key:k,label:'⛔ Toplu silme anı otomatik yedeği'});
  }
+ const entries=[];
  for(const spec of ALL){
    const raw=localStorage.getItem(spec.key); if(!raw) continue;
    const p=parseState(raw); if(!p||!p.state) continue;
-   localBackups.push({...spec, ...p, counts:cnt(p.state)});
+   entries.push({...spec, ...p, at:(p.at||spec.dayAt||null), counts:cnt(p.state)});
  }
- if(!localBackups.length){ box.innerHTML='<div class="card"><div class="empty">Bu cihazda kayıtlı yedek bulunamadı.<br>(Bu telefonda hiç yedek yoksa, “bu sabahki” veri bu cihazda kalmamış olabilir.)</div></div>'; return; }
- let bestIx=0; localBackups.forEach((b,i)=>{ if(score(b)>score(localBackups[bestIx])) bestIx=i; });
+ if(!entries.length){ box.innerHTML='<div class="card"><div class="empty">Bu cihazda kayıtlı yedek bulunamadı.</div></div>'; return; }
+ const live=entries.filter(e=>e.key==='pilateria');
+ const dated=entries.filter(e=>e.key!=='pilateria').sort((a,b)=> String(b.at||'').localeCompare(String(a.at||'')));
+ localBackups=live.concat(dated);
+ const bestIx = dated.length ? (live.length?1:0) : -1; // canli haric EN YENI tarihli
  localBackups.forEach((b,ix)=>{
    const d=document.createElement('div'); d.className='card'+(ix===bestIx?' best':'');
-   const date=b.at?new Date(b.at).toLocaleString('tr-TR'):'tarih bilinmiyor';
-   d.innerHTML='<div class="b-row"><div><div class="b-title">'+esc(b.label)+(ix===bestIx?'<span class="tag">EN DOLU/YENİ</span>':'')+'</div>'+
-     '<div class="b-meta">'+esc(date)+(b.reason?(' · '+esc(b.reason)):'')+'</div></div>'+
+   const date=b.key==='pilateria' ? 'şu an (cihazın canlı hali)' : (b.at?new Date(b.at).toLocaleString('tr-TR'):'tarih bilinmiyor');
+   d.innerHTML='<div class="b-row"><div><div class="b-title">'+esc(b.label)+(ix===bestIx?'<span class="tag">EN YENİ</span>':'')+'</div>'+
+     '<div class="b-meta">📅 '+esc(date)+(b.reason?(' · '+esc(b.reason)):'')+'</div></div>'+
      '<button data-ix="'+ix+'" class="restore-local">Buluta Yükle</button></div>'+
      '<div class="counts"><b>'+b.counts.members+'</b> üye · <b>'+b.counts.groups+'</b> grup · <b>'+b.counts.lessons+'</b> ders · <b>'+b.counts.payments+'</b> ödeme · '+b.counts.instructors+' hoca</div>';
    box.appendChild(d);

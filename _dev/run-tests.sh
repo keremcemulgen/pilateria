@@ -20,11 +20,13 @@ python3 _dev/build-preview.py >/dev/null 2>&1 || echo "  (build-preview uyarı �
 # 3) dosya-yönlendirmeli tam paket
 FALSE=" auto-sync-test supabase-layer-test "
 PREVIEW=" preview-test "
+RECOVER=" recover-page-test "
 TOTOK=0; TOTFAIL=0; NF=0; PROB=""
 for f in _dev/tests/*.js; do
   base="$(basename "$f" .js)"
   case " $FALSE " in *" $base "*) file="pilateria-dev-false.html";; *)
-    case " $PREVIEW " in *" $base "*) file="preview.html";; *) file="pilateria-dev.html";; esac;; esac
+    case " $PREVIEW " in *" $base "*) file="preview.html";; *)
+      case " $RECOVER " in *" $base "*) file="recover.html";; *) file="pilateria-dev.html";; esac;; esac;; esac
   if [ "$base" = "smoke-real-data" ] && [ ! -f /tmp/piltest/state.json ]; then
     echo "  ATLA smoke-real-data (gerçek veri fixture'i /tmp/piltest/state.json yok)"; continue
   fi

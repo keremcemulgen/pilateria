@@ -16,11 +16,21 @@ def rep(old, new, label, count=1):
     print(f'OK {label}')
 
 # 1) Depolama anahtarları — gerçek uygulamadan tamamen izole
-rep("localStorage.getItem('pilateria')", "localStorage.getItem('pilateria_preview')", 'anahtar get', count=2)
+# v113: koruma katmanlari (v103/v104 yedek okumalari) getItem sayisini artirdi -> TUMU degistirilir (taban 2)
+_cg = h.count("localStorage.getItem('pilateria')")
+assert _cg >= 2, f'anahtar get: en az 2 beklenir, bulunan {_cg}'
+rep("localStorage.getItem('pilateria')", "localStorage.getItem('pilateria_preview')", 'anahtar get', count=_cg)
 rep("localStorage.setItem('pilateria',", "localStorage.setItem('pilateria_preview',", 'anahtar set', count=2)
 rep("localStorage.removeItem('pilateria')", "localStorage.removeItem('pilateria_preview')", 'anahtar remove')
 rep("const DIRTY_KEY = 'pilateria_dirty';", "const DIRTY_KEY = 'pilateria_preview_dirty';", 'dirty key')
 rep("const CONFLICT_BACKUP_KEY = 'pilateria_conflict_backup';", "const CONFLICT_BACKUP_KEY = 'pilateria_preview_conflict';", 'conflict key')
+# v113: KORUMA-YEDEK anahtarlarini da IZOLE et — onizleme, gercek uygulamanin cankurtaran yedeklerini
+# (gunluk halka, toplu-silme ani, acilis-oncesi, offsite gunu isareti) ASLA ezmemeli/silmemeli.
+for _k in ['pilateria_daily_','pilateria_pre_cloud_backup','pilateria_mass_delete_backup',
+           'pilateria_pre_pull_backup','pilateria_offsite_day','pilateria_corrupted_BACKUP_']:
+    _old="'"+_k+"'"; _new="'"+_k.replace('pilateria_','pilateria_preview_',1)+"'"
+    _c=h.count(_old); assert _c>=1, f'yedek anahtari {_k}: hic bulunamadi'
+    rep(_old,_new,'yedek anahtari '+_k,count=_c)
 
 # 2) İlk açılışta gerçek yerel veriden kopya al (salt-okunur kaynak)
 rep('function load() {', '''function load() {
