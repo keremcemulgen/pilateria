@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.23.34">
+<meta name="app-version" content="2026.07.23.35">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -10273,7 +10273,11 @@ async function sbLoadAll() {
     const __c = function(st){ return { m:(st.members||[]).length, l:(st.lessons||[]).length, p:(st.payments||[]).length }; };
     const __mx = function(st){ return (st.payments||[]).map(function(p){ return (p && p.date) || ''; }).sort().slice(-1)[0] || ''; };
     const __L = __c(state), __C = __c(__cloudSt);
-    const __localNewer = (__L.p > __C.p) || (__L.l > __C.l) || (__L.m > __C.m) || (__mx(state) > __mx(__cloudSt));
+    // v112: SAYI degil ID bazli ve yalniz UYE+ODEME — ders silmeleri (supurme/son-ders) sahte alarm uretmesin.
+    const __idsOf = function(arr){ const st2 = new Set(); (arr||[]).forEach(function(x){ if (x && x.id) st2.add(x.id); }); return st2; };
+    const __hasMissing = function(locArr, cloudSet){ return (locArr||[]).some(function(x){ return x && x.id && !cloudSet.has(x.id); }); };
+    const __cmIds = __idsOf(__cloudSt.members), __cpIds = __idsOf(__cloudSt.payments);
+    const __localNewer = __hasMissing(state.members, __cmIds) || __hasMissing(state.payments, __cpIds) || (__mx(state) > __mx(__cloudSt));
     if (__localNewer && __sbRole === 'owner') {
       const __ok = await plConfirm('Bu cihazda buluttan DAHA YENİ görünen veriler var.\n\nCihaz: '+__L.m+' üye / '+__L.l+' ders / '+__L.p+' ödeme\nBulut: '+__C.m+' üye / '+__C.l+' ders / '+__C.p+' ödeme\n\nCihazdaki veriler bulutla BİRLEŞTİRİLSİN mi? (Hiçbir kayıt silinmez)', 'Evet, birleştir');
       if (__ok) {
@@ -10495,12 +10499,29 @@ function sbSubscribeAll() {
           const __dnow = Date.now();
           window.__rtDelWin = (window.__rtDelWin || []).filter(function(ts) { return __dnow - ts < 10000; });
           window.__rtDelWin.push(__dnow);
-          if (window.__rtDelWin.length > 12) {
+          if (window.__rtDelWin.length > 25) { // v112: 12 -> 25 (mesru toplu islemler 12'yi asabiliyor; wipe yuzlercedir)
             window.__rtDelTripped = true;
             try { const __cur = localStorage.getItem('pilateria'); if (__cur) localStorage.setItem('pilateria_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {}
             __trace('⛔ REALTIME SİLME SİGORTASI ATTI: buluttan toplu silme algılandı — bu cihazdaki veriler KORUNDU (recover.html ile geri yüklenebilir)');
             try { if (window.plToast) plToast('⛔ Toplu silme algılandı — bu cihazdaki veriler KORUNDU!'); } catch(e) {}
             try { setCloudDot && setCloudDot('offline'); } catch(e) {}
+            // v112 OTOTAMIR: 20 sn sonra buluta bak — uyeler DURUYORSA silmeler mesru toplu islemdi:
+            // sigortayi ac + sunucudan TAM tazele (yerel hizalanir, 'cihaz daha yeni' sahte alarmi dogmaz).
+            // Bulut uye tablosu BOSSA (gercek wipe) koruma surer.
+            clearTimeout(window.__rtFuseVerifyT);
+            window.__rtFuseVerifyT = setTimeout(async function() {
+              try {
+                const __vr = await sbClient.from('members').select('id').limit(1);
+                const __alive = !(__vr && __vr.error) && ((__vr && __vr.data) || []).length > 0;
+                if (__alive) {
+                  window.__rtDelTripped = false; window.__rtDelWin = [];
+                  __trace('✅ SİGORTA OTOTAMİR: bulut sağlıklı (üyeler duruyor) — toplu silme meşruydu, sunucudan tazeleniyor');
+                  try { sbResync('rt-fuse-verify'); } catch(e) {}
+                } else {
+                  __trace('⛔ SİGORTA KALICI: bulut üye tablosu BOŞ/ulaşılamaz — koruma sürüyor (recover.html hazır)');
+                }
+              } catch(e) {}
+            }, (window.__rtFuseVerifyMs || 20000));
             return;
           }
           if (oldId) { delete __sbShadow[t][oldId]; delete __sbVer[t][oldId]; __applyId = oldId; }
@@ -11077,7 +11098,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.23.34';
+const APP_VERSION = '2026.07.23.35';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

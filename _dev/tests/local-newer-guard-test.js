@@ -84,6 +84,24 @@ setTimeout(async ()=>{ try {
   await w.sbLoadAll();
   t('v65: bos bulut cihazi EZMEDI (2 uye durdu)', w.S().members.length===2, w.S().members.length);
 
+  console.log('[5] v112 SAHTE ALARM BITTI: yalniz DERS fazlasi (uye+odeme ayni) -> SORULMAZ, bulut yuklenir');
+  w.eval(`
+    state.members=[{id:'m1',name:'AYSE',joinDate:'2026-01-01',archived:false,packages:[],monthly:{}}];
+    state.groups=[]; state.payments=[{id:'p1',memberId:'m1',date:'2026-07-15',amount:4500,method:'cash'}];
+    state.lessons=[{id:'lx1',date:'2026-07-20',time:'10:00',status:'planned',memberIds:['m1']},
+                   {id:'lx2',date:'2026-07-21',time:'11:00',status:'planned',memberIds:['m1']},
+                   {id:'lx3',date:'2026-07-22',time:'12:00',status:'planned',memberIds:['m1']}];
+    localStorage.setItem('pilateria', JSON.stringify({members:state.members,payments:state.payments,lessons:state.lessons,groups:[],settings:{}}));
+  `);
+  mockSb({ members:[{id:'m1',data:{id:'m1',name:'AYSE',joinDate:'2026-01-01',packages:[],monthly:{}}}],
+    member_finance:[{id:'m1',data:{packages:[]}}],
+    payments:[{id:'p1',data:{id:'p1',memberId:'m1',date:'2026-07-15',amount:4500,method:'cash'}}] }); // DERS YOK (bulutta silinmis)
+  w.eval("window.__asked=false; window.plConfirm=async function(){ window.__asked=true; return false; };");
+  await w.sbLoadAll();
+  t('DERS farki tek basina SORMAZ (sahte alarm bitti)', w.__asked===false);
+  t('bulut yuklendi: yereldeki 3 hayalet ders GITTI', w.S().lessons.length===0, w.S().lessons.length);
+  t('uye+odeme aynen durdu', w.S().members.length===1 && w.S().payments.length===1);
+
   console.log('\nSONUC: '+pass+' gecti, '+fail+' kaldi');
   process.exit(fail?1:0);
 } catch(e){ console.error('TEST COKTU:',e); process.exit(2);} },800);

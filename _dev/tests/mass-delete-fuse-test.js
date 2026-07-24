@@ -23,7 +23,7 @@ setTimeout(async ()=>{ try {
   const mockSb = ()=> w.eval(
     "window.__DELCALLS=0; window.__DELIDS=0; window.__UPSERTS=0;"+
     "sbClient = window.sbClient={ from:function(tbl){ return {"+
-    "  select:function(){ return { order:async function(){ return { data:[], error:null }; } }; },"+
+    "  select:function(){ return { order:async function(){ return { data:[], error:null }; }, limit:async function(){ return { data: window.__VERIFY_MEMBERS||[], error:null }; } }; },"+
     "  upsert:async function(part){ window.__UPSERTS+=(part&&part.length)||0; return { error:null }; },"+
     "  delete:function(){ return { in: async function(col, ids){ window.__DELCALLS++; window.__DELIDS+=((ids&&ids.length)||0); return { error:null }; } } }"+
     "}; }, channel:function(){ return { on:function(a,b,cb){ window.__rtCb=cb; return this; }, subscribe:function(){ return this; } }; } };"
@@ -51,19 +51,22 @@ setTimeout(async ()=>{ try {
   t('silme gonderildi (members+member_finance = 2 cagri)', w.__DELCALLS===2, w.__DELCALLS);
   t('silinen id sayisi 2 (ayni uyenin 2 tablosu)', w.__DELIDS===2, w.__DELIDS);
 
-  console.log('[3] REALTIME SIGORTASI: pespese DELETE yagmuru -> 12 sonrasi UYGULANMAZ, veri korunur');
-  mockSb(); seed(30);
+  console.log('[3] REALTIME SIGORTASI (v112): 25 esik — 20 mesru silme SERBEST; 26+ sigorta + OTOTAMIR');
+  mockSb(); seed(40);
   w.eval("__sbChannel=null; window.__rtDelTripped=false; window.__rtDelWin=[]; localStorage.removeItem('pilateria_mass_delete_backup');");
+  w.eval("window.__rtFuseVerifyMs=50; window.__VERIFY_MEMBERS=[{id:'alive'}]; window.__RESYNCED=0; sbResync = window.sbResync = function(){ window.__RESYNCED++; };");
   w.eval("localStorage.setItem('pilateria', JSON.stringify({members:state.members,payments:[],lessons:[],groups:[],settings:{}}));");
   w.eval("sbSubscribeAll();");
   t('realtime handler yakalandi', typeof w.__rtCb==='function');
   for(let i=1;i<=20;i++){ w.__rtCb({table:'members', eventType:'DELETE', old:{id:'m'+i}, new:null}); }
-  t('yalniz ilk 12 silme uygulandi, kalan 18 uye KORUNDU', w.S().members.length===18, w.S().members.length);
+  t('20 silme SERBEST uygulandi (esik 25, mesru toplu islem)', w.S().members.length===20, w.S().members.length);
+  t('sigorta ATMADI (20<25)', w.eval('window.__rtDelTripped')===false);
+  for(let i=21;i<=30;i++){ w.__rtCb({table:'members', eventType:'DELETE', old:{id:'m'+i}, new:null}); }
+  t('26.dan itibaren BLOKE: 25 uygulandi, 15 uye korundu', w.S().members.length===15, w.S().members.length);
   t('sigorta atti (tripped)', w.eval('window.__rtDelTripped')===true);
-  t('ani yedek yazildi (30 uyeli hal)', (()=>{ const b=w.localStorage.getItem('pilateria_mass_delete_backup'); if(!b) return false; const st=JSON.parse(JSON.parse(b).state); return st.members.length===30; })());
-  // sigorta attiktan sonra tekli silme bile uygulanmaz (oturum boyu koruma)
-  w.__rtCb({table:'members', eventType:'DELETE', old:{id:'m25'}, new:null});
-  t('sigorta sonrasi silmeler de uygulanmiyor', w.S().members.length===18, w.S().members.length);
+  t('ani yedek yazildi', !!w.localStorage.getItem('pilateria_mass_delete_backup'));
+  w.__rtCb({table:'members', eventType:'DELETE', old:{id:'m35'}, new:null});
+  t('sigorta aktifken silmeler uygulanmiyor', w.S().members.length===15, w.S().members.length);
 
   console.log('[4] GUNLUK YEDEK HALKASI: gunde 1 kez, en fazla 5 gun, bos hali yazmaz');
   w.eval("for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); if(k&&k.indexOf('pilateria_daily_')===0){localStorage.removeItem(k);i--;}}");
@@ -86,6 +89,20 @@ setTimeout(async ()=>{ try {
   await w.eval("(async()=>{ const bak=(typeof syncCfg!=='undefined')?syncCfg:undefined; try{ syncCfg=null; await __pilOffsiteDaily(); }finally{ if(bak!==undefined) syncCfg=bak; } })()");
   t('syncCfg yokken hata firlatmadi', true);
 
-  console.log('\nSONUC: '+pass+' gecti, '+fail+' kaldi');
-  process.exit(fail?1:0);
+  setTimeout(()=>{ try {
+    console.log('[6] OTOTAMIR: bulut saglikli -> sigorta ACILDI + resync cagrildi');
+    t('sigorta OTOTAMIRLE acildi (uyeler duruyor)', w.eval('window.__rtDelTripped')===false);
+    t('sunucudan tazeleme cagrildi', w.eval('window.__RESYNCED')>0, w.eval('window.__RESYNCED'));
+
+    console.log('[7] GERCEK WIPE: bulut uye tablosu BOS -> sigorta KALICI');
+    w.eval("window.__VERIFY_MEMBERS=[]; window.__rtDelWin=[]; window.__rtDelTripped=false;");
+    seed(40);
+    for(let i=1;i<=26;i++){ w.__rtCb({table:'members', eventType:'DELETE', old:{id:'m'+i}, new:null}); }
+    t('wipe: sigorta atti', w.eval('window.__rtDelTripped')===true);
+    setTimeout(()=>{ try {
+      t('wipe: sigorta KALICI (bulut bos, ototamir ACMADI)', w.eval('window.__rtDelTripped')===true);
+      console.log('\nSONUC: '+pass+' gecti, '+fail+' kaldi');
+      process.exit(fail?1:0);
+    } catch(e){ console.error('TEST COKTU:',e); process.exit(2);} }, 200);
+  } catch(e){ console.error('TEST COKTU:',e); process.exit(2);} }, 200);
 } catch(e){ console.error('TEST COKTU:',e); process.exit(2);} },800);
