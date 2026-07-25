@@ -44,8 +44,12 @@ setTimeout(async function(){try{
 
   console.log('[4] Kod: focus tetikleyici kaldirildi + realtime rebuild pending gonderir');
   t("sbResync focus dinleyicisi YOK", !/addEventListener\('focus', \(\) => sbResync/.test(html));
-  t("sbResync dirty -> push+return", /isDirty\(\)\) \{[\s\S]{0,90}?await sbFlushPush\(\); \} catch\(e\)\{\} return; \}/.test(html));
-  t("recently-pushed guard", /__sbLastPushAt && \(Date\.now\(\) - __sbLastPushAt\) < 6000\) \{[\s\S]{0,90}?return; \}/.test(html));
+  t("sbResync dirty -> ONCE push", /isDirty\(\)\) \{[\s\S]{0,120}?await sbFlushPush\(\);/.test(html));
+  t("v114: push BASARISIZ ise tazeleme YOK (yerel korunur)", /gönderim BAŞARISIZ[\s\S]{0,400}?return;/.test(html));
+  t("v114: push BASARILI ise tazeleme PLANLANIR (kilit kirildi)", /sbResync\._afterPush = setTimeout\([\s\S]{0,120}?__sbAfterPushMs \|\| 7000/.test(html));
+  t("recently-pushed guard", /if \(__sbLastPushAt && \(Date\.now\(\) - __sbLastPushAt\) < 6000\) \{[\s\S]{0,120}?yakın push → tazeleme atlandı/.test(html));
+  t("v114c: replika korumasi 'after-push' icin de GECERLI (muafiyet YOK)", !/reason !== 'after-push' && __sbLastPushAt/.test(html));
+  t("v114c: engellenen after-push DUSMEZ, ertelenir", /reason === 'after-push'\) \{ clearTimeout\(sbResync\._afterPush\);[\s\S]{0,160}?__sbAfterPushMs \|\| 7000/.test(html));
   t("realtime PER-RECORD apply (tum-state rebuild yok)", /try \{ sbApplyOne\(t, __applyId\); save\(\); \}/.test(html));
 
   console.log("\n=== resync-safety: "+pass+" OK, "+fail+" FAIL ===");

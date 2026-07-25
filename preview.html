@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.23.36-onizleme">
+<meta name="app-version" content="2026.07.25.37-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -10052,14 +10052,38 @@ function sbPickWinner(a, b) { return (((b && b._v) || 0) >= ((a && a._v) || 0)) 
 async function sbResync(reason) {
   if (!SUPABASE_MODE || !sbClient || __sbResyncBusy) return;
   const now = Date.now();
-  if (reason !== 'rt-recover' && (now - __sbLastResync) < 4000) return; // asiri tetiklemeyi kis
+  if (reason !== 'rt-recover' && reason !== 'after-push' && (now - __sbLastResync) < 4000) return; // asiri tetiklemeyi kis
   if (__uiBusyForPull && __uiBusyForPull()) { clearTimeout(sbResync._t); sbResync._t = setTimeout(() => sbResync(reason), 3000); return; }
   __sbResyncBusy = true; __sbLastResync = now;
   try {
     // v46 VERI GUVENLIGI: pending yerel degisiklik varsa SADECE gonder, state'i EZME (yaz-sonra-oku gecikmesi eski veriyi geri getirmesin)
-    if (typeof isDirty === 'function' && isDirty()) { __trace('RESYNC('+reason+'): kirli → sadece gönder, tazeleme YOK'); try { await sbFlushPush(); } catch(e){} return; }
+    if (typeof isDirty === 'function' && isDirty()) {
+      try { await sbFlushPush(); } catch(e){}
+      // v114 KİLİT KIRICI (Kerem: "ortağın girdiği veriler bende gözükmüyor"): burada eskiden KOŞULSUZ
+      // return vardı. Push başarısız olunca kirli bayrak takılı kalıyor → her resync yalnız push → cihaz
+      // buluttan BİR DAHA HİÇ veri çekemiyordu (kalıcı sağırlık). Push BAŞARILI ise korunacak yerel
+      // değişiklik KALMADIĞI için tazelemeyi replika gecikmesinin ardına planla.
+      if (!(typeof isDirty === 'function' && isDirty())) {
+        window.__sbPushStuck = 0;
+        __trace('RESYNC('+reason+'): kirli → gönderildi, tazeleme planlandı');
+        clearTimeout(sbResync._afterPush);
+        sbResync._afterPush = setTimeout(function(){ try { sbResync('after-push'); } catch(e){} }, (window.__sbAfterPushMs || 7000));
+        return;
+      }
+      // Gönderim HALA başarısız: yerel değişiklikler KORUNUR (ezme YOK) — ama sessiz kalma, kullanıcıya bildir.
+      window.__sbPushStuck = (window.__sbPushStuck || 0) + 1;
+      __trace('RESYNC('+reason+'): kirli → gönderim BAŞARISIZ ('+window.__sbPushStuck+') → yerel korundu, tazeleme YOK');
+      if (window.__sbPushStuck === 3) { try { setCloudDot && setCloudDot('offline'); if (window.plToast) plToast('⚠️ Buluta gönderim takıldı — yeni veriler gelmiyor olabilir'); } catch(e){} }
+      return;
+    }
     // yakinda push olduysa tazeleme (replica gecikmesi) yapma
-    if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) { __trace('RESYNC('+reason+'): yakın push → tazeleme atlandı'); return; }
+    if (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000) {
+      __trace('RESYNC('+reason+'): yakın push → tazeleme atlandı');
+      // v114c VERİ GÜVENLİĞİ: replika gecikmesi koruması 'after-push' için de GEÇERLİ (yoksa yeni yerel
+      // değişiklik bayat bulut haliyle EZİLİR). Yakalama düşmesin diye güvenli aralığın ardına ERTELE.
+      if (reason === 'after-push') { clearTimeout(sbResync._afterPush); sbResync._afterPush = setTimeout(function(){ try { sbResync('after-push'); } catch(e){} }, (window.__sbAfterPushMs || 7000)); }
+      return;
+    }
     const all = {};
     let __resyncOk = true;
     for (const t of SB_TABLES) {
@@ -10373,7 +10397,7 @@ async function sbMigrateLocal() {
     for (let i = 0; i < arr.length; i += 100) {
       const part = arr.slice(i, i + 100);
       const r = await sbClient.from(t).upsert(part);
-      if (r.error) { alert('Taşıma hatası (' + t + '): ' + r.error.message); return; }
+      if (r.error) { alert('Taşıma hatası (' + t + '): ' + r.error.message); try { sbSubscribeAll(); } catch(e){} return; }
       n += part.length;
     }
   }
@@ -10455,6 +10479,20 @@ async function sbDiffPush() {
 }
 
 let __sbChannel = null, __sbRtTimer = null;
+// v114 KANAL SAĞLIK DENETİMİ: sbSubscribeAll '__sbChannel dolu' diye erken döndüğü için bir kez ölen
+// kanal sonsuza dek ölü kalıyordu (CHANNEL_ERROR/TIMED_OUT/CLOSED). Burada ölü kanal atılıp yeniden kurulur.
+function sbHealChannel() {
+  if (!sbClient) return;
+  try {
+    const __st = __sbChannel && __sbChannel.state;
+    if (!__sbChannel || __st === 'closed' || __st === 'errored') {
+      if (__sbChannel) { try { sbClient.removeChannel(__sbChannel); } catch(e){} }
+      __sbChannel = null; __sbWasDropped = true;
+      __trace('NABIZ: realtime kanalı ölü/kapalı → yeniden kuruluyor');
+      sbSubscribeAll();
+    }
+  } catch(e){}
+}
 // v52 PER-RECORD APPLY: realtime'da gelen TEK kaydi state'e uygula (tum state'i YENIDEN KURMADAN).
 // Boylece uzaktan gelen bir degisiklik, o an gonderilmekte olan/yerel BASKA bir kaydi ASLA ezmez (revert kok fix).
 async function sbTestWrite() {
@@ -10563,13 +10601,28 @@ function sbSubscribeAll() {
         window.__pilSuppressDirty = false; __sbApplying = false;
         // yeniden-render'i topakla (60ms) — art arda gelen olaylarda tek render
         clearTimeout(__sbRtTimer);
-        __sbRtTimer = setTimeout(() => { try { if (!__uiBusyForPull()) __refreshUIInPlace(); } catch(e){} if (window.plToast) plToast('☁️ Güncellendi'); }, 60);
+        __sbRtTimer = setTimeout(function __rtRender(){ try { if (__uiBusyForPull()) { __sbRtTimer = setTimeout(__rtRender, 1500); return; } __refreshUIInPlace(); if (window.plToast) plToast('☁️ Güncellendi'); } catch(e){} }, 60);
       } catch(e) { console.error('[sb] rt', e); }
     });
     __sbChannel.subscribe((status) => {
       if (status === 'SUBSCRIBED') { if (__sbWasDropped) { __sbWasDropped = false; sbResync('rt-recover'); } }
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { __sbWasDropped = true; }
     });
+    // v114 EMNİYET NABZI: realtime sessizce ölürse (JWT süresi, mobil soket askıya alma, yayın ayarı) ve
+    // sekme AÇIK kalırsa visibilitychange/online HİÇ ateşlenmez → tek tetikleyici kalmaz → cihaz kalıcı SAĞIR.
+    // sbResync kendi güvenlik kilitlerini (kirli / meşgul / kısmi çekim / yakın push) zaten uyguladığı için
+    // periyodik çağırmak GÜVENLİ: gönderilememiş yerel değişiklik varken bulut hali state'i EZMEZ.
+    clearInterval(window.__sbHeartT);
+    window.__sbHeartT = setInterval(function(){
+      try {
+        if (document.visibilityState !== 'visible') return;
+        if (navigator.onLine === false) return;
+        sbHealChannel(); // (1) ağdan BEDAVA: ölü kanal → yeniden kur (SUBSCRIBED olunca rt-recover tam yakalar)
+        // (2) EMNİYET TAM TAZELEME: pahalı olduğu için seyrek. Realtime 'joined' görünüp sessizce
+        // veri akıtmıyorsa (süresi dolmuş JWT) en kötü bayatlık bu süreyle SINIRLI kalır.
+        if ((Date.now() - __sbLastResync) >= (window.__sbFullSyncMs || 300000)) sbResync('nabız');
+      } catch(e){}
+    }, (window.__sbHeartbeatMs || 60000));
     if (!__sbListenersAdded) {
       __sbListenersAdded = true;
       try {
@@ -11119,7 +11172,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.23.36-onizleme';
+const APP_VERSION = '2026.07.25.37-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

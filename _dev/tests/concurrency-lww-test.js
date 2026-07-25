@@ -43,7 +43,8 @@ setTimeout(function(){ try {
   t("subscribe status callback (SUBSCRIBED/rt-recover) kodda", /rt-recover/.test(html) && /'SUBSCRIBED'/.test(html));
   t("online dinleyicisi kodda", /addEventListener\('online'/.test(html));
   t("visibilitychange dinleyicisi kodda", /visibilitychange/.test(html) && /sbResync\('visible'\)/.test(html));
-  t("resync kirliyken state EZMEZ (sadece push+return) — v46 veri güvenliği", /isDirty\(\)\) \{[\s\S]{0,90}?await sbFlushPush\(\); \} catch\(e\)\{\} return; \}/.test(html));
+  t("resync kirliyken ONCE push eder — v46 veri güvenliği", /isDirty\(\)\) \{[\s\S]{0,120}?await sbFlushPush\(\);/.test(html));
+  t("v114: gönderilemeyen yerel değişiklik varken state EZİLMEZ (tazeleme yok)", /gönderim BAŞARISIZ[\s\S]{0,400}?return;/.test(html));
   t("resync öncesi kirliyse önce push (sbDiffPush)", /await sbDiffPush\(\)/.test(html));
 
   console.log('[4] LWW koruması kod düzeyinde (eski uzaktaki yazım yerel yeniyi ezmez)');

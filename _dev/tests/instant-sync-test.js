@@ -40,7 +40,8 @@ setTimeout(async function(){try{
   t("in-flight guard (__sbPushInFlight)", /if \(__sbPushInFlight\) \{ __sbPushAgain = true; return; \}/.test(html));
   t("sbFlushPush in-flight sonrasi tekrar", /if \(__sbPushAgain\) \{ __sbPushAgain = false; Promise\.resolve\(\)\.then\(sbFlushPush\)/.test(html));
   t("SABIT gecikme YOK (setTimeout(sbDiffPush, 120/500) kaldirildi)", !/setTimeout\(sbDiffPush, (120|500)\)/.test(html));
-  t("realtime render coalesce 60ms", /plToast\(.☁️ Güncellendi.\); \}, 60\)/.test(html));
+  t("realtime render coalesce 60ms", /plToast\(.☁️ Güncellendi.\);[\s\S]{0,40}?\}, 60\)/.test(html));
+  t("v114: UI meşgulse render DÜŞMEZ, ertelenir", /__sbRtTimer = setTimeout\(__rtRender, 1500\)/.test(html));
 
   console.log("\n=== instant-sync: "+pass+" OK, "+fail+" FAIL ===");
   process.exit(fail?1:0);
