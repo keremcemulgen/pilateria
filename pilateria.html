@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.25.37">
+<meta name="app-version" content="2026.07.25.38">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -10082,8 +10082,38 @@ async function sbResync(reason) {
     if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); return; }
     __trace('RESYNC('+reason+'): TAM TAZELE (sunucudan tüm veri)');
     __sbHarvestVer(all);
+    // v115 KORUMA: ÜZERİNE YAZMADAN ÖNCE yerel anlık yedek. Günlük halka günde yalnız bir kez
+    // alındığı için BUGÜNÜN girişlerini içermez; ters bir tazelemede dönüş noktası kalmıyordu.
+    const __incoming = sbRowsToState(all);
+    try {
+      const __PL_SNAP_F = [['members','üye'], ['groups','grup'], ['lessons','ders'], ['payments','ödeme']];
+      const __tot = function(st) { let n = 0; __PL_SNAP_F.forEach(function(p){ n += ((st && st[p[0]]) || []).length; }); return n; };
+      const __shrink = [];
+      __PL_SNAP_F.forEach(function(p) {
+        const a = ((state && state[p[0]]) || []).length, b = ((__incoming && __incoming[p[0]]) || []).length;
+        if (b < a) __shrink.push(p[1] + ' ' + a + '→' + b);
+      });
+      const __cur = __shrink.length ? localStorage.getItem('pilateria') : null;
+      if (__cur) {
+        // FAKİRLEŞTİRME KORUMASI: mevcut yedek daha zenginse (art arda ikinci azalma) DOKUNMA.
+        let __old = -1;
+        try { const __p = localStorage.getItem('pilateria_pre_overwrite_backup'); if (__p) __old = __tot(JSON.parse(__p)); } catch(e) {}
+        if (__tot(state) >= __old) {
+          let __ok = false;
+          const __daily = [];
+          for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_daily_') === 0) __daily.push(k); }
+          __daily.sort();
+          for (;;) {
+            try { localStorage.setItem('pilateria_pre_overwrite_backup', __cur); __ok = true; break; }
+            catch(e) { if (!__daily.length) break; try { localStorage.removeItem(__daily.shift()); } catch(e2) { break; } } // KOTA: en eski günlükten başla
+          }
+          __trace(__ok ? ('🧷 TAZELEME ÖNCESİ yerel yedek alındı (azalan: ' + __shrink.join(', ') + ')')
+                       : ('🧷 TAZELEME ÖNCESİ yedek YAZILAMADI (kota) — azalan: ' + __shrink.join(', ')));
+        } else { __trace('🧷 Önceki (daha zengin) tazeleme yedeği korundu — azalan: ' + __shrink.join(', ')); }
+      }
+    } catch(e) { try { __trace('🧷 Tazeleme öncesi yedek hatası: ' + (e && (e.message || e))); } catch(_) {} }
     __sbApplying = true; window.__pilSuppressDirty = true;
-    state = sbRowsToState(all); applyV10MigrationToState(state); sanitizeStateText(state); save();
+    state = __incoming; applyV10MigrationToState(state); sanitizeStateText(state); save();
     window.__pilSuppressDirty = false; __sbApplying = false;
     sbSnapshotShadow(sbStateToRows());
     if (!(__uiBusyForPull && __uiBusyForPull())) __refreshUIInPlace();
@@ -11160,7 +11190,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.25.37';
+const APP_VERSION = '2026.07.25.38';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
