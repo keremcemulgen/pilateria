@@ -138,6 +138,8 @@ function renderLocal(){
  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);
    const dm=k&&k.match(/^pilateria_daily_(\d{4}-\d{2}-\d{2})$/);
    if(dm) ALL.push({key:k,label:'Cihaz günlük yedeği',dayAt:dm[1]+'T00:00:00'});
+   const rm=k&&k.match(/^pilateria_pre_cloud_(\d+)$/);
+   if(rm) ALL.push({key:k,label:'Uygulama açılışı öncesi otomatik yedek (halka #'+rm[1]+')'}); // v118: 5 slotluk halka
    if(k==='pilateria_mass_delete_backup') ALL.push({key:k,label:'⛔ Toplu silme anı otomatik yedeği'});
  }
  const entries=[];

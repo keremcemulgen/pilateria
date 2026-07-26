@@ -19,6 +19,7 @@ setTimeout(async ()=>{ try {
     window.plToast=function(){}; window.__trace=function(){}; window.__uiBusyForPull=function(){return true;};
     __sbRole='owner'; window.__sbRole='owner';
     window.isDirty=function(){return false;};
+    window.__pilGhostHealMs=60000;   // v118: hayalet-tazeleme bu testte hic tetiklenmesin (belirlenimci)
   `);
   const mockSb = ()=> w.eval(
     "window.__DELCALLS=0; window.__DELIDS=0; window.__UPSERTS=0;"+
@@ -44,9 +45,19 @@ setTimeout(async ()=>{ try {
   t('ani yedek (mass_delete_backup) yazildi', !!w.localStorage.getItem('pilateria_mass_delete_backup'));
 
   console.log('[2] PUSH normal: TEK kayit silme SERBEST (sigorta yanlis alarm vermez)');
+  // v118 (a): MEZAR TASI YOKKEN yokluk SILME sayilmaz. Yerelde olmayip golgede olan kayit
+  // "bu cihaza hic ulasmamis" olabilir (26 Tem olayi). Bu halde bulut KORUNUR.
   mockSb(); seed(20);
-  w.eval("sbSnapshotShadow(sbStateToRows());");
-  w.eval("state.members = state.members.filter(m=>m.id!=='m1');"); // 1 uye silindi (mesru)
+  w.eval("sbSnapshotShadow(sbStateToRows()); try{__pilTombRecord();}catch(e){}");
+  w.eval("state.members = state.members.filter(m=>m.id!=='m1');"); // kayit DUSTU ama kullanici silmedi
+  await w.sbDiffPush();
+  t('v118: mezar tasi YOKKEN hicbir silme gitmez (hayalet korumasi)', w.__DELCALLS===0, w.__DELCALLS);
+
+  // v118 (b): kullanici GERCEKTEN silince mezar tasi yazilir ve silme normal sekilde gider.
+  // Gercek uygulamada mezar tasini save() yazar; bu testte save() stub oldugu icin elle cagriliyor.
+  mockSb(); seed(20);
+  w.eval("sbSnapshotShadow(sbStateToRows()); try{__pilTombRecord();}catch(e){}"); // temel: 20 uye
+  w.eval("state.members = state.members.filter(m=>m.id!=='m1'); try{__pilTombRecord();}catch(e){}"); // 1 uye silindi (mesru)
   await w.sbDiffPush();
   t('silme gonderildi (members+member_finance = 2 cagri)', w.__DELCALLS===2, w.__DELCALLS);
   t('silinen id sayisi 2 (ayni uyenin 2 tablosu)', w.__DELIDS===2, w.__DELIDS);
