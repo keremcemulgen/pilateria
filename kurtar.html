@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://nvbnmhaxumrfsxdzrzzj.supabase.co wss://nvbnmhaxumrfsxdzrzzj.supabase.co; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+<title>Pilateria — Kurtarma Konsolu</title>
+<style>
+ :root{--bg:#0f1216;--card:#1a1f26;--muted:#8b95a3;--text:#e8edf3;--accent:#4a9eff;--ok:#39c07a;--warn:#f0a83b;--danger:#e5533c;--line:#2a313b}
+ *{box-sizing:border-box}
+ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);padding:16px;line-height:1.5;-webkit-text-size-adjust:100%}
+ .wrap{max-width:820px;margin:0 auto}
+ h1{font-size:20px;margin:0 0 4px}
+ h2{font-size:16px;margin:24px 0 8px}
+ .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+ .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+ .b-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+ .b-title{font-weight:600}
+ .b-meta{color:var(--muted);font-size:12px;margin-top:2px}
+ .counts{font-size:13px;margin-top:8px;color:var(--muted)}
+ .counts b{color:var(--text)}
+ button{font:inherit;border:0;border-radius:9px;padding:9px 13px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+ button.secondary{background:#2a313b;color:var(--text)}
+ button.go{background:var(--ok)}
+ button:disabled{opacity:.45;cursor:not-allowed}
+ input{font:inherit;width:100%;padding:11px 12px;border-radius:9px;border:1px solid var(--line);background:#0f1216;color:var(--text);margin-top:6px}
+ .lbl{font-size:12px;color:var(--muted);margin-top:8px}
+ .status{font-size:13px;margin-top:8px;min-height:18px;word-break:break-word}
+ .ok{color:var(--ok)}.warn{color:var(--warn)}.danger{color:var(--danger)}.mut{color:var(--muted)}
+ .empty{color:var(--muted);font-size:13px;text-align:center;padding:12px}
+ .note{border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:14px}
+ .note-info{background:#12303f;border:1px solid #1d4a63;color:#bfe0f2}
+ .note-warn{background:#3a2c12;border:1px solid #6b5220;color:#f0d9a8}
+ .note-danger{background:#3a1a14;border:1px solid #6b2a20;color:#f3c4bb}
+ .gain{font-size:13.5px;margin-top:8px;padding:8px 10px;border-radius:8px;background:#10261c;border:1px solid #1f5137;color:#bff0d6}
+ .gain.none{background:#20242b;border-color:#2f3742;color:var(--muted)}
+ .pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:20px;font-weight:700;margin-left:6px;vertical-align:middle}
+ .pill-best{background:var(--ok);color:#052}
+ .pill-live{background:#2a313b;color:var(--muted)}
+ .pill-cloud{background:#1d4a63;color:#bfe0f2}
+ .row-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+ details{margin-top:8px}
+ summary{cursor:pointer;font-size:12.5px;color:var(--accent)}
+ .idlist{font-size:12px;color:var(--muted);margin-top:6px;max-height:200px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace}
+ .log{font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;background:#0b0e12;border:1px solid var(--line);border-radius:10px;padding:10px;max-height:260px;overflow:auto;white-space:pre-wrap}
+ label.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
+ label.chk input{width:auto;margin:3px 0 0 0}
+ .spin{opacity:.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <h1>🧰 Pilateria — Kurtarma Konsolu</h1>
+ <div class="sub">Bu ekran uygulamayı <b>çalıştırmaz</b> ve senkron başlatmaz. Hiçbir kayıt kendiliğinden silinmez veya değişmez. Aşağıdaki her işlem <b>yalnızca EKLER ve GÜNCELLER (upsert) — hiçbir zaman SİLMEZ.</b></div>
+
+ <div class="note note-danger"><b>Kurtarma sürerken uygulamayı hiçbir cihazda açma.</b> Uygulama her açılışta “açılış öncesi yedeği” üzerine yazar; bu, kurtarmak istediğin veriyi yok edebilir.</div>
+
+ <h2>📱 1) Bu cihazdaki yedekler</h2>
+ <div class="sub">Giriş yapmadan da görünür. Her yedeği <b>İndir</b> ile dosya olarak saklayabilirsin (güvenli kopya).</div>
+ <div id="local-list"></div>
+
+ <div class="card" id="login-card">
+  <div class="b-title">☁️ 2) Bulut analizi için giriş</div>
+  <div class="lbl">Yönetici e-postan ve şifren. Şifre yalnızca Supabase’e gönderilir; bu sayfada saklanmaz, hiçbir yere yazılmaz.</div>
+  <input id="email" type="email" placeholder="e-posta" autocomplete="username" autocapitalize="off" spellcheck="false">
+  <input id="pass" type="password" placeholder="şifre" autocomplete="current-password">
+  <div class="row-line"><button id="login-btn">Giriş Yap ve Analiz Et</button></div>
+  <div class="status" id="login-status"></div>
+ </div>
+
+ <div id="cloud-part" style="display:none">
+  <h2>☁️ 3) Bulutun şu anki hali</h2>
+  <div id="cloud-now"></div>
+
+  <h2>🔍 4) Analiz — hangi yedek ne kazandırır?</h2>
+  <div class="sub">“<b>Kazanç</b>” = o yedekte olup <b>bulutta HİÇ olmayan</b> kayıt sayısı. Kaybolan veriyi geri getirecek yedek, kazancı en yüksek olandır.</div>
+  <div id="analysis"></div>
+
+  <h2>🧩 5) Birleştirilmiş kurtarma</h2>
+  <div class="note note-info">Seçtiğin kaynaklar <b>eskiden yeniye</b> sırayla buluta yazılır. Silinen kayıtlar geri gelir; aynı kaydın iki kopyası varsa <b>en yeni tarihli olan kazanır</b>. Hiçbir kayıt silinmez.</div>
+  <div class="note note-warn">Yan etki: geçmişte <b>bilerek</b> sildiğin birkaç kayıt geri gelebilir (“hayalet kayıt”). Bunları uygulamadan elle silebilirsin — veri kaybetmekten çok daha iyidir.</div>
+  <div class="card">
+   <div id="merge-picks"></div>
+   <label class="chk" style="margin-top:12px"><input type="checkbox" id="opt-settings"><span>Ayarlar tablosunu da yaz <span class="mut">(önerilmez — ayarların/PIN geri sarabilir)</span></span></label>
+   <div class="row-line">
+    <button id="snap-btn" class="secondary">☂️ Önce bulutun şu halini yedekle</button>
+    <button id="merge-btn" class="go" disabled>▶️ Seçilenleri buluta birleştir</button>
+   </div>
+   <div class="status" id="merge-status"></div>
+  </div>
+
+  <h2>🗄️ 6) Buluttaki günlük yedekler</h2>
+  <div id="cloud-list"></div>
+ </div>
+
+ <h2>📜 Günlük</h2>
+ <div class="log" id="log">hazır.</div>
+ <div class="sub" style="margin-top:14px">Kurtarma bitince tüm cihazlarda uygulamayı <b>sert yenile</b> (kapat–aç) ve v117 sürümünde olduğundan emin ol.</div>
+</div>
+
+<script src="supabase-vendor.js"></script>
+<script>
+const SUPABASE_URL='https://nvbnmhaxumrfsxdzrzzj.supabase.co';
+const SUPABASE_KEY='sb_publishable_OdVQd9vKYQF1HZLZT_Ewkg_L-6qqVHL';
+const SB_TABLES=['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
+const KEY_TABLES=['members','groups','lessons','payments','instructors'];
+const TR={members:'üye',groups:'grup',lessons:'ders',payments:'ödeme',instructors:'hoca'};
+let sb=null, session=null, cloudRows=null, sources=[], analysisRows=[];
+
+try{ sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}}); }
+catch(e){ document.getElementById('log').textContent='Supabase kütüphanesi yüklenemedi: '+e; }
+
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cnt=(st)=>({members:(st&&st.members||[]).length,groups:(st&&st.groups||[]).length,lessons:(st&&st.lessons||[]).length,payments:(st&&st.payments||[]).length,instructors:(st&&st.instructors||[]).length});
+function log(m){ const el=document.getElementById('log'); el.textContent += '\n'+m; el.scrollTop=el.scrollHeight; }
+function fmtDate(s){ if(!s) return 'tarih bilinmiyor'; try{ return new Date(s).toLocaleString('tr-TR'); }catch(e){ return String(s); } }
+
+// kararli JSON (anahtar sirasi farki "degisiklik" sayilmasin)
+function stable(o){
+  if(o===null||typeof o!=='object') return JSON.stringify(o===undefined?null:o);
+  if(Array.isArray(o)) return '['+o.map(stable).join(',')+']';
+  return '{'+Object.keys(o).sort().map(k=>JSON.stringify(k)+':'+stable(o[k])).join(',')+'}';
+}
+
+function parseState(raw){
+  if(!raw) return null; let o; try{o=JSON.parse(raw);}catch(e){return null;}
+  let st=o, at=null, reason=null;
+  if(o && typeof o==='object' && ('state' in o)){ at=o.at||null; reason=o.reason||null; st=o.state; if(typeof st==='string'){try{st=JSON.parse(st);}catch(e){return null;}} }
+  if(!st || typeof st!=='object') return null;
+  return {state:st, at, reason};
+}
+
+// ---- state -> tablo satirlari (uygulamanin sbStateToRows'unun birebir esi; recover.html ile ayni) ----
+function buildRows(state){
+  const rows={}; SB_TABLES.forEach(t=>rows[t]={});
+  const splitMember=(m)=>{const base=JSON.parse(JSON.stringify(m||{}));const fin={totalPrice:base.totalPrice,packages:base.packages||[],monthly:{}};delete base.totalPrice;delete base.packages;base.monthly=base.monthly||{};for(const ay in base.monthly){const mm=base.monthly[ay]||{};const fm={};if('totalPrice' in mm){fm.totalPrice=mm.totalPrice;delete mm.totalPrice;}if('extendedNote' in mm){fm.extendedNote=mm.extendedNote;delete mm.extendedNote;}if(Object.keys(fm).length)fin.monthly[ay]=fm;}return{base,fin};};
+  const splitGroup=(g)=>{const base=JSON.parse(JSON.stringify(g||{}));const fin={customTotalPrice:base.customTotalPrice,packages:base.packages||[]};delete base.customTotalPrice;delete base.packages;return{base,fin};};
+  const splitInstr=(i)=>{const base=JSON.parse(JSON.stringify(i||{}));const fin={};if('rate' in base){fin.rate=base.rate;delete base.rate;}if('shareRate' in base){fin.shareRate=base.shareRate;delete base.shareRate;}return{base,fin};};
+  (state.members||[]).forEach(m=>{if(!m||!m.id)return;const s=splitMember(m);rows.members[m.id]=s.base;rows.member_finance[m.id]=s.fin;});
+  (state.groups||[]).forEach(g=>{if(!g||!g.id)return;const s=splitGroup(g);rows.groups[g.id]=s.base;rows.group_finance[g.id]=s.fin;});
+  (state.lessons||[]).forEach(l=>{if(!l||!l.id)return;rows.lessons[l.id]=l;});
+  (state.instructors||[]).forEach(i=>{if(!i||!i.id)return;const s=splitInstr(i);rows.instructors[i.id]=s.base;rows.instructor_finance[i.id]=s.fin;});
+  (state.payments||[]).forEach(p=>{if(!p||!p.id)return;rows.payments[p.id]=p;});
+  (state.instructorPayouts||[]).forEach((po,ix)=>{const id=po.id||('po-'+ix+'-'+(po.month||''));rows.instructor_payouts[id]=po;});
+  (state.packageTypes||[]).forEach(pt=>{if(!pt||!pt.id)return;rows.package_types[pt.id]=pt;});
+  (state.campaigns||[]).forEach(c=>{if(!c||!c.id)return;rows.campaigns[c.id]=c;});
+  (state.waTemplates||[]).forEach((w,ix)=>{const id=w.id||('wt-'+ix);rows.wa_templates[id]=w;});
+  const st=JSON.parse(JSON.stringify(state.settings||{}));st._pinHash=state._pinHash;st.monthInit=state.monthInit||{};rows.settings['singleton']=st;
+  return rows;
+}
+
+// ---- bulut satir formati -> state (sbRowsToState esi; recover.html ile ayni) ----
+function snapshotToState(snap){
+  const by=(t)=>{const m={};(snap&&snap[t]||[]).forEach(r=>{if(r&&r.id!=null)m[r.id]=r.data;});return m;};
+  return rowsMapToState({members:by('members'),member_finance:by('member_finance'),groups:by('groups'),group_finance:by('group_finance'),lessons:by('lessons'),instructors:by('instructors'),instructor_finance:by('instructor_finance'),payments:by('payments'),instructor_payouts:by('instructor_payouts'),package_types:by('package_types'),campaigns:by('campaigns'),wa_templates:by('wa_templates'),settings:by('settings')});
+}
+function rowsMapToState(M){
+  const mM=(base,fin)=>{const m=JSON.parse(JSON.stringify(base||{}));if(fin){if(fin.totalPrice!==undefined)m.totalPrice=fin.totalPrice;m.packages=fin.packages||[];m.monthly=m.monthly||{};for(const ay in(fin.monthly||{}))m.monthly[ay]=Object.assign({},m.monthly[ay]||{},fin.monthly[ay]);}else{m.packages=m.packages||[];}return m;};
+  const mG=(base,fin)=>{const g=JSON.parse(JSON.stringify(base||{}));if(fin){if(fin.customTotalPrice!==undefined)g.customTotalPrice=fin.customTotalPrice;g.packages=fin.packages||[];}else{g.packages=g.packages||[];}return g;};
+  const mI=(base,fin)=>{const i=JSON.parse(JSON.stringify(base||{}));if(fin){if(fin.rate!==undefined)i.rate=fin.rate;if(fin.shareRate!==undefined)i.shareRate=fin.shareRate;}return i;};
+  const st={};
+  st.members=Object.keys(M.members||{}).map(id=>mM(M.members[id],(M.member_finance||{})[id]));
+  st.groups=Object.keys(M.groups||{}).map(id=>mG(M.groups[id],(M.group_finance||{})[id]));
+  st.lessons=Object.values(M.lessons||{});
+  st.instructors=Object.keys(M.instructors||{}).map(id=>mI(M.instructors[id],(M.instructor_finance||{})[id]));
+  st.payments=Object.values(M.payments||{});
+  st.instructorPayouts=Object.values(M.instructor_payouts||{});
+  st.packageTypes=Object.values(M.package_types||{});
+  st.campaigns=Object.values(M.campaigns||{});
+  st.waTemplates=Object.values(M.wa_templates||{});
+  const s=(M.settings||{})['singleton']; if(s){ st.settings=s; st._pinHash=s._pinHash; st.monthInit=s.monthInit||{}; }
+  return st;
+}
+
+// ---- yerel kaynaklari topla ----
+const LOCAL_KEYS=[
+ {key:'pilateria', label:'Şu anki cihaz hali (canlı)', live:true},
+ {key:'pilateria_pre_cloud_backup', label:'Uygulama açılışı öncesi otomatik yedek (v103)'},
+ {key:'pilateria_pre_pull_backup', label:'Buluttan çekmeden önceki yedek'},
+ {key:'pilateria_pre_resync_backup', label:'Eşitleme öncesi yedek'},
+ {key:'pilateria_pre_overwrite_backup', label:'🧷 Buluttan tazeleme öncesi yedek (v115)'},
+ {key:'pilateria_kurtarma_oncesi', label:'☂️ Kurtarma öncesi bulut kopyası'},
+];
+function collectLocal(){
+  const ALL=LOCAL_KEYS.slice();
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    const dm=k&&k.match(/^pilateria_daily_(\d{4}-\d{2}-\d{2})$/);
+    if(dm) ALL.push({key:k,label:'Cihaz günlük yedeği',dayAt:dm[1]+'T00:00:00'});
+    if(k==='pilateria_mass_delete_backup') ALL.push({key:k,label:'⛔ Toplu silme anı otomatik yedeği'});
+  }
+  const out=[];
+  for(const spec of ALL){
+    let raw=null; try{ raw=localStorage.getItem(spec.key); }catch(e){}
+    if(!raw) continue;
+    const p=parseState(raw); if(!p||!p.state) continue;
+    out.push({id:spec.key, kind:'local', live:!!spec.live, label:spec.label, state:p.state, at:(p.at||spec.dayAt||null), reason:p.reason, counts:cnt(p.state), bytes:raw.length});
+  }
+  const live=out.filter(e=>e.live);
+  const dated=out.filter(e=>!e.live).sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
+  return live.concat(dated);
+}
+
+function download(name, obj){
+  try{
+    const blob=new Blob([JSON.stringify(obj)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500);
+    log('⬇️ indirildi: '+name);
+  }catch(e){ log('indirme hatası: '+(e.message||e)); }
+}
+
+function renderLocal(){
+  const box=document.getElementById('local-list'); box.innerHTML='';
+  sources=collectLocal();
+  if(!sources.length){ box.innerHTML='<div class="card"><div class="empty">Bu cihazda kayıtlı yedek bulunamadı.</div></div>'; return; }
+  sources.forEach((b,ix)=>{
+    const d=document.createElement('div'); d.className='card';
+    const date=b.live ? 'şu an (cihazın canlı hali)' : fmtDate(b.at);
+    d.innerHTML='<div class="b-row"><div style="flex:1;min-width:220px"><div class="b-title">'+esc(b.label)+(b.live?'<span class="pill pill-live">CANLI</span>':'')+'</div>'+
+      '<div class="b-meta">📅 '+esc(date)+(b.reason?(' · '+esc(b.reason)):'')+' · '+Math.round(b.bytes/1024)+' KB</div></div>'+
+      '<button class="secondary dl" data-ix="'+ix+'">İndir</button></div>'+
+      '<div class="counts"><b>'+b.counts.members+'</b> üye · <b>'+b.counts.groups+'</b> grup · <b>'+b.counts.lessons+'</b> ders · <b>'+b.counts.payments+'</b> ödeme · <b>'+b.counts.instructors+'</b> hoca</div>'+
+      '<div id="an-'+ix+'"></div>';
+    box.appendChild(d);
+  });
+  box.querySelectorAll('.dl').forEach(btn=>btn.addEventListener('click',()=>{
+    const b=sources[+btn.dataset.ix];
+    download('pilateria-'+b.id.replace(/^pilateria_?/,'')+'-'+String(b.at||'canli').replace(/[:.]/g,'-')+'.json', {at:b.at,label:b.label,state:b.state});
+  }));
+  log('yerel kaynak sayısı: '+sources.length);
+}
+
+// ---- bulut ----
+async function fetchCloud(){
+  const out={}; let total=0;
+  for(const t of SB_TABLES){
+    const m={}; let from=0;
+    for(;;){
+      const {data,error}=await sb.from(t).select('id,data').range(from,from+999);
+      if(error) throw new Error(t+': '+error.message);
+      (data||[]).forEach(r=>{ if(r&&r.id!=null) m[r.id]=r.data; });
+      if(!data||data.length<1000) break;
+      from+=1000;
+    }
+    out[t]=m; total+=Object.keys(m).length;
+  }
+  log('☁️ buluttan okunan kayıt: '+total);
+  return out;
+}
+
+function renderCloudNow(){
+  const st=rowsMapToState(cloudRows); const c=cnt(st);
+  document.getElementById('cloud-now').innerHTML='<div class="card"><div class="b-title">Bulut (canlı)</div>'+
+    '<div class="counts"><b>'+c.members+'</b> üye · <b>'+c.groups+'</b> grup · <b>'+c.lessons+'</b> ders · <b>'+c.payments+'</b> ödeme · <b>'+c.instructors+'</b> hoca</div></div>';
+}
+
+// kaynak -> buluta gore YENI / FARKLI
+function analyzeSource(state){
+  const rows=buildRows(state);
+  const res={added:{},changed:{},addedIds:{},totalAdded:0};
+  KEY_TABLES.forEach(t=>{
+    const cur=cloudRows[t]||{}; let a=0,ch=0; const ids=[];
+    Object.keys(rows[t]).forEach(id=>{
+      if(!(id in cur)){ a++; ids.push(id); }
+      else if(stable(cur[id])!==stable(rows[t][id])) ch++;
+    });
+    res.added[t]=a; res.changed[t]=ch; res.addedIds[t]=ids; res.totalAdded+=a;
+  });
+  return res;
+}
+
+function labelFor(t, state, id){
+  try{
+    if(t==='lessons'){ const l=(state.lessons||[]).find(x=>x&&x.id===id); if(l) return (l.date||'?')+' '+(l.time||'')+' · '+(l.memberName||l.groupName||l.title||''); }
+    if(t==='payments'){ const p=(state.payments||[]).find(x=>x&&x.id===id); if(p) return (p.date||'?')+' · '+(p.amount!=null?p.amount:'')+' ₺ · '+(p.memberName||p.note||''); }
+    if(t==='members'){ const m=(state.members||[]).find(x=>x&&x.id===id); if(m) return (m.name||'')+' ('+(m.joinDate||'')+')'; }
+    if(t==='groups'){ const g=(state.groups||[]).find(x=>x&&x.id===id); if(g) return (g.name||''); }
+    if(t==='instructors'){ const i=(state.instructors||[]).find(x=>x&&x.id===id); if(i) return (i.name||''); }
+  }catch(e){}
+  return id;
+}
+
+function renderAnalysis(){
+  analysisRows=[];
+  const box=document.getElementById('analysis'); box.innerHTML='';
+  const all=sources.concat(cloudSnaps);
+  let best=null;
+  all.forEach(s=>{ s.an=analyzeSource(s.state); if(!best||s.an.totalAdded>best.an.totalAdded) best=s; });
+  all.forEach((s,ix)=>{
+    analysisRows.push(s);
+    const a=s.an;
+    const gains=KEY_TABLES.filter(t=>a.added[t]>0).map(t=>'<b>'+a.added[t]+'</b> '+TR[t]);
+    const chg=KEY_TABLES.filter(t=>a.changed[t]>0).map(t=>a.changed[t]+' '+TR[t]);
+    const d=document.createElement('div'); d.className='card';
+    let h='<div class="b-row"><div style="flex:1;min-width:220px"><div class="b-title">'+esc(s.label)+
+      (s.kind==='cloud'?'<span class="pill pill-cloud">BULUT</span>':'')+
+      (s===best&&a.totalAdded>0?'<span class="pill pill-best">EN ÇOK KAZANDIRAN</span>':'')+'</div>'+
+      '<div class="b-meta">📅 '+esc(s.live?'şu an (cihazın canlı hali)':fmtDate(s.at))+'</div></div>'+
+      '<label class="chk"><input type="checkbox" class="pick" data-ix="'+ix+'"><span>seç</span></label></div>';
+    h+= a.totalAdded>0
+      ? '<div class="gain">➕ Bulutta OLMAYAN: '+gains.join(' · ')+'  <span class="mut">(toplam '+a.totalAdded+' kayıt geri gelir)</span></div>'
+      : '<div class="gain none">Bu kaynakta bulutta olmayan kayıt yok — kazanç 0.</div>';
+    if(chg.length) h+='<div class="counts">✏️ İçeriği farklı olan: '+esc(chg.join(' · '))+' <span class="mut">(yazılırsa bu kaynağın hali geçerli olur)</span></div>';
+    if(a.totalAdded>0){
+      let list='';
+      KEY_TABLES.forEach(t=>{ if(!a.addedIds[t].length) return;
+        list += '— '+TR[t].toUpperCase()+' ('+a.addedIds[t].length+') —\n';
+        a.addedIds[t].slice(0,40).forEach(id=>{ list += '  '+labelFor(t,s.state,id)+'\n'; });
+        if(a.addedIds[t].length>40) list += '  … +'+(a.addedIds[t].length-40)+' tane daha\n';
+      });
+      h+='<details><summary>Geri gelecek kayıtları göster</summary><div class="idlist">'+esc(list)+'</div></details>';
+    }
+    d.innerHTML=h; box.appendChild(d);
+  });
+  box.querySelectorAll('.pick').forEach(c=>c.addEventListener('change',syncPicks));
+  // birlesim ozeti
+  renderMergePicks();
+}
+
+function selectedSources(){
+  const out=[];
+  document.querySelectorAll('#analysis .pick:checked').forEach(c=>out.push(analysisRows[+c.dataset.ix]));
+  // eskiden yeniye: canli hal EN SON yazilsin (en yeni kabul edilir)
+  out.sort((a,b)=>{
+    const av=a.live?'9999':String(a.at||''), bv=b.live?'9999':String(b.at||'');
+    return av.localeCompare(bv);
+  });
+  return out;
+}
+function syncPicks(){ renderMergePicks(); }
+
+function renderMergePicks(){
+  const sel=selectedSources();
+  const box=document.getElementById('merge-picks');
+  document.getElementById('merge-btn').disabled = sel.length===0 || !session;
+  if(!sel.length){ box.innerHTML='<div class="empty">Yukarıdan en az bir kaynak seç.</div>'; return; }
+  // birlesim: hangi kayitlar toplamda eklenecek
+  const union={}; KEY_TABLES.forEach(t=>union[t]=new Set());
+  sel.forEach(s=>KEY_TABLES.forEach(t=>s.an.addedIds[t].forEach(id=>union[t].add(id))));
+  const parts=KEY_TABLES.filter(t=>union[t].size>0).map(t=>'<b>'+union[t].size+'</b> '+TR[t]);
+  let h='<div class="b-title">Yazma sırası (eskiden yeniye):</div><div class="counts">';
+  sel.forEach((s,i)=>{ h+= (i+1)+'. '+esc(s.label)+' <span class="mut">('+esc(s.live?'canlı':fmtDate(s.at))+')</span><br>'; });
+  h+='</div>';
+  h+= parts.length ? '<div class="gain">Sonuç: buluta toplam '+parts.join(' · ')+' geri gelecek.</div>'
+                   : '<div class="gain none">Bu seçimle bulutta olmayan hiçbir kayıt eklenmeyecek (yalnız güncelleme olur).</div>';
+  box.innerHTML=h;
+}
+
+async function login(){
+  const email=document.getElementById('email').value.trim();
+  const pass=document.getElementById('pass').value;
+  const st=document.getElementById('login-status');
+  if(!sb){ st.innerHTML='<span class="danger">Supabase yüklenemedi.</span>'; return; }
+  if(!email||!pass){ st.innerHTML='<span class="warn">E-posta ve şifre gerekli.</span>'; return; }
+  st.textContent='Giriş yapılıyor…';
+  try{
+    const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error){ st.innerHTML='<span class="danger">Giriş başarısız: '+esc(error.message)+'</span>'; return; }
+    session=data.session;
+    document.getElementById('pass').value='';
+    st.innerHTML='<span class="ok">✓ Giriş yapıldı ('+esc(email)+'). Bulut okunuyor…</span>';
+    log('✓ giriş: '+email);
+    cloudRows=await fetchCloud();
+    await loadCloudBackups();
+    document.getElementById('cloud-part').style.display='block';
+    renderCloudNow();
+    renderAnalysis();
+    st.innerHTML='<span class="ok">✓ Analiz hazır — aşağıya bak.</span>';
+  }catch(e){ st.innerHTML='<span class="danger">Hata: '+esc(e.message||e)+'</span>'; log('HATA: '+(e.message||e)); }
+}
+
+let cloudSnaps=[];
+async function loadCloudBackups(){
+  cloudSnaps=[];
+  const list=document.getElementById('cloud-list');
+  try{
+    const {data,error}=await sb.from('daily_backups').select('id,created_at,snapshot').order('id',{ascending:false}).limit(30);
+    if(error){ list.innerHTML='<div class="card"><div class="empty">Bulut yedek tablosu okunamadı.</div></div>'; return; }
+    if(!data||!data.length){ list.innerHTML='<div class="card"><div class="empty">Bulutta günlük yedek yok.</div></div>'; return; }
+    list.innerHTML='';
+    data.forEach((row,ix)=>{
+      const st=snapshotToState(row.snapshot||{}); const c=cnt(st);
+      cloudSnaps.push({id:'cloud-'+row.id, kind:'cloud', label:'Bulut günlük yedeği '+row.id, state:st, at:row.created_at, counts:c});
+      const d=document.createElement('div'); d.className='card';
+      d.innerHTML='<div class="b-row"><div><div class="b-title">'+esc(row.id)+'</div><div class="b-meta">'+esc(fmtDate(row.created_at))+'</div></div>'+
+        '<button class="secondary dlc" data-ix="'+ix+'">İndir</button></div>'+
+        '<div class="counts"><b>'+c.members+'</b> üye · <b>'+c.groups+'</b> grup · <b>'+c.lessons+'</b> ders · <b>'+c.payments+'</b> ödeme</div>';
+      list.appendChild(d);
+    });
+    list.querySelectorAll('.dlc').forEach(btn=>btn.addEventListener('click',()=>{
+      const s=cloudSnaps[+btn.dataset.ix];
+      download('pilateria-bulut-'+String(s.label).replace(/[^0-9a-zA-Z-]/g,'_')+'.json',{at:s.at,label:s.label,state:s.state});
+    }));
+    log('☁️ bulut günlük yedeği: '+data.length+' adet');
+  }catch(e){ log('bulut yedek listesi hatası: '+(e.message||e)); }
+}
+
+async function preserveCurrentPin(rows){
+  try{ const cur=(cloudRows&&cloudRows.settings&&cloudRows.settings['singleton'])||null;
+    if(cur&&('_pinHash' in cur)&&rows.settings&&rows.settings.singleton) rows.settings.singleton._pinHash=cur._pinHash; }catch(e){}
+}
+
+async function snapshotCloudNow(){
+  const btn=document.getElementById('snap-btn'), ms=document.getElementById('merge-status');
+  if(!session||!cloudRows){ ms.innerHTML='<span class="warn">Önce giriş yap.</span>'; return; }
+  btn.disabled=true;
+  try{
+    const st=rowsMapToState(cloudRows);
+    const pack={at:new Date().toISOString(), reason:'kurtarma oncesi bulut kopyasi', state:JSON.stringify(st)};
+    try{ localStorage.setItem('pilateria_kurtarma_oncesi', JSON.stringify(pack)); }catch(e){ log('yerel kayıt olmadı (yer yok?): '+(e.message||e)); }
+    download('pilateria-KURTARMA-ONCESI-bulut.json', {at:pack.at,label:'kurtarma öncesi bulut',state:st});
+    ms.innerHTML='<span class="ok">✓ Bulutun şu anki hali bu cihaza yedeklendi ve dosya olarak indirildi (geri dönüş noktası).</span>';
+    log('☂️ kurtarma öncesi bulut kopyası alındı');
+    renderLocal();
+  }catch(e){ ms.innerHTML='<span class="danger">Hata: '+esc(e.message||e)+'</span>'; }
+  finally{ btn.disabled=false; }
+}
+
+async function doMerge(){
+  const sel=selectedSources();
+  const ms=document.getElementById('merge-status'), btn=document.getElementById('merge-btn');
+  if(!session){ ms.innerHTML='<span class="warn">Önce giriş yap.</span>'; return; }
+  if(!sel.length){ ms.innerHTML='<span class="warn">Kaynak seçilmedi.</span>'; return; }
+  const writeSettings=document.getElementById('opt-settings').checked;
+  const union={}; KEY_TABLES.forEach(t=>union[t]=new Set());
+  sel.forEach(s=>KEY_TABLES.forEach(t=>s.an.addedIds[t].forEach(id=>union[t].add(id))));
+  const parts=KEY_TABLES.filter(t=>union[t].size>0).map(t=>union[t].size+' '+TR[t]);
+  const msg='Seçilen '+sel.length+' kaynak eskiden yeniye buluta yazılacak.\n\n'+
+            'Geri gelecek: '+(parts.join(', ')||'yeni kayıt yok')+'\n'+
+            'Ayarlar tablosu: '+(writeSettings?'YAZILACAK':'yazılmayacak')+'\n\n'+
+            'Hiçbir kayıt SİLİNMEZ. Devam edilsin mi?';
+  if(!confirm(msg)) return;
+  btn.disabled=true;
+  const tables=SB_TABLES.filter(t=>writeSettings||t!=='settings');
+  let n=0;
+  try{
+    for(let si=0; si<sel.length; si++){
+      const s=sel[si];
+      log('▶️ ('+(si+1)+'/'+sel.length+') yazılıyor: '+s.label);
+      const rows=buildRows(s.state);
+      await preserveCurrentPin(rows);
+      for(const t of tables){
+        const arr=Object.keys(rows[t]).map(id=>({id, data:rows[t][id]}));
+        for(let i=0;i<arr.length;i+=100){
+          const part=arr.slice(i,i+100);
+          const {error}=await sb.from(t).upsert(part);
+          if(error) throw new Error(t+': '+error.message);
+          n+=part.length; ms.textContent='Yazılıyor… '+n+' kayıt ('+s.label+' → '+t+')';
+        }
+      }
+    }
+    ms.innerHTML='<span class="ok">✓ Tamamlandı — '+n+' kayıt yazıldı. Doğrulama için bulut yeniden okunuyor…</span>';
+    log('✓ birleştirme bitti: '+n+' kayıt');
+    cloudRows=await fetchCloud();
+    renderCloudNow(); renderAnalysis();
+    const c=cnt(rowsMapToState(cloudRows));
+    ms.innerHTML='<span class="ok">✓ Bitti. Bulutun yeni hali: '+c.members+' üye · '+c.groups+' grup · '+c.lessons+' ders · '+c.payments+' ödeme. Şimdi tüm cihazlarda uygulamayı kapat–aç.</span>';
+  }catch(e){
+    ms.innerHTML='<span class="danger">Yazma hatası: '+esc(e.message||e)+' — '+n+' kayıt yazılmıştı. Tekrar deneyebilirsin (upsert güvenlidir).</span>';
+    log('HATA: '+(e.message||e));
+  }finally{
+    // Basarili birlestirmeden sonra analiz yenilenir ve secim sifirlanir -> dugme yeniden pasif.
+    // Hata halinde secim durdugu icin dugme aktif kalir (tekrar denenebilir; upsert guvenlidir).
+    try{ renderMergePicks(); }catch(e2){ btn.disabled=false; }
+  }
+}
+
+document.getElementById('login-btn').addEventListener('click', login);
+document.getElementById('pass').addEventListener('keydown',e=>{ if(e.key==='Enter') login(); });
+document.getElementById('snap-btn').addEventListener('click', snapshotCloudNow);
+document.getElementById('merge-btn').addEventListener('click', doMerge);
+renderLocal();
+</script>
+</body>
+</html>
