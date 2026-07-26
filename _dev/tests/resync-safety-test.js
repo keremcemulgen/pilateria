@@ -21,7 +21,10 @@ setTimeout(async function(){try{
     +"upsert:function(){ window.__pushCalled++; return Promise.resolve({error:null}); }, "
     +"delete:function(){ return { in:function(){ return Promise.resolve({error:null}); } }; } }; } };");
   // YEREL yeni degerler
-  w.eval("state.members=[{id:'M1',name:'YENI',totalPrice:9999,monthly:{'2026-07':{enrolled:false}}}]; state.groups=[]; state.payments=[]; __sbShadow={}; __sbVer={};");
+  // v117: bu birim testler push MEKANIGINI olcuyor; gercek cihazda push, acilis cekimi
+  // (sbLoadAll/sbSnapshotShadow) TEMELI kurduktan SONRA yapilir. __sbBaseReady=true bu
+  // gercek onkosulu temsil eder — bayat-ezme kalkani yalniz TEMEL YOKKEN devreye girer.
+  w.eval("state.members=[{id:'M1',name:'YENI',totalPrice:9999,monthly:{'2026-07':{enrolled:false}}}]; state.groups=[]; state.payments=[]; __sbShadow={}; __sbBaseReady=true; __sbVer={};");
 
   console.log('[1] KIRLI iken sbResync: SADECE gonder (push), state EZILMEZ, sunucudan CEKMEZ');
   w.eval("localStorage.setItem('pilateria_dirty','1'); __sbLastResync=0; __sbLastPushAt=0; __sbResyncBusy=false; window.__selectCalled=0; window.__pushCalled=0;");

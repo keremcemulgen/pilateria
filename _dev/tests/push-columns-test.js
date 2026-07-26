@@ -27,7 +27,10 @@ setTimeout(async ()=>{ try {
 
   console.log('[2] DAVRANIS: gercek sbDiffPush payload yakalama');
   w.eval(`
-    __sbShadow={}; __sbVer={};
+  // v117: bu birim testler push MEKANIGINI olcuyor; gercek cihazda push, acilis cekimi
+  // (sbLoadAll/sbSnapshotShadow) TEMELI kurduktan SONRA yapilir. __sbBaseReady=true bu
+  // gercek onkosulu temsil eder — bayat-ezme kalkani yalniz TEMEL YOKKEN devreye girer.
+    __sbShadow={}; __sbBaseReady=true; __sbVer={};
     state.members=[{id:'mX',name:'META TEST',phone:'5551112233',joinDate:'2026-07-01',totalPrice:8500,monthly:{'2026-07':{enrolled:true,totalPrice:8500,note:'n'}},packages:[{month:'2026-07',price:8500,sessions:8}]}];
     state.groups=[]; state.lessons=[{id:'lX',date:'2026-07-15',time:'09:00',memberIds:['mX'],status:'planned',packageMonth:'2026-07'}];
     state.payments=[{id:'pX',memberId:'mX',amount:8500,date:'2026-07-05',packageMonth:'2026-07'}];

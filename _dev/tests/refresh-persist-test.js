@@ -21,7 +21,10 @@ setTimeout(async function(){try{
     +"upsert:function(rows){ window.__upserted=window.__upserted.concat(rows); return Promise.resolve({error:null}); }, "
     +"delete:function(){ return { in:function(){ return Promise.resolve({error:null}); } }; } }; } };");
   // YEREL (localStorage'dan gelmis gibi): kullanici fiyati 9999 yapmis, henuz GONDERILMEMIS (dirty)
-  w.eval("state.members=[{id:'M1',name:'YENI',totalPrice:9999,joinDate:'2026-05-01',monthly:{}}]; state.groups=[]; state.payments=[]; __sbShadow={}; __sbVer={}; localStorage.setItem('pilateria_dirty','1');");
+  // v117: bu birim testler push MEKANIGINI olcuyor; gercek cihazda push, acilis cekimi
+  // (sbLoadAll/sbSnapshotShadow) TEMELI kurduktan SONRA yapilir. __sbBaseReady=true bu
+  // gercek onkosulu temsil eder — bayat-ezme kalkani yalniz TEMEL YOKKEN devreye girer.
+  w.eval("state.members=[{id:'M1',name:'YENI',totalPrice:9999,joinDate:'2026-05-01',monthly:{}}]; state.groups=[]; state.payments=[]; __sbShadow={}; __sbBaseReady=true; __sbVer={}; localStorage.setItem('pilateria_dirty','1');");
 
   console.log('[1] sbLoadAll: kirli yerel (9999) sunucudaki eski (5000) ile EZILMEZ, GONDERILIR');
   await w.eval("sbLoadAll()"); await new Promise(r=>setTimeout(r,250));
@@ -30,7 +33,7 @@ setTimeout(async function(){try{
   t("degisiklik sunucuya GONDERILDI (upsert cagrildi)", w.eval("window.__upserted.length")>0, w.eval("window.__upserted.length"));
 
   console.log('[2] TEMIZ acilista: sunucu hali alinir (normal)');
-  w.eval("localStorage.removeItem('pilateria_dirty'); state.members=[{id:'M1',name:'LOCAL',totalPrice:1}]; __sbShadow={}; __sbVer={}; window.__upserted=[];");
+  w.eval("localStorage.removeItem('pilateria_dirty'); state.members=[{id:'M1',name:'LOCAL',totalPrice:1}]; __sbShadow={}; __sbBaseReady=true; __sbVer={}; window.__upserted=[];");
   await w.eval("sbLoadAll()"); await new Promise(r=>setTimeout(r,250));
   t("temiz -> sunucu hali (STALE, 5000)", w.eval("state.members[0].name")==='STALE' && w.eval("state.members[0].totalPrice")===5000, w.eval("state.members[0].name")+'/'+w.eval("state.members[0].totalPrice"));
 
@@ -38,7 +41,9 @@ setTimeout(async function(){try{
   t("visibility-hidden pending gonderir", /visibilityState === 'hidden' && typeof isDirty === 'function' && isDirty\(\)\) \{ clearTimeout\(__sbPushTimer\); sbFlushPush\(\)/.test(html));
   t("pagehide pending gonderir", /addEventListener\('pagehide', \(\) => \{ if \(typeof isDirty === 'function' && isDirty\(\)\) \{ clearTimeout\(__sbPushTimer\); sbFlushPush\(\)/.test(html));
   t("ANLIK push (mikrotask, sabit gecikme yok)", /Promise\.resolve\(\)\.then\(\(\) => \{ __sbPushQueued = false; sbFlushPush\(\)/.test(html));
-  t("sbLoadAll dirty koru (__wasDirty && __localState)", /if \(__wasDirty && __localState\) \{[\s\S]*?state = __localState;[\s\S]*?await sbDiffPush\(\)/.test(html));
+  // v117: kirli acilista artik yerel state OLDUGU GIBI geri konmuyor (bayat cihaz bulutu geri sariyordu);
+  // sunucu temel alinip yalniz BU OTURUMDA degismis kayitlar yerelden aliniyor — korunma AYNI, kural DAHA KESKIN.
+  t("sbLoadAll dirty koru (__wasDirty && __localState -> birlestirme + push)", /if \(__wasDirty && __localState\) \{[\s\S]*?state = __sbMergeUnsentLocal\(state, __localState\);[\s\S]*?await sbDiffPush\(\)/.test(html));
 
   console.log("\n=== refresh-persist: "+pass+" OK, "+fail+" FAIL ===");
   process.exit(fail?1:0);

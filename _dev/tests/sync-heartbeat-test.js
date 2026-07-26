@@ -38,7 +38,10 @@ setTimeout(async ()=>{ try {
   );
   const seedLocal = ()=> w.eval(
     "state.members=[{id:'L1',name:'YEREL-DEGISIK',totalPrice:9999,monthly:{'2026-07':{enrolled:false}}}];"+
-    "state.groups=[]; state.payments=[]; state.lessons=[]; __sbShadow={}; __sbVer={};"+
+  // v117: bu birim testler push MEKANIGINI olcuyor; gercek cihazda push, acilis cekimi
+  // (sbLoadAll/sbSnapshotShadow) TEMELI kurduktan SONRA yapilir. __sbBaseReady=true bu
+  // gercek onkosulu temsil eder — bayat-ezme kalkani yalniz TEMEL YOKKEN devreye girer.
+    "state.groups=[]; state.payments=[]; state.lessons=[]; __sbShadow={}; __sbBaseReady=true; __sbVer={};"+
     "__sbResyncBusy=false; __sbLastResync=0; __sbLastPushAt=0;"
   );
 

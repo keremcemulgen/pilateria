@@ -16,7 +16,10 @@ setTimeout(async function(){try{
   w.eval("['renderMembers','renderDashboard','renderGroups','renderCalendar','__refreshUIInPlace','save','setCloudDot','plToast'].forEach(fn=>window[fn]=function(){});");
   w.eval("window.__upsertCount=0; sbClient={ from:function(t){ return { select:function(){return{order:function(){return Promise.resolve({data:[]});}};}, upsert:function(){window.__upsertCount++;return Promise.resolve({error:null});}, delete:function(){return{in:function(){return Promise.resolve({error:null});}};} }; } };");
   w.eval("window.__flushN=0; sbFlushPush=(function(orig){ return function(){ window.__flushN++; return orig.apply(this,arguments); }; })(sbFlushPush);");
-  w.eval("state.members=[{id:'M1',name:'X',totalPrice:1,monthly:{}}]; state.groups=[]; state.payments=[]; __sbShadow={}; __sbVer={}; __sbApplying=false; __sbPushQueued=false; __sbPushInFlight=false; __sbPushAgain=false; localStorage.setItem('pilateria_dirty','1');");
+  // v117: bu birim testler push MEKANIGINI olcuyor; gercek cihazda push, acilis cekimi
+  // (sbLoadAll/sbSnapshotShadow) TEMELI kurduktan SONRA yapilir. __sbBaseReady=true bu
+  // gercek onkosulu temsil eder — bayat-ezme kalkani yalniz TEMEL YOKKEN devreye girer.
+  w.eval("state.members=[{id:'M1',name:'X',totalPrice:1,monthly:{}}]; state.groups=[]; state.payments=[]; __sbShadow={}; __sbBaseReady=true; __sbVer={}; __sbApplying=false; __sbPushQueued=false; __sbPushInFlight=false; __sbPushAgain=false; localStorage.setItem('pilateria_dirty','1');");
 
   console.log('[1] ANLIK: 3 es-zamanli schedulePush -> TEK push (coalesce), ~aninda');
   w.eval("sbSchedulePush(); sbSchedulePush(); sbSchedulePush();");
@@ -27,10 +30,10 @@ setTimeout(async function(){try{
   console.log('[2] In-flight kuyruk: suren push sirasinda yeni degisiklik -> bitince tekrar push');
   // upsert'i yavaslat + shadow BOSALT (gercek diff olsun) + degisiklik yap
   w.eval("window.__upsertCount=0; window.__flushN=0; sbClient.from=function(t){ return { select:function(){return{order:function(){return Promise.resolve({data:[]});}};}, upsert:function(){ window.__upsertCount++; return new Promise(function(res){ setTimeout(function(){res({error:null});}, 40); }); }, delete:function(){return{in:function(){return Promise.resolve({error:null});}};} }; };");
-  w.eval("__sbShadow={}; __sbVer={}; __sbPushQueued=false; __sbPushInFlight=false; __sbPushAgain=false; state.members[0].totalPrice=100; localStorage.setItem('pilateria_dirty','1');");
+  w.eval("__sbShadow={}; __sbBaseReady=true; __sbVer={}; __sbPushQueued=false; __sbPushInFlight=false; __sbPushAgain=false; state.members[0].totalPrice=100; localStorage.setItem('pilateria_dirty','1');");
   w.eval("sbSchedulePush();"); // ilk push basliyor (yavas upsert 40ms)
   await tick(12); // push in-flight
-  w.eval("state.members[0].totalPrice=200; __sbShadow={}; localStorage.setItem('pilateria_dirty','1'); sbSchedulePush();"); // suren push sirasinda yeni degisiklik
+  w.eval("state.members[0].totalPrice=200; __sbShadow={}; __sbBaseReady=true; localStorage.setItem('pilateria_dirty','1'); sbSchedulePush();"); // suren push sirasinda yeni degisiklik
   t("suren push sirasinda schedulePush -> __sbPushAgain set", w.eval("__sbPushAgain")===true, 'inFlight='+w.eval('__sbPushInFlight')+' again='+w.eval('__sbPushAgain'));
   await tick(150); // her iki push da bitsin
   t("in-flight sonrasi 2. push yapildi (upsert >=2)", w.eval("window.__upsertCount")>=2, w.eval("window.__upsertCount"));

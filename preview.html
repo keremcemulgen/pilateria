@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.26.39-onizleme">
+<meta name="app-version" content="2026.07.26.40-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2171,6 +2171,10 @@ const DEFAULT_STATE = {
   ],
 };
 let state = load();
+// v117 AÇILIŞ PARMAK İZİ: "bu kaydı BU OTURUMDA ben mi değiştirdim?" sorusunun tek kaynağı.
+// Açılış çekimi (sbLoadAll) bayat yerel veriyi sunucunun üzerine KOYMASIN diye kullanılır.
+let __sbBootFp = null;
+try { __sbBootFp = __sbFingerprint(state); } catch(e) { __sbBootFp = null; }
 let weekOffset = 0;
 
 function load() {
@@ -10143,6 +10147,11 @@ function __trace(s) {
   } catch(_){}
 }
 let __sbShadow = {};   // tablo → { id → JSON.stringify(data) }  (diff + echo-önleme)
+// v117 HAYATI: __sbShadow YALNIZ BELLEKTEDIR ve acilis cekimi bitene kadar BOSTUR. Bos golge
+// "her kayit degismis" demektir; o halde yapilan bir push, cihazin BAYAT kopyasini buluta basip
+// diger cihazlarin yazdiklarini geri sarar. Bu bayrak "golge GUVENILIR bir temelden alindi mi?"
+// sorusunu tutar; yalniz sbSnapshotShadow icinde true olur.
+let __sbBaseReady = false;
 let __sbPushTimer = null;
 let __sbApplying = false; // realtime uygularken save-döngüsünü önle
 const SB_TABLES = ['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
@@ -10150,6 +10159,77 @@ const SB_TABLES = ['members','member_finance','groups','group_finance','lessons'
 // ===== v.20 EŞZAMANLILIK: zaman-damgalı çakışma çözümü + yeniden-tazeleme =====
 let __sbVer = {};      // tablo -> { id -> _v (updatedAt ms) }
 let __sbWasDropped = false, __sbListenersAdded = false, __sbResyncBusy = false, __sbLastResync = 0, __sbLastPushAt = 0;
+// ───────── v117: BAYAT CIHAZIN BULUTU GERİ SARMASI ─────────
+// Kerem (26 Tem): "PC'den bir sürü ödeme ve ders girdim, telefonumda güncellendi; ortağım girdi ve
+// VERİLER DEĞİŞTİ (eski hâline döndü); ben de telefondan girdim, aynısı oldu."
+// Bu blok "bu kaydı BU OTURUMDA ben mi değiştirdim?" sorusunu KAYIT BAZINDA cevaplar. Önceki kanon
+// (state genelinde _lastLocalEditAt karşılaştırması) YANLIŞTI: cihaz 10:00'da çekip 11:00'de ALAKASIZ
+// bir kaydı düzenlerse, PC'nin 10:30'da yazdığı kaydı da "yerel daha yeni" sayarak geri sarıyordu.
+function __sbHash(o) {           // djb2 — hızlı; yalnız "değişti mi?" sorusu için, kriptografik değil
+  let s0; try { s0 = JSON.stringify(o); } catch(e) { return 'x'; }
+  if (s0 == null) return 'n';
+  let h = 5381;
+  for (let i = 0; i < s0.length; i++) h = (((h << 5) + h) ^ s0.charCodeAt(i)) >>> 0;
+  return h.toString(36) + ':' + s0.length;
+}
+function __sbMergeColls() { return ['members','groups','lessons','instructors','payments','packageTypes','campaigns']; }
+// AÇILIŞ PARMAK İZİ: uygulama açıldığında yerel veri NEYDİ. `let state = load()` hemen ardından alınır.
+function __sbFingerprint(st) {
+  if (!st) return null;
+  const fp = {};
+  __sbMergeColls().forEach(function(k) {
+    const m = {};
+    (Array.isArray(st[k]) ? st[k] : []).forEach(function(r) { if (r && r.id != null) m[r.id] = __sbHash(r); });
+    fp[k] = m;
+  });
+  fp._misc = __sbHash([st.settings || null, st.monthInit || null, st.instructorPayouts || [], st.waTemplates || [], st._pinHash || null]);
+  return fp;
+}
+function __sbMiscHash(st) { return __sbHash([st.settings || null, st.monthInit || null, st.instructorPayouts || [], st.waTemplates || [], st._pinHash || null]); }
+// AÇILIŞ BİRLEŞTİRME: temel SUNUCU halidir. Yalnızca BU OTURUMDA gerçekten değişmiş/oluşmuş
+// kayıtlar yerelden alınır; dokunulmamış kayıtlar SUNUCUDAN gelir. Sunucuda olup yerelde olmayan
+// kayıt (başka cihazın yeni kaydı) ASLA silinmez — yalnız bu oturumda gerçekten silinenler silinir.
+// Parmak izi yoksa GÜVENLİ tarafa düşer: sunucu esas alınır (yerel kopya zaten pre_cloud_backup'ta).
+function __sbMergeUnsentLocal(serverSt, localSt) {
+  if (!serverSt) return localSt;
+  if (!localSt) return serverSt;
+  let fp = null; try { fp = __sbBootFp; } catch(e) { fp = null; }
+  let kept = 0, fromServer = 0, rescued = 0, honoured = 0;
+  __sbMergeColls().forEach(function(key) {
+    const sv = Array.isArray(serverSt[key]) ? serverSt[key] : [];
+    const lc = Array.isArray(localSt[key]) ? localSt[key] : [];
+    const boot = (fp && fp[key]) || null;
+    const svById = {}; sv.forEach(function(r) { if (r && r.id != null) svById[r.id] = r; });
+    const out = [], seen = {};
+    lc.forEach(function(r) {
+      if (!r || r.id == null) { out.push(r); return; }                      // id'siz kayıt → dokunma, koru
+      seen[r.id] = 1;
+      if (!(r.id in svById)) { out.push(r); rescued++; return; }            // yerel-özgü OLUŞTURMA → KORU
+      if (!boot) { out.push(svById[r.id]); fromServer++; return; }          // parmak izi yok → SUNUCU
+      const b = boot[r.id];
+      if (b === undefined || b !== __sbHash(r)) { out.push(r); kept++; return; } // bu oturumda dokunuldu → YEREL
+      out.push(svById[r.id]); fromServer++;                                 // dokunulmadı → SUNUCU kazanır
+    });
+    sv.forEach(function(r) {
+      if (!r || r.id == null) return;
+      if (seen[r.id]) return;
+      if (boot && boot[r.id] !== undefined) { honoured++; return; }         // açılışta BENDE vardı, artık yok → bu oturumda SİLİNDİ
+      out.push(r); rescued++;                                               // hiç görmediğim kayıt → başka cihazın yenisi → KORU
+    });
+    serverSt[key] = out;
+  });
+  // ayar / şablon / hakediş bloğu: bu oturumda değiştiyse YEREL, değişmediyse SUNUCU
+  try {
+    if (fp && fp._misc !== undefined && fp._misc !== __sbMiscHash(localSt)) {
+      serverSt.settings = localSt.settings; serverSt.monthInit = localSt.monthInit;
+      serverSt.instructorPayouts = localSt.instructorPayouts; serverSt.waTemplates = localSt.waTemplates;
+      if (localSt._pinHash) serverSt._pinHash = localSt._pinHash;
+    }
+  } catch(e) {}
+  serverSt._lastLocalEditAt = Math.max(+serverSt._lastLocalEditAt || 0, +localSt._lastLocalEditAt || 0);
+  try { __trace('AÇILIŞ BİRLEŞTİRME: yerel değişiklik ' + kept + ' · sunucudan ' + fromServer + ' · kurtarılan ' + rescued + ' · silme onaylanan ' + honoured + (fp ? '' : ' (parmak izi YOK → sunucu esas)')); } catch(e) {}
+  return serverSt;
+}
 // Sunucudan gelen satirlarin _v damgasini __sbVer'e al, veriden temizle (domain nesnesi temiz kalsin)
 function __sbHarvestVer(all) {
   SB_TABLES.forEach(t => {
@@ -10290,6 +10370,7 @@ function sbRowsToState(all) {
 }
 function sbSnapshotShadow(rows) {
   __sbShadow = {};
+  __sbBaseReady = true;   // v117: golge artik GUVENILIR bir temelden (sunucu cekimi / tasima / resync) alindi
   SB_TABLES.forEach(t => { __sbShadow[t] = {}; for (const id in rows[t]) __sbShadow[t][id] = JSON.stringify(rows[t][id]); });
 }
 
@@ -10491,8 +10572,10 @@ async function sbLoadAll() {
   sanitizeStateText(state);
   sbSnapshotShadow(sbStateToRows()); // shadow = SUNUCU hali (diff temeli)
   if (__wasDirty && __localState) {
-    // yerel hali geri koy → sbDiffPush yalniz YERELIN DEGISTIRDIGI kayitlari gonderir (sunucu-shadow ile diff)
-    state = __localState;
+    // v117: yerel hali OLDUGU GIBI geri koymak = bayat cihazin bulutu geri sarmasi (Kerem, 26 Tem).
+    // Artik SUNUCU temel alinir; yalniz BU OTURUMDA gercekten degismis/olusmus kayitlar yerelden
+    // gelir; sunucuda olup yerelde olmayan kayit (baska cihazin yenisi) ASLA silinmez.
+    state = __sbMergeUnsentLocal(state, __localState);
     try { await sbDiffPush(); } catch(e) { console.error('[sb] acilis dirty push', e); }
     sbSnapshotShadow(sbStateToRows()); // shadow = yerel (gonderildi)
   }
@@ -10576,6 +10659,18 @@ async function sbFlushPush() {
 }
 async function sbDiffPush() {
   if (!sbClient) return;
+  // v117 BAYAT-EZME KALKANI: golge GUVENILIR bir temelden alinmadan diff YAPILAMAZ. Bos/eksik
+  // golge "her kayit degismis" demektir; bu halde push, bayat yerel kopyayi _v=Date.now() ile
+  // buluta basip diger cihazlarin yazdiklarini geri sarar. Gonderim ERTELENIR (veri kaybolmaz:
+  // kirli bayrak takili kalir), acilis cekimi bitince gercek diff ile gonderilir.
+  if (!__sbBaseReady) {
+    try { localStorage.setItem(DIRTY_KEY, '1'); } catch(e) {}
+    __trace('⏸ TEMEL HAZIR DEĞİL (açılış çekimi tamamlanmadı) → gönderim ERTELENDİ, yerel değişiklik korunuyor');
+    setCloudDot && setCloudDot('pending');
+    clearTimeout(sbDiffPush._baseT);
+    sbDiffPush._baseT = setTimeout(function(){ try { if (!__sbBaseReady && sbClient) sbLoadAll(); } catch(e) {} }, 5000);
+    return;
+  }
   if (navigator.onLine === false) { setCloudDot && setCloudDot('offline'); return; }
   setCloudDot && setCloudDot('syncing');
   const rows = sbStateToRows();
@@ -11317,7 +11412,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.26.39-onizleme';
+const APP_VERSION = '2026.07.26.40-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
