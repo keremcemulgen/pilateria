@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.25.38-onizleme">
+<meta name="app-version" content="2026.07.26.39-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -2506,6 +2506,8 @@ function applyV10MigrationToState(s) {
     if (!s.settings.openMinute) s.settings.openMinute = 0;
     if (!s.settings.closeMinute) s.settings.closeMinute = 0;
   }
+  // 6) v116: v116 ÖNCESİ yeniden adlandırmalardan kalan bayat grup adlarını kadroyla onar (idempotent)
+  try { __repairStaleGroupNames(s); } catch(e) {}
   return s;
 }
 
@@ -2597,6 +2599,117 @@ function __activeRosterForMonth(g, ay) {
     if (isMemberInactiveInMonth(mm, ay)) return false;
     return isMemberEnrolledInMonth(mid, ay);
   });
+}
+// ───────── v116: UYE YENIDEN ADLANDIRILINCA DONMUS GRUP ADLARI ─────────
+// Kanon: ay bazlı ad KADRO geçmişini korur, YAZIM geçmişini DEĞİL. Aynı insanın adı
+// düzeltildiğinde geçmiş aylar dahil her yerde yeni yazımıyla görünür; ELLE yazılmış
+// adlara ASLA dokunulmaz.
+function __plFirstName(nm) { return ((nm || '').trim().split(/\s+/)[0] || ''); }
+// Donmuş adı parçalarına ayırır: yeni biçim ' - ' (tam ad), eski v18 biçimi '/' (ilk ad).
+function __plNameParts(nm) {
+  const s0 = (nm || '').trim();
+  if (!s0) return null;
+  if (s0.indexOf(' - ') >= 0) return { sep: ' - ', style: 'full',  parts: s0.split(' - ').map(function(p){ return p.trim(); }) };
+  if (s0.indexOf('/')   >= 0) return { sep: '/',   style: 'first', parts: s0.split('/').map(function(p){ return p.trim(); }) };
+  return { sep: '', style: 'single', parts: [s0] };
+}
+// ESKİ adı YENİ adla değiştirir. Hiçbir parça uymazsa null döner (=> YAZMA YOK).
+function __plRewriteFrozen(stored, oldFull, newFull) {
+  const pr = __plNameParts(stored);
+  if (!pr) return null;
+  const oldFirst = __plFirstName(oldFull), newFirst = __plFirstName(newFull);
+  let hit = false;
+  const out = pr.parts.map(function(p) {
+    if (pr.style === 'first') { if (p === oldFirst) { hit = true; return newFirst; } return p; }
+    if (p === oldFull) { hit = true; return newFull; }
+    // tek üyeli grubun adı ilk-isim biçiminde donmuş olabilir ("Ayşe")
+    if (pr.style === 'single' && oldFirst !== oldFull && p === oldFirst) { hit = true; return newFirst; }
+    return p;
+  });
+  return hit ? out.join(pr.sep) : null;
+}
+// saveMember'dan çağrılır: ad düzeltildiyse donmuş grup adlarına YAY (geçmiş aylar dahil).
+function __propagateMemberRename(memberId, oldName, newName) {
+  const oldFull = (oldName || '').trim(), newFull = (newName || '').trim();
+  if (!oldFull || !newFull || oldFull === newFull) return 0;   // ad değişmedi -> HİÇBİR yazma
+  const ms = state.members || [];
+  // ADAŞ KORUMASI: başka bir üye HÂLÂ eski adı taşıyorsa donmuş metin kime aitti belirsiz -> DOKUNMA.
+  if (ms.some(function(m){ return m && m.id !== memberId && (m.name || '').trim() === oldFull; })) return 0;
+  const oldFirst = __plFirstName(oldFull);
+  const firstClash = ms.some(function(m){ return m && m.id !== memberId && __plFirstName(m.name) === oldFirst; });
+  let n = 0;
+  (state.groups || []).forEach(function(g) {
+    if (!g) return;
+    const apply = function(stored) {
+      const pr = __plNameParts(stored);
+      if (!pr) return null;
+      if (pr.style === 'first' && firstClash) return null;   // eski '/' biçiminde ilk-ad adaşı -> DOKUNMA
+      return __plRewriteFrozen(stored, oldFull, newFull);
+    };
+    const gn = apply(g.name);
+    if (gn !== null && gn !== g.name) { g.name = gn; n++; }
+    const mn = g.monthlyNames;
+    if (mn) Object.keys(mn).forEach(function(k) {
+      const v = apply(mn[k]);
+      if (v !== null && v !== mn[k]) { mn[k] = v; n++; }
+    });
+  });
+  return n;
+}
+// v116 ONARIM (idempotent): v116 ÖNCESİ yapılmış yeniden adlandırmalar mevcut veride BAYAT
+// kalmış olabilir. Kadroyla KONUM KONUM hizalar ve YALNIZCA tek bir parçası hiçbir üyeye
+// uymayan (= bir kişinin yazımı değişmiş) metni tazeler. Elle yazılmış adlar için eşikler:
+//  · tek parçalı ada DOKUNMA (elle yazılmış olabilir)   · iki+ parça bayatsa DOKUNMA (bu bir
+//  yeniden adlandırma değil)   · başka bir üyeye uyan parça BAYAT SAYILMAZ (kadro değişmiş).
+function __repairStaleGroupNames(s) {
+  let __gl = null; try { __gl = state; } catch(e) {}
+  const st = s || __gl;
+  if (!st || !Array.isArray(st.groups) || !Array.isArray(st.members)) return 0;
+  const ms = st.members;
+  const known = function(p, style) {
+    return ms.some(function(m) {
+      const nm = ((m && m.name) || '').trim();
+      if (!nm) return false;
+      return style === 'first' ? (__plFirstName(nm) === p) : (nm === p || __plFirstName(nm) === p);
+    });
+  };
+  let n = 0;
+  st.groups.forEach(function(g) {
+    if (!g) return;
+    const fix = function(stored, ay) {
+      const pr = __plNameParts(stored);
+      if (!pr || pr.parts.length < 2) return null;   // tek parçalı ad ELLE yazılmış olabilir -> DOKUNMA
+      const cands = [];
+      try { cands.push(resolveGroupMembersForMonth(g, ay) || []); } catch(e) {}
+      try { if (st === __gl) cands.push(__activeRosterForMonth(g, ay) || []); } catch(e) {}
+      for (let ci = 0; ci < cands.length; ci++) {
+        const roster = cands[ci];
+        if (!roster || roster.length !== pr.parts.length) continue;
+        const names = roster.map(function(id) { const m = ms.find(function(x){ return x && x.id === id; }); return ((m && m.name) || '').trim(); });
+        if (names.some(function(x){ return !x; })) continue;
+        let stale = 0, bad = false;
+        const out = pr.parts.map(function(p, i) {
+          const want = pr.style === 'first' ? __plFirstName(names[i]) : names[i];
+          if (p === want) return p;
+          if (known(p, pr.style)) { bad = true; return p; }   // BAŞKA bir üyeye uyuyor -> kadro değişmiş
+          stale++;
+          return want;
+        });
+        if (bad || stale !== 1) continue;   // TAM BİR kişinin yazımı değişmiş olmalı
+        const joined = out.join(pr.sep);
+        if (joined !== stored) return joined;
+      }
+      return null;
+    };
+    const gn = fix(g.name, currentMonth());
+    if (gn) { g.name = gn; n++; }
+    const mn = g.monthlyNames;
+    if (mn) Object.keys(mn).forEach(function(k) {
+      const v = fix(mn[k], k);
+      if (v) { mn[k] = v; n++; }
+    });
+  });
+  return n;
 }
 // v41 (Kerem kurali): GRUP ADI AY BAZLIDIR.
 // - Elle verilen ad g.monthlyNames[ay]'a yazilir -> o aydan ITIBAREN gecerli, onceki aylar ESKI adini korur.
@@ -5618,6 +5731,8 @@ function saveMember() {
     // v10: archived, packages alanlarını koru
     const prev = state.members[i];
     state.members[i] = { ...prev, ...data, packages: prev.packages || [], archived: prev.archived || false };
+    // v116: AD DÜZELTİLDİYSE donmuş grup adlarına YAY (geçmiş aylar dahil) — aynı insan, yeni yazım.
+    try { __propagateMemberRename(id, (prev && prev.name) || '', name); } catch(e) {}
   } else {
     data.archived = false;
     data.packages = [];
@@ -11202,7 +11317,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.25.38-onizleme';
+const APP_VERSION = '2026.07.26.39-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
