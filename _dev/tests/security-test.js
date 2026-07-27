@@ -20,7 +20,12 @@ setTimeout(async ()=>{ try {
   console.log('[1] CSP + referrer meta head\'de');
   const csp = d.querySelector('meta[http-equiv="Content-Security-Policy"]');
   t('CSP meta var', !!csp);
-  t('connect-src JSONBin + self ile kisitli', csp && /connect-src 'self' https:\/\/api\.jsonbin\.io/.test(csp.content));
+  // v121: bu satir ESKIDEN api.jsonbin.io'nun connect-src'de OLMASINI sart kosuyordu.
+  // O izin, gunluk tam-state sizintisinin (O-5) yapisal ayagiydi. Artik TERSI dogrulanir:
+  // disari yalniz Supabase'e cikilabilir, jsonbin.io'ya ASLA.
+  t('connect-src yalniz self + Supabase (jsonbin.io YOK)',
+    csp && /connect-src 'self' https:\/\/nvbnmhaxumrfsxdzrzzj\.supabase\.co/.test(csp.content)
+        && !/jsonbin/i.test((csp.content.match(/connect-src[^;]*/) || [''])[0]));
   t('object-src none', csp && /object-src 'none'/.test(csp.content));
   t('base-uri self', csp && /base-uri 'self'/.test(csp.content));
   t('frame-ancestors none (clickjacking)', csp && /frame-ancestors 'none'/.test(csp.content));

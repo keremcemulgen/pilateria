@@ -7,12 +7,13 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.27.43">
+<meta name="app-version" content="2026.07.27.44">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
-     Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
+     v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
+     kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
       girişte+yüklemede metin temizliği katmanıdır.) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.jsonbin.io https://nvbnmhaxumrfsxdzrzzj.supabase.co wss://nvbnmhaxumrfsxdzrzzj.supabase.co; worker-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://nvbnmhaxumrfsxdzrzzj.supabase.co wss://nvbnmhaxumrfsxdzrzzj.supabase.co; worker-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
@@ -1751,7 +1752,8 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
     </div>
     <div id="backup-cloud-list" style="margin-top:10px;"></div>
     <div class="note-block">
-      Gece 00:00'da bulut yedeği OTOMATİK alınır (son 30 gün + ay başları 400 güne kadar). Her cihazda ayrıca son 5 günün yerel yedeği ve günde 1 kez ikinci bulut (JSONBin) kopyası tutulur. Uygulama hiç açılamazsa acil ekran: <b>keremcemulgen.github.io/pilateria/recover.html</b>
+      Gece 00:00'da bulut yedeği OTOMATİK alınır (son 30 gün + ay başları 400 güne kadar) ve gün içinde saatlik anlık görüntü tutulur. Her cihazda ayrıca son 5 günün yerel yedeği vardır. Uygulama hiç açılamazsa acil ekran: <b>keremcemulgen.github.io/pilateria/recover.html</b><br><br>
+      <b>v121 — Gizlilik:</b> Eski "ikinci bulut (JSONBin)" kopyası KAPATILDI; üye bilgileri artık hiçbir üçüncü tarafa gönderilmiyor. Buna karşılık tüm yedekler tek sağlayıcıda (Supabase) toplandığı için <b>ayda bir "⬇️ Yedek İndir (JSON)"</b> ile kendi cihazına da bir kopya almanı öneririm — son indirme tarihi yukarıda görünür.
     </div>
   </div>
 </section>
@@ -9419,6 +9421,19 @@ function fillWaTemplate(text, ctx) {
     .replace(/\{fiyat\}[ \u00A0]*₺/g, () => tlFiyat)
     .replace(/\{fiyat\}/g, () => tlFiyat);
 }
+// v121 GİZLİLİK (D-2): WhatsApp bağlantısı artık sayfada statik <a href> içinde
+// BEKLEMEZ. Kişisel veri (isim, borç tutarı, ders saati) yalnız TIKLAMA ANINDA
+// URL'ye dönüşür ve sekme noopener,noreferrer ile açılır: açılan sekmenin
+// window.opener'ı yoktur ve Referer gönderilmez.
+// DÜRÜSTLÜK NOTU: mesaj metni wa.me'ye sorgu dizesiyle gitmeye DEVAM eder —
+// bu wa.me'nin doğasıdır ve zaten alıcı WhatsApp'ın kendisidir. Kaldırılan risk,
+// verinin tıklanmadan önce DOM'da/durum çubuğunda/kopyalanabilir bağlantıda durması.
+function waOpenFrom(btn) {
+  if (!btn || !btn.getAttribute) return;
+  const p = btn.getAttribute('data-wa-p') || '';
+  const m = btn.getAttribute('data-wa-m') || '';
+  window.open(buildWaLink(p, m), '_blank', 'noopener,noreferrer');
+}
 function buildWaLink(phone, text) {
   const p = normalizePhone(phone);
   const msg = encodeURIComponent(text || '');
@@ -9514,7 +9529,7 @@ function sendWa(memberId) {
   const phone = document.getElementById('wa-phone').value;
   const text = document.getElementById('wa-message').value;
   const link = buildWaLink(phone, text);
-  window.open(link, '_blank');
+  window.open(link, '_blank', 'noopener,noreferrer'); // v121 D-2: opener/referrer sızıntısı kapalı
   closeWaModal();
 }
 // ───────── v119 PARASAL BAKIYE KANONU (Kerem 27 Tem) ─────────
@@ -9671,7 +9686,7 @@ function renderTodayMessages() {
     const phone = member.phone || '';
     const phoneOk = !!normalizePhone(phone);
     const waBtn = phoneOk
-      ? `<a href="${buildWaLink(phone, msg)}" target="_blank" rel="noopener noreferrer" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">💬 WhatsApp'ta Aç</a>`
+      ? `<button type="button" onclick="waOpenFrom(this)" data-wa-p="${escapeHtml(phone)}" data-wa-m="${escapeHtml(msg)}" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;">💬 WhatsApp'ta Aç</button>`
       : `<span style="color:var(--bad);font-size:12px;">telefon yok</span>`;
     return `<tr>
       <td><b>👤 ${member.name}</b><br><small style="color:${phoneOk?'var(--muted)':'var(--bad)'}">${phone || 'tel yok'}</small></td>
@@ -9806,7 +9821,6 @@ function openWaBulkModal(memberIds, templateId) {
     const phone = m.phone || '';
     const ctx = { ad: m.name.split(' ')[0] || m.name, kalan: rem, paket: (state.packageTypes[0]||{}).name || '' };
     const msg = fillWaTemplate(tpl.text, ctx);
-    const link = buildWaLink(phone, msg);
     const phoneOk = !!normalizePhone(phone);
     return `<tr>
       <td><b>${m.name}</b></td>
@@ -9814,7 +9828,7 @@ function openWaBulkModal(memberIds, templateId) {
       <td>${money(rem)} ₺</td>
       <td>
         ${phoneOk
-          ? `<a href="${link}" target="_blank" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">📤 Gönder</a>`
+          ? `<button type="button" onclick="waOpenFrom(this)" data-wa-p="${escapeHtml(phone)}" data-wa-m="${escapeHtml(msg)}" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;">📤 Gönder</button>`
           : '<span style="color:var(--bad);font-size:12px;">telefon yok</span>'}
       </td>
     </tr>`;
@@ -9904,6 +9918,9 @@ function __exportDataNow() {
   a.href = url;
   a.download = `pilateria-yedek-${todayISO()}.json`;
   a.click();
+  // v121: yedek panelinin "son elle yedek" satırı için damga (JSONBin kapandı,
+  // elle indirilen kopyanın tazeliği artık görünür olmalı).
+  try { localStorage.setItem('pilateria_last_export_day', todayISO()); } catch(e) {}
   URL.revokeObjectURL(url);
 }
 function importData(e) { // v58: yonetici dogrulamasi — dosya secilir, ONCE dogrula, sonra oku
@@ -10006,6 +10023,13 @@ async function __resetAllDataNow() {
 // SUPABASE_MODE=false iken uygulama ESKİSİ GİBİ JSONBin ile çalışır (canlı güvende).
 // true olduğunda: e-posta girişi + tablo senkronu + realtime (kod: auth/veri katmanı adımlarında).
 const SUPABASE_MODE = true;
+// v121 GİZLİLİK (O-5): JSONBin (eski "ikinci bulut") KAPATILDI ve bir daha açılmamalı.
+// Sebep: JSONBin master key TARAYICIDA DÜZ METİN durur ve günlük yedek TÜM state'i
+// (üye adı, telefon, TC kimlik, sağlık notu, adres, ödemeler) üçüncü tarafa yollardı.
+// Bu bayrak JS tarafındaki tek kapı; ASIL kilit CSP connect-src'dir (yukarıda).
+// Yerel 'pilateria_sync' anahtarı BİLEREK silinmez: JSONBin sürüm geçmişi arşivine
+// (GET /v3/b/{binId}/versions) erişimin tek yolu odur — kurtarma ipucu olarak durur.
+const JSONBIN_ENABLED = false;
 const SUPABASE_URL = 'https://nvbnmhaxumrfsxdzrzzj.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_OdVQd9vKYQF1HZLZT_Ewkg_L-6qqVHL'; // publishable — tarayıcıda güvenli (RLS korur)
 let sbClient = null;
@@ -10165,6 +10189,7 @@ function saveSyncConfig() {
 }
 
 async function pushToCloud(silent) {
+  if (!JSONBIN_ENABLED) return false; // v121 O-5: JSONBin yolu kapalı
   if (!syncCfg.enabled || !syncCfg.key || !syncCfg.bin) {
     if (!silent) renderSyncStatus('Önce senkron ayarlarını girip kaydedin.', 'err');
     return false;
@@ -10193,6 +10218,7 @@ async function pushToCloud(silent) {
   } finally { isSyncing = false; }
 }
 async function pullFromCloud(silent) {
+  if (!JSONBIN_ENABLED) return false; // v121 O-5: JSONBin yolu kapalı
   if (!syncCfg.enabled || !syncCfg.key || !syncCfg.bin) {
     if (!silent) renderSyncStatus('Önce senkron ayarlarını girip kaydedin.', 'err');
     return false;
@@ -10601,6 +10627,7 @@ function __pilDailySnapshot() {
 }
 async function __pilOffsiteDaily() {
   try {
+    if (!JSONBIN_ENABLED) return; // v121 O-5: günlük tam-state gönderimi DURDURULDU
     if (__sbRole !== 'owner') return;
     if (typeof syncCfg === 'undefined' || !syncCfg || !syncCfg.bin || !syncCfg.key) return;
     const day = new Date().toISOString().slice(0, 10);
@@ -10620,12 +10647,14 @@ async function refreshBackupPanel() {
   const ring = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_daily_') === 0) ring.push(k.slice(-10)); } } catch(e) {}
   ring.sort();
-  let offsite = '—'; try { offsite = localStorage.getItem('pilateria_offsite_day') || '—'; } catch(e) {}
+  // v121: JSONBin satırının yerine ELLE indirilen son yedeğin tarihi — sağlayıcı
+  // çeşitliliği kapandığı için kullanıcının bunu görmesi artık daha önemli.
+  let lastExport = 'hiç'; try { lastExport = localStorage.getItem('pilateria_last_export_day') || 'hiç'; } catch(e) {}
   let preCloud = '—'; try { const r = localStorage.getItem('pilateria_pre_cloud_backup'); if (r) preCloud = String(JSON.parse(r).at || '').slice(0, 16).replace('T', ' '); } catch(e) {}
   const rows = [
     '📱 Bu cihazdaki günlük yedekler: <b>' + (ring.length ? ring.map(esc).join(', ') : 'henüz yok') + '</b>',
     '⤵️ Son açılış-öncesi yedeği: <b>' + esc(preCloud) + '</b>',
-    '🛰️ İkinci bulut (JSONBin) son gönderim: <b>' + esc(offsite) + '</b>'
+    '💾 Son elle indirilen yedek (bu cihaz): <b>' + esc(lastExport) + '</b>'
   ];
   const listEl = document.getElementById('backup-cloud-list');
   const nowBtn = document.getElementById('backup-now-btn');
@@ -10712,7 +10741,7 @@ async function sbLoadAll() {
   if (!__loadOk) { __trace('AÇILIŞ: eksik çekim → yerel korundu, 8sn sonra tekrar'); setCloudDot && setCloudDot('offline'); try { sbSubscribeAll(); } catch(e){} clearTimeout(sbLoadAll._t); sbLoadAll._t = setTimeout(() => { try { sbLoadAll(); } catch(e){} }, 8000); return; }
   const total = SB_TABLES.reduce((a, t) => a + Object.keys(all[t]).length, 0);
   if (total === 0 && __sbRole === 'owner') {
-    await __sbFreshenFromJsonbin(); // GÜVENCE: eski sistemin bulutundaki (JSONBin) EN GÜNCEL hali çek — hangi cihazdan geçilirse geçilsin veri kaybolmaz
+    await __sbFreshenFromJsonbin(); // v121: artık işlem yapmaz (JSONBin kapalı). Bulut boş dönerse yerel veri korunur — aşağıdaki v65/v51 koruma katmanları devrede.
   }
   if (total === 0 && __sbRole === 'owner' && (state.members || []).length) {
     // İlk kurulum: bulut boş, cihazda veri var → taşımayı öner
@@ -10797,6 +10826,9 @@ async function sbForceMigrate() {
 // Geçiş öncesi: JSONBin'de bizden yeni veri varsa onu al (SUPABASE modunda JSONBin senkronu kapalı olduğundan tek seferlik bilinçli çekim)
 async function __sbFreshenFromJsonbin() {
   try {
+    // v121 O-5 + VERİ BÜTÜNLÜĞÜ: kapalı. Sızıntının yanı sıra bayat bir JSONBin
+    // kopyasının canlı state'i ezme riskini de kaldırır (Supabase bir an boş dönerse).
+    if (!JSONBIN_ENABLED) return;
     if (!syncCfg || !syncCfg.key || !syncCfg.bin) return;
     const r = await fetch('https://api.jsonbin.io/v3/b/' + syncCfg.bin + '/latest', { headers: { 'X-Master-Key': syncCfg.key } });
     if (!r.ok) return;
@@ -11243,6 +11275,7 @@ function schedulePush(delayMs) {
 }
 
 async function autoPush() {
+  if (!JSONBIN_ENABLED) return; // v121 O-5: JSONBin yolu kapalı
   if (!syncConfigured()) return;
   if (!isDirty()) { setCloudDot('ok'); return; }
   if (navigator.onLine === false) { setCloudDot('offline'); return; }
@@ -11266,6 +11299,7 @@ async function autoPush() {
 }
 
 async function autoPullIfNeeded(reason) {
+  if (!JSONBIN_ENABLED) return; // v121 O-5: JSONBin yolu kapalı
   if (!syncConfigured()) return;
   if (isDirty()) { schedulePush(600); return; }
   if (isSyncing) return;
@@ -11511,7 +11545,7 @@ async function diagnosePinSync() {
   let cloudHash = null;
   let cloudErr = null;
   diag.innerHTML = '<i>Bulut sorgulanıyor...</i>';
-  if (syncCfg.enabled && syncCfg.key && syncCfg.bin) {
+  if (JSONBIN_ENABLED && syncCfg.enabled && syncCfg.key && syncCfg.bin) {
     try {
       const r = await fetch(`https://api.jsonbin.io/v3/b/${syncCfg.bin}/latest`, {
         headers: { 'X-Master-Key': syncCfg.key }
@@ -11541,7 +11575,7 @@ async function diagnosePinSync() {
   if (!localHash && cloudHash) {
     diag.innerHTML += '<div style="margin-top:8px;padding:8px;background:#fff3e0;color:#e65100;border-radius:6px;font-size:12px;">💡 Bulutta PIN var ama bu cihaza inmemiş. <b>Ayarlar → Bulut Senkron → ⬇️ Buluttan Çek</b> yap.</div>';
   }
-  if (localHash && !cloudHash && syncCfg.enabled) {
+  if (JSONBIN_ENABLED && localHash && !cloudHash && syncCfg.enabled) {
     diag.innerHTML += '<div style="margin-top:8px;padding:8px;background:#fff3e0;color:#e65100;border-radius:6px;font-size:12px;">💡 Yerelde PIN var ama bulutta yok. <b>⬆️ Buluta Yolla</b> butonuna bas ya da PIN\'i tekrar kaydet.</div>';
   }
 }
@@ -11632,7 +11666,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.27.43';
+const APP_VERSION = '2026.07.27.44';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
