@@ -77,7 +77,9 @@ h = h.replace(f"APP_VERSION = '{ver}'", f"APP_VERSION = '{ver}-onizleme'")
 rep("navigator.serviceWorker.register('sw.js')", "Promise.resolve() // ÖNİZLEME: SW kaydı yok — .register('sw.js')", 'sw off')
 
 # Bütünlük
-assert h.count('</script>') == 3 and 'init();' in h and h.rstrip().endswith('</html>')  # 2 inline + 1 vendor
+# v122: v120'de init() async oldu (init().catch(...)) — eski 'init();' kontrolu sessizce
+# basarisiz oluyor, preview.html BAYAT kaliyor ve preview-test eski surumu test ediyordu.
+assert h.count('</script>') == 3 and re.search(r'\binit\(\)\s*[;.]', h) and h.rstrip().endswith('</html>')  # 2 inline + 1 vendor
 assert "localStorage.setItem('pilateria'," not in h
 open('preview.html', 'w', encoding='utf-8').write(h)
 print('preview.html uretildi:', len(h), 'karakter, surum', ver + '-onizleme')

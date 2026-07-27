@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.27.44">
+<meta name="app-version" content="2026.07.27.45">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -3480,6 +3480,9 @@ function closeModal(id) {
       }
     } catch(e) { __modalSuppressPopstate = false; }
   }
+  // v122: modal ACIKKEN gelen bulut verisinin ERTELENEN tazelemesi burada uygulanir.
+  // (Aksi halde liste bayat kalirdi: detayda yeni fiyat, listede eski fiyat.)
+  if (__modalStack.length === 0) { try { __flushPendingUIRefresh(); } catch(e){} }
 }
 // v15: Tarayıcı geri tuşu ile en üstteki modal kapanır
 // v17 CRITICAL FIX: closeModal() history.back() çağırırken __modalSuppressPopstate=true
@@ -5305,6 +5308,9 @@ function renderMembers() {
       return;
     }
     tb.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="big">🤷‍♀️</div>Bu dönemde kayıt yok.</div></td></tr>`;
+    // v122: mobil kart listesi de temizlenmeli — yoksa onceki ayin kartlari ekranda BAYAT kalirdi
+    { const __wc = document.getElementById('members-cards');
+      if (__wc) __wc.innerHTML = '<div class="empty" style="padding:24px;">Bu dönemde kayıt yok.</div>'; }
     return;
   }
   { const __mabtn2 = document.getElementById('month-add-btn'); if (__mabtn2) __mabtn2.style.display = (monthISO && monthISO >= ROSTER_START_MONTH) ? '' : 'none'; }
@@ -10519,7 +10525,7 @@ async function sbResync(reason) {
     state = __incoming; applyV10MigrationToState(state); sanitizeStateText(state); save();
     window.__pilSuppressDirty = false; __sbApplying = false;
     sbSnapshotShadow(sbStateToRows());
-    if (!(__uiBusyForPull && __uiBusyForPull())) __refreshUIInPlace();
+    __refreshUIWhenIdle(); // v122: mesgulse ERTELENIR ama KAYBOLMAZ (eskiden sessizce atiliyordu)
   } catch(e) { console.error('[sb] resync', e); }
   finally { __sbResyncBusy = false; }
 }
@@ -11216,7 +11222,12 @@ function __uiBusyForPull() {
 function __refreshUIInPlace() {
   const sy = window.scrollY;
   const scrolled = [...document.querySelectorAll('.table-wrap, .gcal-body, #members-cards, .modal')].map(el => [el, el.scrollTop, el.scrollLeft]);
-  const active = (document.querySelector('.tab.active') || {}).dataset ? document.querySelector('.tab.active').dataset.page : 'dashboard';
+  // v122: aktif sayfanin TEK KAYNAGI .page.active — 'groups' sayfasinin ust sekmesi (.tab) YOK,
+  // bu yuzden eskiden .tab.active null kalip 'dashboard'a dusuyor ve YANLIS sayfa tazeleniyordu.
+  const __pgEl = document.querySelector('.page.active');
+  const active = (__pgEl && __pgEl.id && __pgEl.id.indexOf('page-') === 0)
+    ? __pgEl.id.slice(5)
+    : (((document.querySelector('.tab.active') || {}).dataset) ? document.querySelector('.tab.active').dataset.page : 'dashboard');
   const map = {
     dashboard: () => renderDashboard(),
     calendar:  () => renderCalendar(),
@@ -11236,6 +11247,35 @@ function __refreshUIInPlace() {
     try { window.scrollTo(0, sy); } catch(e){}
     scrolled.forEach(([el, t, l]) => { try { el.scrollTop = t; el.scrollLeft = l; } catch(e){} });
   });
+}
+// v122 KOK FIX: ERTELENEN TAZELEME KAYBOLMAZ.
+// Eskiden bulut verisi uygulandigi anda kullanici mesgulse (modal acik / input odakta)
+// tazeleme sessizce ATILIYORDU; tekrar denenmedigi icin liste DOM'u KALICI bayat kalirdi
+// (uye detayi 8.500, arkadaki liste 8.000). Artik: ertele + bayrakla + tekrar dene,
+// modal kapaninca aninda uygula. Yazma sirasinda kullanici HALA bozulmaz.
+var __pendingUIRefresh = false;
+var __pendingUIRefreshTimer = null;
+const PENDING_UI_REFRESH_RETRY_MS = 1200;
+function __refreshUIWhenIdle() {
+  try {
+    if (__uiBusyForPull && __uiBusyForPull()) {
+      __pendingUIRefresh = true;
+      clearTimeout(__pendingUIRefreshTimer);
+      __pendingUIRefreshTimer = setTimeout(__refreshUIWhenIdle, PENDING_UI_REFRESH_RETRY_MS);
+      return;
+    }
+    const wasDeferred = __pendingUIRefresh;
+    __pendingUIRefresh = false;
+    clearTimeout(__pendingUIRefreshTimer); __pendingUIRefreshTimer = null;
+    __refreshUIInPlace();
+    // Sadece GERCEKTEN ertelenmis bir tazeleme uygulandiginda haber ver (nabiz spam'i yok)
+    if (wasDeferred && window.plToast) { try { plToast('☁️ Güncellendi'); } catch(e){} }
+  } catch(e) { console.error('[sb] refreshWhenIdle', e); }
+}
+function __flushPendingUIRefresh() {
+  if (!__pendingUIRefresh) return;
+  if (__uiBusyForPull && __uiBusyForPull()) return; // hala mesgul — zamanlayici halleder
+  __refreshUIWhenIdle();
 }
 const CONFLICT_BACKUP_KEY = 'pilateria_conflict_backup';
 let lastAutoPullTs = 0;
@@ -11666,7 +11706,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.27.44';
+const APP_VERSION = '2026.07.27.45';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

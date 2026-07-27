@@ -7,12 +7,13 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.27.42-onizleme">
+<meta name="app-version" content="2026.07.27.45-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
-     Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
+     v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
+     kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
       girişte+yüklemede metin temizliği katmanıdır.) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.jsonbin.io https://nvbnmhaxumrfsxdzrzzj.supabase.co wss://nvbnmhaxumrfsxdzrzzj.supabase.co; worker-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://nvbnmhaxumrfsxdzrzzj.supabase.co wss://nvbnmhaxumrfsxdzrzzj.supabase.co; worker-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <!-- PWA: telefona uygulama olarak kurulabilir -->
 <link rel="manifest" href="manifest.json">
@@ -1207,6 +1208,9 @@
 .detail-actions .btn, .md-actions .btn { font-weight:600; }
 .bd-row:nth-child(even), .batch-row:nth-child(even) { background:color-mix(in srgb, var(--muted) 5%, transparent); border-radius:8px; }
 .note-block { border-radius:10px; }
+/* v120 GUVENLIK (Y-2): kimlik ekrani acikken panel PERDE ARKASINDA boyanmasin.
+   Onceden overlay yalniz z-index:9999 idi; veriler DOM'da cizilmis halde duruyordu. */
+body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
 </style>
 <script src="supabase-vendor.js"></script>
 </head>
@@ -1750,7 +1754,8 @@
     </div>
     <div id="backup-cloud-list" style="margin-top:10px;"></div>
     <div class="note-block">
-      Gece 00:00'da bulut yedeği OTOMATİK alınır (son 30 gün + ay başları 400 güne kadar). Her cihazda ayrıca son 5 günün yerel yedeği ve günde 1 kez ikinci bulut (JSONBin) kopyası tutulur. Uygulama hiç açılamazsa acil ekran: <b>keremcemulgen.github.io/pilateria/recover.html</b>
+      Gece 00:00'da bulut yedeği OTOMATİK alınır (son 30 gün + ay başları 400 güne kadar) ve gün içinde saatlik anlık görüntü tutulur. Her cihazda ayrıca son 5 günün yerel yedeği vardır. Uygulama hiç açılamazsa acil ekran: <b>keremcemulgen.github.io/pilateria/recover.html</b><br><br>
+      <b>v121 — Gizlilik:</b> Eski "ikinci bulut (JSONBin)" kopyası KAPATILDI; üye bilgileri artık hiçbir üçüncü tarafa gönderilmiyor. Buna karşılık tüm yedekler tek sağlayıcıda (Supabase) toplandığı için <b>ayda bir "⬇️ Yedek İndir (JSON)"</b> ile kendi cihazına da bir kopya almanı öneririm — son indirme tarihi yukarıda görünür.
     </div>
   </div>
 </section>
@@ -2588,7 +2593,7 @@ function sanitizeStateText(st) {
   if (!st || typeof st !== 'object') return st;
   const FIELDS = {
     members: ['name','phone','tcno','adres','health','note'],
-    groups: ['name','note'],
+    groups: ['name','note','waGroupLink'],
     instructors: ['name','phone','note'],
     payments: ['pkgName','note','method','campaignName'],
     packageTypes: ['name'],
@@ -2617,6 +2622,17 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+// v120 GUVENLIK (K-2b): kullanici/bulut kaynakli bir URL href'e konmadan ONCE buradan gecer.
+// javascript:, data:, vbscript: gibi KOD CALISTIRAN semalar elenir; yalniz http(s) gecer.
+// NOT: donen deger HALA escapeHtml() ile oznitelik baglamina yazilmalidir (cift savunma).
+function safeUrl(u) {
+  if (typeof u !== 'string') return '';
+  const t = u.trim();
+  if (!t) return '';
+  if (/[\u0000-\u001F\u007F]/.test(t)) return '';   // gizli satir sonu/kontrol karakteri kacamagi
+  if (!/^https?:\/\//i.test(t)) return '';            // beyaz liste: SADECE http/https
+  return t;
 }
 // Otomatik grup ismi: üye isimlerinin tire ile birleştirilmiş hali
 // (v10) Kullanıcı isim atamadığında çağrılır
@@ -3472,6 +3488,9 @@ function closeModal(id) {
       }
     } catch(e) { __modalSuppressPopstate = false; }
   }
+  // v122: modal ACIKKEN gelen bulut verisinin ERTELENEN tazelemesi burada uygulanir.
+  // (Aksi halde liste bayat kalirdi: detayda yeni fiyat, listede eski fiyat.)
+  if (__modalStack.length === 0) { try { __flushPendingUIRefresh(); } catch(e){} }
 }
 // v15: Tarayıcı geri tuşu ile en üstteki modal kapanır
 // v17 CRITICAL FIX: closeModal() history.back() çağırırken __modalSuppressPopstate=true
@@ -5297,6 +5316,9 @@ function renderMembers() {
       return;
     }
     tb.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="big">🤷‍♀️</div>Bu dönemde kayıt yok.</div></td></tr>`;
+    // v122: mobil kart listesi de temizlenmeli — yoksa onceki ayin kartlari ekranda BAYAT kalirdi
+    { const __wc = document.getElementById('members-cards');
+      if (__wc) __wc.innerHTML = '<div class="empty" style="padding:24px;">Bu dönemde kayıt yok.</div>'; }
     return;
   }
   { const __mabtn2 = document.getElementById('month-add-btn'); if (__mabtn2) __mabtn2.style.display = (monthISO && monthISO >= ROSTER_START_MONTH) ? '' : 'none'; }
@@ -9413,6 +9435,19 @@ function fillWaTemplate(text, ctx) {
     .replace(/\{fiyat\}[ \u00A0]*₺/g, () => tlFiyat)
     .replace(/\{fiyat\}/g, () => tlFiyat);
 }
+// v121 GİZLİLİK (D-2): WhatsApp bağlantısı artık sayfada statik <a href> içinde
+// BEKLEMEZ. Kişisel veri (isim, borç tutarı, ders saati) yalnız TIKLAMA ANINDA
+// URL'ye dönüşür ve sekme noopener,noreferrer ile açılır: açılan sekmenin
+// window.opener'ı yoktur ve Referer gönderilmez.
+// DÜRÜSTLÜK NOTU: mesaj metni wa.me'ye sorgu dizesiyle gitmeye DEVAM eder —
+// bu wa.me'nin doğasıdır ve zaten alıcı WhatsApp'ın kendisidir. Kaldırılan risk,
+// verinin tıklanmadan önce DOM'da/durum çubuğunda/kopyalanabilir bağlantıda durması.
+function waOpenFrom(btn) {
+  if (!btn || !btn.getAttribute) return;
+  const p = btn.getAttribute('data-wa-p') || '';
+  const m = btn.getAttribute('data-wa-m') || '';
+  window.open(buildWaLink(p, m), '_blank', 'noopener,noreferrer');
+}
 function buildWaLink(phone, text) {
   const p = normalizePhone(phone);
   const msg = encodeURIComponent(text || '');
@@ -9508,7 +9543,7 @@ function sendWa(memberId) {
   const phone = document.getElementById('wa-phone').value;
   const text = document.getElementById('wa-message').value;
   const link = buildWaLink(phone, text);
-  window.open(link, '_blank');
+  window.open(link, '_blank', 'noopener,noreferrer'); // v121 D-2: opener/referrer sızıntısı kapalı
   closeWaModal();
 }
 // ───────── v119 PARASAL BAKIYE KANONU (Kerem 27 Tem) ─────────
@@ -9630,9 +9665,12 @@ function renderTodayMessages() {
       paket: (state.packageTypes.find(p=>p.id===group.defaultPackageId)||{}).name || '',
     };
     const msg = fillWaTemplate(tpl.text, ctx);
-    const waLink = group.waGroupLink || '';
+    // v120 GUVENLIK (K-2b): waGroupLink sanitize edilmiyordu; javascript:alert(1) ve
+    // `"><img onerror=...` yuku panelde HER ACILISTA calisiyordu. Artik protokol beyaz
+    // listesinden geciyor ve oznitelik baglaminda escapeHtml ile yaziliyor.
+    const waLink = safeUrl(group.waGroupLink);
     const linkBtn = waLink
-      ? `<a href="${waLink}" target="_blank" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">🔗 WhatsApp Grubunu Aç</a>`
+      ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener noreferrer" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">🔗 WhatsApp Grubunu Aç</a>`
       : `<button class="btn small secondary" onclick="openGroupModal('${group.id}')" title="Grup modaline ekle">+ Grup Linki</button>`;
     return `<tr>
       <td><b>👯 ${group.name}</b><br><small style="color:var(--muted)">${(group.memberIds||[]).length} üye</small></td>
@@ -9640,7 +9678,7 @@ function renderTodayMessages() {
       <td>${hasOverdue ? `<span style="color:var(--bad)">${money(balance)} ₺</span>` : '<span class="badge ok">Tam</span>'}</td>
       <td style="white-space:pre-wrap;max-width:380px;font-size:13px;">${msg.replace(/</g,'&lt;')}</td>
       <td>
-        <button class="btn small" onclick="copyTodayMessage(this, ${JSON.stringify(msg).replace(/"/g,'&quot;')})" title="Mesajı panoya kopyala">📋 Kopyala</button>
+        <button class="btn small" onclick="copyTodayMessage(this)" data-msg="${escapeHtml(msg)}" title="Mesajı panoya kopyala">📋 Kopyala</button>
         ${linkBtn}
       </td>
     </tr>`;
@@ -9662,7 +9700,7 @@ function renderTodayMessages() {
     const phone = member.phone || '';
     const phoneOk = !!normalizePhone(phone);
     const waBtn = phoneOk
-      ? `<a href="${buildWaLink(phone, msg)}" target="_blank" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">💬 WhatsApp'ta Aç</a>`
+      ? `<button type="button" onclick="waOpenFrom(this)" data-wa-p="${escapeHtml(phone)}" data-wa-m="${escapeHtml(msg)}" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;">💬 WhatsApp'ta Aç</button>`
       : `<span style="color:var(--bad);font-size:12px;">telefon yok</span>`;
     return `<tr>
       <td><b>👤 ${member.name}</b><br><small style="color:${phoneOk?'var(--muted)':'var(--bad)'}">${phone || 'tel yok'}</small></td>
@@ -9670,7 +9708,7 @@ function renderTodayMessages() {
       <td>${hasOverdue ? `<span style="color:var(--bad)">${money(balance)} ₺</span>` : '<span class="badge ok">Tam</span>'}</td>
       <td style="white-space:pre-wrap;max-width:380px;font-size:13px;">${msg.replace(/</g,'&lt;')}</td>
       <td>
-        <button class="btn small" onclick="copyTodayMessage(this, ${JSON.stringify(msg).replace(/"/g,'&quot;')})" title="Mesajı panoya kopyala">📋 Kopyala</button>
+        <button class="btn small" onclick="copyTodayMessage(this)" data-msg="${escapeHtml(msg)}" title="Mesajı panoya kopyala">📋 Kopyala</button>
         ${waBtn}
       </td>
     </tr>`;
@@ -9687,6 +9725,11 @@ function renderTodayMessages() {
 }
 // Mesajı panoya kopyala + buton feedback
 function copyTodayMessage(btn, msg) {
+  // v120 GUVENLIK (K-2a): mesaj eskiden onclick icine JS string'i olarak gomuluyordu.
+  // HTML ozniteligi ONCE entity-cozulur SONRA JS olarak calisir; JSON.stringify(...).replace(/"/g,'&quot;')
+  // '&' karakterini kacirmadigi icin uye adindaki `&quot;` gercek tirnaga donusup string'i kiriyordu.
+  // Artik mesaj data-msg ozniteliginde VERI olarak tasiniyor — kod baglamina hic girmiyor.
+  if (msg === undefined || msg === null) msg = btn.getAttribute('data-msg') || '';
   const done = () => {
     const orig = btn.textContent;
     btn.textContent = '✓ Kopyalandı';
@@ -9792,7 +9835,6 @@ function openWaBulkModal(memberIds, templateId) {
     const phone = m.phone || '';
     const ctx = { ad: m.name.split(' ')[0] || m.name, kalan: rem, paket: (state.packageTypes[0]||{}).name || '' };
     const msg = fillWaTemplate(tpl.text, ctx);
-    const link = buildWaLink(phone, msg);
     const phoneOk = !!normalizePhone(phone);
     return `<tr>
       <td><b>${m.name}</b></td>
@@ -9800,7 +9842,7 @@ function openWaBulkModal(memberIds, templateId) {
       <td>${money(rem)} ₺</td>
       <td>
         ${phoneOk
-          ? `<a href="${link}" target="_blank" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">📤 Gönder</a>`
+          ? `<button type="button" onclick="waOpenFrom(this)" data-wa-p="${escapeHtml(phone)}" data-wa-m="${escapeHtml(msg)}" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;">📤 Gönder</button>`
           : '<span style="color:var(--bad);font-size:12px;">telefon yok</span>'}
       </td>
     </tr>`;
@@ -9845,11 +9887,40 @@ async function confirmAdminVerify() {
   const msg = document.getElementById('adv-msg');
   if (!email || !pass) { if (msg) msg.textContent = 'E-posta ve şifreni gir.'; return; }
   if (msg) msg.textContent = 'Doğrulanıyor...';
+  // v120 GUVENLIK (K-3): bu kapi "yonetici" kapisi olarak sunuluyordu ama YALNIZ PAROLA
+  // dogruluyordu. Gecerli parolasi olan HER personel; Yedek Indir (TC kimlik, adres, saglik
+  // notu), Veri Yukle ve Tumunu Sifirla kapilarindan geciyordu. Artik iki kapi var:
+  //   (1) girilen e-posta ACIK OTURUMUN e-postasi olmali -> hesap degistirerek atlatilamaz,
+  //   (2) profiles.role SUNUCUDAN taze okunur; 'owner' degilse kapi ACILMAZ, modal KAPANMAZ.
+  try {
+    const { data: __cur } = await sbClient.auth.getSession();
+    const __curEmail = ((__cur && __cur.session && __cur.session.user && __cur.session.user.email) || '').trim();
+    if (__curEmail && email.toLowerCase() !== __curEmail.toLowerCase()) {
+      if (msg) msg.textContent = 'Bu ekranda yalnız açık oturumun e-postası kullanılabilir.';
+      return;
+    }
+  } catch(_) {}
   try {
     const { error } = await sbClient.auth.signInWithPassword({ email: email, password: pass });
     if (error) { if (msg) msg.textContent = 'E-posta veya şifre hatalı.'; return; }
     try { const { data } = await sbClient.auth.getSession(); if (data && data.session) __sbSession = data.session; } catch(_) {}
   } catch(e2) { if (msg) msg.textContent = 'Doğrulama başarısız — bağlantıyı kontrol et.'; return; }
+  // ROL KAPISI — __sbRole degiskenine GUVENILMEZ, sunucudan taze okunur.
+  let __role = null;
+  try {
+    const { data: __s2 } = await sbClient.auth.getSession();
+    const __uid = __s2 && __s2.session && __s2.session.user && __s2.session.user.id;
+    if (!__uid) throw new Error('oturum yok');
+    const __pr = await sbClient.from('profiles').select('role').eq('id', __uid).single();
+    __role = (__pr && __pr.data && __pr.data.role) || null;
+  } catch(e3) { __role = null; }
+  if (__role !== 'owner') {
+    if (msg) msg.textContent = (__role === null)
+      ? 'Yetki okunamadı — bağlantıyı kontrol et. İşlem AÇILMADI.'
+      : 'Bu işlem yalnız SAHİP hesabına açıktır. (Bu hesap: personel)';
+    __advCb = null;   // bekleyen tehlikeli islemi dusur
+    return;           // modal ACIK kalir, kullanici geri bildirimi gorur
+  }
   closeModal('modal-admin-verify');
   const cb = __advCb; __advCb = null; if (cb) cb();
 }
@@ -9861,6 +9932,9 @@ function __exportDataNow() {
   a.href = url;
   a.download = `pilateria-yedek-${todayISO()}.json`;
   a.click();
+  // v121: yedek panelinin "son elle yedek" satırı için damga (JSONBin kapandı,
+  // elle indirilen kopyanın tazeliği artık görünür olmalı).
+  try { localStorage.setItem('pilateria_last_export_day', todayISO()); } catch(e) {}
   URL.revokeObjectURL(url);
 }
 function importData(e) { // v58: yonetici dogrulamasi — dosya secilir, ONCE dogrula, sonra oku
@@ -9963,6 +10037,13 @@ async function __resetAllDataNow() {
 // SUPABASE_MODE=false iken uygulama ESKİSİ GİBİ JSONBin ile çalışır (canlı güvende).
 // true olduğunda: e-posta girişi + tablo senkronu + realtime (kod: auth/veri katmanı adımlarında).
 const SUPABASE_MODE = true;
+// v121 GİZLİLİK (O-5): JSONBin (eski "ikinci bulut") KAPATILDI ve bir daha açılmamalı.
+// Sebep: JSONBin master key TARAYICIDA DÜZ METİN durur ve günlük yedek TÜM state'i
+// (üye adı, telefon, TC kimlik, sağlık notu, adres, ödemeler) üçüncü tarafa yollardı.
+// Bu bayrak JS tarafındaki tek kapı; ASIL kilit CSP connect-src'dir (yukarıda).
+// Yerel 'pilateria_sync' anahtarı BİLEREK silinmez: JSONBin sürüm geçmişi arşivine
+// (GET /v3/b/{binId}/versions) erişimin tek yolu odur — kurtarma ipucu olarak durur.
+const JSONBIN_ENABLED = false;
 const SUPABASE_URL = 'https://nvbnmhaxumrfsxdzrzzj.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_OdVQd9vKYQF1HZLZT_Ewkg_L-6qqVHL'; // publishable — tarayıcıda güvenli (RLS korur)
 let sbClient = null;
@@ -9991,12 +10072,13 @@ function sbShowAuth(mode) {
   const ov = document.getElementById('sb-auth-overlay');
   if (!ov) return;
   ov.style.display = 'flex';
+  try { document.body.classList.add('pl-authlock'); } catch(e) {}   // v120 Y-2
   const rb = document.getElementById('sb-role-box'); if (rb) rb.style.display = (mode === 'role') ? 'block' : 'none';
   document.getElementById('sb-login-box').style.display = (mode === 'login') ? 'block' : 'none';
   document.getElementById('sb-setpass-box').style.display = (mode === 'setpass') ? 'block' : 'none';
   if (mode === 'login' || mode === 'setpass') setTimeout(() => { const f = document.getElementById(mode === 'login' ? 'sb-email' : 'sb-newpass'); if (f) f.focus(); }, 80);
 }
-function sbHideAuth() { const ov = document.getElementById('sb-auth-overlay'); if (ov) ov.style.display = 'none'; }
+function sbHideAuth() { const ov = document.getElementById('sb-auth-overlay'); if (ov) ov.style.display = 'none'; try { document.body.classList.remove('pl-authlock'); } catch(e) {} }
 function sbAuthMsg(id, m, ok) { const el = document.getElementById(id); if (el) { el.textContent = m || ''; el.style.color = ok ? '#2e7d32' : '#c62828'; } }
 function sbTrError(error) {
   const m = String((error && error.message) || '');
@@ -10123,6 +10205,7 @@ function saveSyncConfig() {
 async function pushToCloud(silent) {
   renderSyncStatus('🧪 Önizleme modunda bulut kapalıdır — hiçbir veri gönderilmez.', 'warn');
   if (true) return false;
+  if (!JSONBIN_ENABLED) return false; // v121 O-5: JSONBin yolu kapalı
   if (!syncCfg.enabled || !syncCfg.key || !syncCfg.bin) {
     if (!silent) renderSyncStatus('Önce senkron ayarlarını girip kaydedin.', 'err');
     return false;
@@ -10153,6 +10236,7 @@ async function pushToCloud(silent) {
 async function pullFromCloud(silent) {
   renderSyncStatus('🧪 Önizleme modunda bulut kapalıdır — hiçbir veri çekilmez.', 'warn');
   if (true) return false;
+  if (!JSONBIN_ENABLED) return false; // v121 O-5: JSONBin yolu kapalı
   if (!syncCfg.enabled || !syncCfg.key || !syncCfg.bin) {
     if (!silent) renderSyncStatus('Önce senkron ayarlarını girip kaydedin.', 'err');
     return false;
@@ -10453,7 +10537,7 @@ async function sbResync(reason) {
     state = __incoming; applyV10MigrationToState(state); sanitizeStateText(state); save();
     window.__pilSuppressDirty = false; __sbApplying = false;
     sbSnapshotShadow(sbStateToRows());
-    if (!(__uiBusyForPull && __uiBusyForPull())) __refreshUIInPlace();
+    __refreshUIWhenIdle(); // v122: mesgulse ERTELENIR ama KAYBOLMAZ (eskiden sessizce atiliyordu)
   } catch(e) { console.error('[sb] resync', e); }
   finally { __sbResyncBusy = false; }
 }
@@ -10561,6 +10645,7 @@ function __pilDailySnapshot() {
 }
 async function __pilOffsiteDaily() {
   try {
+    if (!JSONBIN_ENABLED) return; // v121 O-5: günlük tam-state gönderimi DURDURULDU
     if (__sbRole !== 'owner') return;
     if (typeof syncCfg === 'undefined' || !syncCfg || !syncCfg.bin || !syncCfg.key) return;
     const day = new Date().toISOString().slice(0, 10);
@@ -10580,12 +10665,14 @@ async function refreshBackupPanel() {
   const ring = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_daily_') === 0) ring.push(k.slice(-10)); } } catch(e) {}
   ring.sort();
-  let offsite = '—'; try { offsite = localStorage.getItem('pilateria_preview_offsite_day') || '—'; } catch(e) {}
+  // v121: JSONBin satırının yerine ELLE indirilen son yedeğin tarihi — sağlayıcı
+  // çeşitliliği kapandığı için kullanıcının bunu görmesi artık daha önemli.
+  let lastExport = 'hiç'; try { lastExport = localStorage.getItem('pilateria_last_export_day') || 'hiç'; } catch(e) {}
   let preCloud = '—'; try { const r = localStorage.getItem('pilateria_preview_pre_cloud_backup'); if (r) preCloud = String(JSON.parse(r).at || '').slice(0, 16).replace('T', ' '); } catch(e) {}
   const rows = [
     '📱 Bu cihazdaki günlük yedekler: <b>' + (ring.length ? ring.map(esc).join(', ') : 'henüz yok') + '</b>',
     '⤵️ Son açılış-öncesi yedeği: <b>' + esc(preCloud) + '</b>',
-    '🛰️ İkinci bulut (JSONBin) son gönderim: <b>' + esc(offsite) + '</b>'
+    '💾 Son elle indirilen yedek (bu cihaz): <b>' + esc(lastExport) + '</b>'
   ];
   const listEl = document.getElementById('backup-cloud-list');
   const nowBtn = document.getElementById('backup-now-btn');
@@ -10672,7 +10759,7 @@ async function sbLoadAll() {
   if (!__loadOk) { __trace('AÇILIŞ: eksik çekim → yerel korundu, 8sn sonra tekrar'); setCloudDot && setCloudDot('offline'); try { sbSubscribeAll(); } catch(e){} clearTimeout(sbLoadAll._t); sbLoadAll._t = setTimeout(() => { try { sbLoadAll(); } catch(e){} }, 8000); return; }
   const total = SB_TABLES.reduce((a, t) => a + Object.keys(all[t]).length, 0);
   if (total === 0 && __sbRole === 'owner') {
-    await __sbFreshenFromJsonbin(); // GÜVENCE: eski sistemin bulutundaki (JSONBin) EN GÜNCEL hali çek — hangi cihazdan geçilirse geçilsin veri kaybolmaz
+    await __sbFreshenFromJsonbin(); // v121: artık işlem yapmaz (JSONBin kapalı). Bulut boş dönerse yerel veri korunur — aşağıdaki v65/v51 koruma katmanları devrede.
   }
   if (total === 0 && __sbRole === 'owner' && (state.members || []).length) {
     // İlk kurulum: bulut boş, cihazda veri var → taşımayı öner
@@ -10757,6 +10844,9 @@ async function sbForceMigrate() {
 // Geçiş öncesi: JSONBin'de bizden yeni veri varsa onu al (SUPABASE modunda JSONBin senkronu kapalı olduğundan tek seferlik bilinçli çekim)
 async function __sbFreshenFromJsonbin() {
   try {
+    // v121 O-5 + VERİ BÜTÜNLÜĞÜ: kapalı. Sızıntının yanı sıra bayat bir JSONBin
+    // kopyasının canlı state'i ezme riskini de kaldırır (Supabase bir an boş dönerse).
+    if (!JSONBIN_ENABLED) return;
     if (!syncCfg || !syncCfg.key || !syncCfg.bin) return;
     const r = await fetch('https://api.jsonbin.io/v3/b/' + syncCfg.bin + '/latest', { headers: { 'X-Master-Key': syncCfg.key } });
     if (!r.ok) return;
@@ -11144,7 +11234,12 @@ function __uiBusyForPull() {
 function __refreshUIInPlace() {
   const sy = window.scrollY;
   const scrolled = [...document.querySelectorAll('.table-wrap, .gcal-body, #members-cards, .modal')].map(el => [el, el.scrollTop, el.scrollLeft]);
-  const active = (document.querySelector('.tab.active') || {}).dataset ? document.querySelector('.tab.active').dataset.page : 'dashboard';
+  // v122: aktif sayfanin TEK KAYNAGI .page.active — 'groups' sayfasinin ust sekmesi (.tab) YOK,
+  // bu yuzden eskiden .tab.active null kalip 'dashboard'a dusuyor ve YANLIS sayfa tazeleniyordu.
+  const __pgEl = document.querySelector('.page.active');
+  const active = (__pgEl && __pgEl.id && __pgEl.id.indexOf('page-') === 0)
+    ? __pgEl.id.slice(5)
+    : (((document.querySelector('.tab.active') || {}).dataset) ? document.querySelector('.tab.active').dataset.page : 'dashboard');
   const map = {
     dashboard: () => renderDashboard(),
     calendar:  () => renderCalendar(),
@@ -11164,6 +11259,35 @@ function __refreshUIInPlace() {
     try { window.scrollTo(0, sy); } catch(e){}
     scrolled.forEach(([el, t, l]) => { try { el.scrollTop = t; el.scrollLeft = l; } catch(e){} });
   });
+}
+// v122 KOK FIX: ERTELENEN TAZELEME KAYBOLMAZ.
+// Eskiden bulut verisi uygulandigi anda kullanici mesgulse (modal acik / input odakta)
+// tazeleme sessizce ATILIYORDU; tekrar denenmedigi icin liste DOM'u KALICI bayat kalirdi
+// (uye detayi 8.500, arkadaki liste 8.000). Artik: ertele + bayrakla + tekrar dene,
+// modal kapaninca aninda uygula. Yazma sirasinda kullanici HALA bozulmaz.
+var __pendingUIRefresh = false;
+var __pendingUIRefreshTimer = null;
+const PENDING_UI_REFRESH_RETRY_MS = 1200;
+function __refreshUIWhenIdle() {
+  try {
+    if (__uiBusyForPull && __uiBusyForPull()) {
+      __pendingUIRefresh = true;
+      clearTimeout(__pendingUIRefreshTimer);
+      __pendingUIRefreshTimer = setTimeout(__refreshUIWhenIdle, PENDING_UI_REFRESH_RETRY_MS);
+      return;
+    }
+    const wasDeferred = __pendingUIRefresh;
+    __pendingUIRefresh = false;
+    clearTimeout(__pendingUIRefreshTimer); __pendingUIRefreshTimer = null;
+    __refreshUIInPlace();
+    // Sadece GERCEKTEN ertelenmis bir tazeleme uygulandiginda haber ver (nabiz spam'i yok)
+    if (wasDeferred && window.plToast) { try { plToast('☁️ Güncellendi'); } catch(e){} }
+  } catch(e) { console.error('[sb] refreshWhenIdle', e); }
+}
+function __flushPendingUIRefresh() {
+  if (!__pendingUIRefresh) return;
+  if (__uiBusyForPull && __uiBusyForPull()) return; // hala mesgul — zamanlayici halleder
+  __refreshUIWhenIdle();
 }
 const CONFLICT_BACKUP_KEY = 'pilateria_preview_conflict';
 let lastAutoPullTs = 0;
@@ -11203,6 +11327,7 @@ function schedulePush(delayMs) {
 }
 
 async function autoPush() {
+  if (!JSONBIN_ENABLED) return; // v121 O-5: JSONBin yolu kapalı
   if (!syncConfigured()) return;
   if (!isDirty()) { setCloudDot('ok'); return; }
   if (navigator.onLine === false) { setCloudDot('offline'); return; }
@@ -11226,6 +11351,7 @@ async function autoPush() {
 }
 
 async function autoPullIfNeeded(reason) {
+  if (!JSONBIN_ENABLED) return; // v121 O-5: JSONBin yolu kapalı
   if (!syncConfigured()) return;
   if (isDirty()) { schedulePush(600); return; }
   if (isSyncing) return;
@@ -11471,7 +11597,7 @@ async function diagnosePinSync() {
   let cloudHash = null;
   let cloudErr = null;
   diag.innerHTML = '<i>Bulut sorgulanıyor...</i>';
-  if (syncCfg.enabled && syncCfg.key && syncCfg.bin) {
+  if (JSONBIN_ENABLED && syncCfg.enabled && syncCfg.key && syncCfg.bin) {
     try {
       const r = await fetch(`https://api.jsonbin.io/v3/b/${syncCfg.bin}/latest`, {
         headers: { 'X-Master-Key': syncCfg.key }
@@ -11501,7 +11627,7 @@ async function diagnosePinSync() {
   if (!localHash && cloudHash) {
     diag.innerHTML += '<div style="margin-top:8px;padding:8px;background:#fff3e0;color:#e65100;border-radius:6px;font-size:12px;">💡 Bulutta PIN var ama bu cihaza inmemiş. <b>Ayarlar → Bulut Senkron → ⬇️ Buluttan Çek</b> yap.</div>';
   }
-  if (localHash && !cloudHash && syncCfg.enabled) {
+  if (JSONBIN_ENABLED && localHash && !cloudHash && syncCfg.enabled) {
     diag.innerHTML += '<div style="margin-top:8px;padding:8px;background:#fff3e0;color:#e65100;border-radius:6px;font-size:12px;">💡 Yerelde PIN var ama bulutta yok. <b>⬆️ Buluta Yolla</b> butonuna bas ya da PIN\'i tekrar kaydet.</div>';
   }
 }
@@ -11592,7 +11718,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.27.42-onizleme';
+const APP_VERSION = '2026.07.27.45-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
@@ -11643,7 +11769,7 @@ function setupVersionCheck() {
 }
 
 // ========== INIT ==========
-function init() {
+async function init() {
   // MIGRATION: Eski sürümdeki localStorage PIN'ini state'e taşı (bir kerelik)
   // v2026.04.21.1'de PIN yalnızca localStorage PIN_HASH_KEY'de tutuluyordu,
   // state._pinHash'e kopyalanıp push edilmediği için diğer cihazlara gitmiyordu.
@@ -11657,7 +11783,10 @@ function init() {
   } catch(e){}
 
   // Giriş: Supabase modunda e-posta+şifre; değilse eski PIN akışı
-  if (SUPABASE_MODE) { sbAuthGate(); } else { lockIfNeeded(); }
+  // v120 GUVENLIK (Y-2): sbAuthGate() await EDILMIYORDU. Panel, kimlik/rol daha
+  // belli degilken boyaniyordu; personel hesabinda sahibe-ozel alanlar bir an gorunebiliyordu.
+  // sbAuthGate her iki dalda da (oturum var / yok) hizlica cozulur — akis kilitlenmez.
+  if (SUPABASE_MODE) { await sbAuthGate(); } else { lockIfNeeded(); }
 
   // defaults for first run: add 4 instructors if none
   if (!state.instructors.length) {
@@ -11694,7 +11823,7 @@ function init() {
   }
 }
 __pilDailySnapshot(); // v104: gunun ilk acilisinda cihaz-ici gunluk yedek (bulut/giris beklemez)
-init();
+init().catch(function(e){ console.error('[init] acilis hatasi', e); });   // v120 Y-2: init artik async
 </script>
 
 <script>
