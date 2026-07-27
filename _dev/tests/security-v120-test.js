@@ -132,5 +132,12 @@ T('Y-3: politika sahip-kosullu (my_role() = owner)', /daily_backups[\s\S]{0,700}
 T('Y-3: eski gevsek politika adi acikca DUSURULUYOR',
   /drop policy if exists daily_backups_auth_all/i.test(sql));
 
+// K-1 — yedek fonksiyonu anonim cagrilamamali. Uretimde yetki zaten kaldirilmis
+// (2026-07-27: acl = postgres + service_role). Betikte de olmali ki yeniden
+// calistirmak PostgreSQL'in varsayilan "herkese EXECUTE" davranisini geri getirmesin.
+T('K-1: kurulum betigi take_backup EXECUTE yetkisini anon/authenticated/public dan ALIYOR',
+  /revoke\s+execute\s+on\s+function\s+public\.pilateria_take_backup\(\)\s+from[^;]*anon[^;]*;/i.test(sql) &&
+  /revoke[^;]*pilateria_take_backup[^;]*authenticated[^;]*;/i.test(sql));
+
 console.log(`\nSONUC: ${ok} gecti, ${fail} kaldi`);
 process.exit(fail ? 1 : 0);

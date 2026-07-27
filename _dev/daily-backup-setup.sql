@@ -70,6 +70,16 @@ begin
   return bid;
 end $$;
 
+-- 2b) K-1 — FONKSİYONU İNTERNETE KAPAT.
+-- PostgreSQL yeni fonksiyonlara EXECUTE yetkisini varsayılan olarak HERKESE verir.
+-- Bu fonksiyon "security definer" olduğu için RLS'i atlar; yetki açık kalırsa
+-- giriş yapmamış herkes onu sınırsız çağırıp veritabanını yorabilir ve o günkü
+-- yedeği anlık halle ezebilir. Üretimde bu yetki zaten kaldırılmış durumda
+-- (2026-07-27 doğrulaması: acl = postgres + service_role); burada da olması,
+-- betiğin ileride yeniden çalıştırılmasının açığı geri getirmemesi içindir.
+-- pg_cron postgres yetkisiyle koştuğundan gece yedeği bundan etkilenmez.
+revoke execute on function public.pilateria_take_backup() from public, anon, authenticated;
+
 -- 3) İlk yedeği HEMEN al (kurulumu doğrulamak için)
 select public.pilateria_take_backup() as ilk_yedek_gunu;
 
