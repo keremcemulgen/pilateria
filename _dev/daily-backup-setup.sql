@@ -15,16 +15,25 @@ create table if not exists public.daily_backups (
 
 alter table public.daily_backups enable row level security;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_policies
-    where schemaname='public' and tablename='daily_backups' and policyname='daily_backups_auth_all'
-  ) then
-    create policy daily_backups_auth_all on public.daily_backups
-      for all to authenticated using (true) with check (true);
-  end if;
-end $$;
+-- v120 GÜVENLİK (Y-3) — BU BLOK ESKİDEN BİR GERİ-ADIM TUZAĞIYDI.
+-- Eski hali "daily_backups_auth_all" adlı, giriş yapmış HERKESE tam yetki veren bir politika
+-- kuruyordu ve varlık kontrolünü POLİTİKA ADINA göre yapıyordu. Üretimde artık sahibe-özel
+-- "daily_backups_owner_all" politikası var; adlar farklı olduğu için bu betiği tekrar
+-- çalıştırmak gevşek politikayı yenisinin YANINA ekliyordu. PostgreSQL permissive politikaları
+-- OR'ladığından yedekler (TC kimlik, adres, sağlık notu dahil TÜM veri) sessizce personele
+-- yeniden açılıyordu. Artık gevşek politika açıkça DÜŞÜRÜLÜR ve sahibe-özel olan kurulur.
+
+-- Rolü profiles'tan okuyan güvenli yardımcı (SECURITY DEFINER + sabit search_path).
+create or replace function public.my_role()
+returns text language sql stable security definer set search_path to 'public'
+as $fn$ select coalesce((select role from public.profiles where id = auth.uid()), 'none') $fn$;
+
+drop policy if exists daily_backups_auth_all  on public.daily_backups;   -- gevşek olanı düşür
+drop policy if exists daily_backups_owner_all on public.daily_backups;   -- idempotent yeniden kurulum
+create policy daily_backups_owner_all on public.daily_backups
+  for all to authenticated
+  using (my_role() = 'owner')
+  with check (my_role() = 'owner');
 
 -- 2) Anlık görüntü fonksiyonu (tüm tabloları tek jsonb'de toplar, 30 günden eskiyi siler)
 create or replace function public.pilateria_take_backup()

@@ -420,10 +420,29 @@ async function snapshotCloudNow(){
   finally{ btn.disabled=false; }
 }
 
+// v120 GÜVENLİK (Y-1): "giriş yapmış olmak" YETMEZ. Bu konsol buluta toplu yazar;
+// personel hesabı da giriş yapabildiği için eskiden HERKES birleştirme çalıştırabiliyordu.
+// Artık profiles.role SUNUCUDAN taze okunur ve yalnız 'owner' devam edebilir.
+async function requireOwner(statusEl){
+  try{
+    const {data:s}=await sb.auth.getSession();
+    const uid=s&&s.session&&s.session.user&&s.session.user.id;
+    if(!uid){ if(statusEl) statusEl.innerHTML='<span class="warn">Önce giriş yap.</span>'; return false; }
+    const {data,error}=await sb.from('profiles').select('role').eq('id',uid).single();
+    const role=(data&&data.role)||null;
+    if(error||role!=='owner'){
+      if(statusEl) statusEl.innerHTML='<span class="danger">'+(role?'Bu işlem yalnız SAHİP hesabına açıktır. (Bu hesap: personel)':'Yetki okunamadı — işlem YAPILMADI.')+'</span>';
+      return false;
+    }
+    return true;
+  }catch(e){ if(statusEl) statusEl.innerHTML='<span class="danger">Yetki denetlenemedi — işlem YAPILMADI.</span>'; return false; }
+}
+
 async function doMerge(){
   const sel=selectedSources();
   const ms=document.getElementById('merge-status'), btn=document.getElementById('merge-btn');
   if(!session){ ms.innerHTML='<span class="warn">Önce giriş yap.</span>'; return; }
+  if(!(await requireOwner(ms))) return;   // v120 Y-1: sahip kapısı
   if(!sel.length){ ms.innerHTML='<span class="warn">Kaynak seçilmedi.</span>'; return; }
   const writeSettings=document.getElementById('opt-settings').checked;
   const union={}; KEY_TABLES.forEach(t=>union[t]=new Set());

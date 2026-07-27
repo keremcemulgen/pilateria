@@ -34,16 +34,25 @@ const CLOUD={members:{M1:{id:'M1',name:'U1',monthly:{}},M2:{id:'M2',name:'U2',mo
   instructors:{},instructor_finance:{},payments:{P1:{id:'P1',date:'2026-07-20',amount:100}},instructor_payouts:{},package_types:{},campaigns:{},wa_templates:{},settings:{}};
 
 const WRITES=[]; let DELETES=0;
+// v120 Y-1: kurtarma konsolu artik SAHIP kapisi ariyor (profiles.role). Mock rolu
+// disaridan degistirilebilir ki hem gecerli (owner) hem reddedilen (staff) yol denenebilsin.
+let ROLE='owner';
 function mockClient(){
   return {
-    auth:{ signInWithPassword:()=>Promise.resolve({data:{session:{user:{id:'u'}}},error:null}) },
+    auth:{
+      signInWithPassword:()=>Promise.resolve({data:{session:{user:{id:'u'}}},error:null}),
+      getSession:()=>Promise.resolve({data:{session:{user:{id:'u',email:'a@b.c'}}},error:null})
+    },
     from:function(tab){
       return {
         select:function(){
           return {
             range:function(){ const arr=Object.keys(CLOUD[tab]||{}).map(id=>({id,data:CLOUD[tab][id]})); return Promise.resolve({data:arr,error:null}); },
             order:function(){ return { limit:function(){ return Promise.resolve({data:[],error:null}); } }; },
-            eq:function(){ return { maybeSingle:function(){ return Promise.resolve({data:null,error:null}); } }; }
+            eq:function(){ return {
+              maybeSingle:function(){ return Promise.resolve({data:null,error:null}); },
+              single:function(){ return Promise.resolve(tab==='profiles'?{data:{role:ROLE},error:null}:{data:null,error:null}); }
+            }; }
           };
         },
         upsert:function(rows){ WRITES.push({table:tab, ids:rows.map(r=>r.id)}); return Promise.resolve({error:null}); },
@@ -122,6 +131,24 @@ setTimeout(async function(){try{
   await new Promise(r=>setTimeout(r,900));
   t('settings yazildi (opt-in)', WRITES.some(x=>x.table==='settings'), JSON.stringify(WRITES.map(x=>x.table)));
   t('yine hic silme yok', DELETES===0, DELETES);
+
+  // ==========================================================================
+  // [7] v120 Y-1 — SAHIP KAPISI. Bu konsol tum bulutu yeniden yazabiliyor;
+  // eskiden "giris yapmis olmak" yetiyordu, yani personel de birlestirebiliyordu.
+  // ==========================================================================
+  console.log('\n[7] v120 Y-1: PERSONEL birlestiremez (sahip kapisi)');
+  ROLE='staff';
+  WRITES.length=0; DELETES=0;
+  const an3=d.querySelectorAll('#analysis .card');
+  an3[1].querySelector('.pick').click();
+  await new Promise(r=>setTimeout(r,60));
+  d.getElementById('merge-btn').click();
+  await new Promise(r=>setTimeout(r,900));
+  t('v120 Y-1: personel rolunde HIC yazma olmadi', WRITES.length===0, WRITES.length);
+  t('v120 Y-1: personel rolunde HIC silme olmadi', DELETES===0, DELETES);
+  t('v120 Y-1: kullaniciya SAHIP uyarisi gosterildi',
+    /SAHİP/.test(d.getElementById('merge-status').textContent), d.getElementById('merge-status').textContent.slice(0,80));
+  ROLE='owner';
 
   console.log("\n=== kurtar-console: "+pass+" OK, "+fail+" FAIL ===");
   process.exit(fail?1:0);

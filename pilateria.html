@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.27.42">
+<meta name="app-version" content="2026.07.27.43">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      Bağlantı yalnız kendi origin + JSONBin'e; nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
      (Uygulama satır-içi JS+onclick kullandığından script/style 'unsafe-inline' zorunlu; asıl XSS savunması
@@ -1207,6 +1207,9 @@
 .detail-actions .btn, .md-actions .btn { font-weight:600; }
 .bd-row:nth-child(even), .batch-row:nth-child(even) { background:color-mix(in srgb, var(--muted) 5%, transparent); border-radius:8px; }
 .note-block { border-radius:10px; }
+/* v120 GUVENLIK (Y-2): kimlik ekrani acikken panel PERDE ARKASINDA boyanmasin.
+   Onceden overlay yalniz z-index:9999 idi; veriler DOM'da cizilmis halde duruyordu. */
+body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
 </style>
 <script src="supabase-vendor.js"></script>
 </head>
@@ -2580,7 +2583,7 @@ function sanitizeStateText(st) {
   if (!st || typeof st !== 'object') return st;
   const FIELDS = {
     members: ['name','phone','tcno','adres','health','note'],
-    groups: ['name','note'],
+    groups: ['name','note','waGroupLink'],
     instructors: ['name','phone','note'],
     payments: ['pkgName','note','method','campaignName'],
     packageTypes: ['name'],
@@ -2609,6 +2612,17 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+// v120 GUVENLIK (K-2b): kullanici/bulut kaynakli bir URL href'e konmadan ONCE buradan gecer.
+// javascript:, data:, vbscript: gibi KOD CALISTIRAN semalar elenir; yalniz http(s) gecer.
+// NOT: donen deger HALA escapeHtml() ile oznitelik baglamina yazilmalidir (cift savunma).
+function safeUrl(u) {
+  if (typeof u !== 'string') return '';
+  const t = u.trim();
+  if (!t) return '';
+  if (/[\u0000-\u001F\u007F]/.test(t)) return '';   // gizli satir sonu/kontrol karakteri kacamagi
+  if (!/^https?:\/\//i.test(t)) return '';            // beyaz liste: SADECE http/https
+  return t;
 }
 // Otomatik grup ismi: üye isimlerinin tire ile birleştirilmiş hali
 // (v10) Kullanıcı isim atamadığında çağrılır
@@ -9622,9 +9636,12 @@ function renderTodayMessages() {
       paket: (state.packageTypes.find(p=>p.id===group.defaultPackageId)||{}).name || '',
     };
     const msg = fillWaTemplate(tpl.text, ctx);
-    const waLink = group.waGroupLink || '';
+    // v120 GUVENLIK (K-2b): waGroupLink sanitize edilmiyordu; javascript:alert(1) ve
+    // `"><img onerror=...` yuku panelde HER ACILISTA calisiyordu. Artik protokol beyaz
+    // listesinden geciyor ve oznitelik baglaminda escapeHtml ile yaziliyor.
+    const waLink = safeUrl(group.waGroupLink);
     const linkBtn = waLink
-      ? `<a href="${waLink}" target="_blank" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">🔗 WhatsApp Grubunu Aç</a>`
+      ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener noreferrer" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">🔗 WhatsApp Grubunu Aç</a>`
       : `<button class="btn small secondary" onclick="openGroupModal('${group.id}')" title="Grup modaline ekle">+ Grup Linki</button>`;
     return `<tr>
       <td><b>👯 ${group.name}</b><br><small style="color:var(--muted)">${(group.memberIds||[]).length} üye</small></td>
@@ -9632,7 +9649,7 @@ function renderTodayMessages() {
       <td>${hasOverdue ? `<span style="color:var(--bad)">${money(balance)} ₺</span>` : '<span class="badge ok">Tam</span>'}</td>
       <td style="white-space:pre-wrap;max-width:380px;font-size:13px;">${msg.replace(/</g,'&lt;')}</td>
       <td>
-        <button class="btn small" onclick="copyTodayMessage(this, ${JSON.stringify(msg).replace(/"/g,'&quot;')})" title="Mesajı panoya kopyala">📋 Kopyala</button>
+        <button class="btn small" onclick="copyTodayMessage(this)" data-msg="${escapeHtml(msg)}" title="Mesajı panoya kopyala">📋 Kopyala</button>
         ${linkBtn}
       </td>
     </tr>`;
@@ -9654,7 +9671,7 @@ function renderTodayMessages() {
     const phone = member.phone || '';
     const phoneOk = !!normalizePhone(phone);
     const waBtn = phoneOk
-      ? `<a href="${buildWaLink(phone, msg)}" target="_blank" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">💬 WhatsApp'ta Aç</a>`
+      ? `<a href="${buildWaLink(phone, msg)}" target="_blank" rel="noopener noreferrer" class="btn small" style="background:#25D366;border-color:#25D366;color:#fff;text-decoration:none;">💬 WhatsApp'ta Aç</a>`
       : `<span style="color:var(--bad);font-size:12px;">telefon yok</span>`;
     return `<tr>
       <td><b>👤 ${member.name}</b><br><small style="color:${phoneOk?'var(--muted)':'var(--bad)'}">${phone || 'tel yok'}</small></td>
@@ -9662,7 +9679,7 @@ function renderTodayMessages() {
       <td>${hasOverdue ? `<span style="color:var(--bad)">${money(balance)} ₺</span>` : '<span class="badge ok">Tam</span>'}</td>
       <td style="white-space:pre-wrap;max-width:380px;font-size:13px;">${msg.replace(/</g,'&lt;')}</td>
       <td>
-        <button class="btn small" onclick="copyTodayMessage(this, ${JSON.stringify(msg).replace(/"/g,'&quot;')})" title="Mesajı panoya kopyala">📋 Kopyala</button>
+        <button class="btn small" onclick="copyTodayMessage(this)" data-msg="${escapeHtml(msg)}" title="Mesajı panoya kopyala">📋 Kopyala</button>
         ${waBtn}
       </td>
     </tr>`;
@@ -9679,6 +9696,11 @@ function renderTodayMessages() {
 }
 // Mesajı panoya kopyala + buton feedback
 function copyTodayMessage(btn, msg) {
+  // v120 GUVENLIK (K-2a): mesaj eskiden onclick icine JS string'i olarak gomuluyordu.
+  // HTML ozniteligi ONCE entity-cozulur SONRA JS olarak calisir; JSON.stringify(...).replace(/"/g,'&quot;')
+  // '&' karakterini kacirmadigi icin uye adindaki `&quot;` gercek tirnaga donusup string'i kiriyordu.
+  // Artik mesaj data-msg ozniteliginde VERI olarak tasiniyor — kod baglamina hic girmiyor.
+  if (msg === undefined || msg === null) msg = btn.getAttribute('data-msg') || '';
   const done = () => {
     const orig = btn.textContent;
     btn.textContent = '✓ Kopyalandı';
@@ -9837,11 +9859,40 @@ async function confirmAdminVerify() {
   const msg = document.getElementById('adv-msg');
   if (!email || !pass) { if (msg) msg.textContent = 'E-posta ve şifreni gir.'; return; }
   if (msg) msg.textContent = 'Doğrulanıyor...';
+  // v120 GUVENLIK (K-3): bu kapi "yonetici" kapisi olarak sunuluyordu ama YALNIZ PAROLA
+  // dogruluyordu. Gecerli parolasi olan HER personel; Yedek Indir (TC kimlik, adres, saglik
+  // notu), Veri Yukle ve Tumunu Sifirla kapilarindan geciyordu. Artik iki kapi var:
+  //   (1) girilen e-posta ACIK OTURUMUN e-postasi olmali -> hesap degistirerek atlatilamaz,
+  //   (2) profiles.role SUNUCUDAN taze okunur; 'owner' degilse kapi ACILMAZ, modal KAPANMAZ.
+  try {
+    const { data: __cur } = await sbClient.auth.getSession();
+    const __curEmail = ((__cur && __cur.session && __cur.session.user && __cur.session.user.email) || '').trim();
+    if (__curEmail && email.toLowerCase() !== __curEmail.toLowerCase()) {
+      if (msg) msg.textContent = 'Bu ekranda yalnız açık oturumun e-postası kullanılabilir.';
+      return;
+    }
+  } catch(_) {}
   try {
     const { error } = await sbClient.auth.signInWithPassword({ email: email, password: pass });
     if (error) { if (msg) msg.textContent = 'E-posta veya şifre hatalı.'; return; }
     try { const { data } = await sbClient.auth.getSession(); if (data && data.session) __sbSession = data.session; } catch(_) {}
   } catch(e2) { if (msg) msg.textContent = 'Doğrulama başarısız — bağlantıyı kontrol et.'; return; }
+  // ROL KAPISI — __sbRole degiskenine GUVENILMEZ, sunucudan taze okunur.
+  let __role = null;
+  try {
+    const { data: __s2 } = await sbClient.auth.getSession();
+    const __uid = __s2 && __s2.session && __s2.session.user && __s2.session.user.id;
+    if (!__uid) throw new Error('oturum yok');
+    const __pr = await sbClient.from('profiles').select('role').eq('id', __uid).single();
+    __role = (__pr && __pr.data && __pr.data.role) || null;
+  } catch(e3) { __role = null; }
+  if (__role !== 'owner') {
+    if (msg) msg.textContent = (__role === null)
+      ? 'Yetki okunamadı — bağlantıyı kontrol et. İşlem AÇILMADI.'
+      : 'Bu işlem yalnız SAHİP hesabına açıktır. (Bu hesap: personel)';
+    __advCb = null;   // bekleyen tehlikeli islemi dusur
+    return;           // modal ACIK kalir, kullanici geri bildirimi gorur
+  }
   closeModal('modal-admin-verify');
   const cb = __advCb; __advCb = null; if (cb) cb();
 }
@@ -9983,12 +10034,13 @@ function sbShowAuth(mode) {
   const ov = document.getElementById('sb-auth-overlay');
   if (!ov) return;
   ov.style.display = 'flex';
+  try { document.body.classList.add('pl-authlock'); } catch(e) {}   // v120 Y-2
   const rb = document.getElementById('sb-role-box'); if (rb) rb.style.display = (mode === 'role') ? 'block' : 'none';
   document.getElementById('sb-login-box').style.display = (mode === 'login') ? 'block' : 'none';
   document.getElementById('sb-setpass-box').style.display = (mode === 'setpass') ? 'block' : 'none';
   if (mode === 'login' || mode === 'setpass') setTimeout(() => { const f = document.getElementById(mode === 'login' ? 'sb-email' : 'sb-newpass'); if (f) f.focus(); }, 80);
 }
-function sbHideAuth() { const ov = document.getElementById('sb-auth-overlay'); if (ov) ov.style.display = 'none'; }
+function sbHideAuth() { const ov = document.getElementById('sb-auth-overlay'); if (ov) ov.style.display = 'none'; try { document.body.classList.remove('pl-authlock'); } catch(e) {} }
 function sbAuthMsg(id, m, ok) { const el = document.getElementById(id); if (el) { el.textContent = m || ''; el.style.color = ok ? '#2e7d32' : '#c62828'; } }
 function sbTrError(error) {
   const m = String((error && error.message) || '');
@@ -11580,7 +11632,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.27.42';
+const APP_VERSION = '2026.07.27.43';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
@@ -11631,7 +11683,7 @@ function setupVersionCheck() {
 }
 
 // ========== INIT ==========
-function init() {
+async function init() {
   // MIGRATION: Eski sürümdeki localStorage PIN'ini state'e taşı (bir kerelik)
   // v2026.04.21.1'de PIN yalnızca localStorage PIN_HASH_KEY'de tutuluyordu,
   // state._pinHash'e kopyalanıp push edilmediği için diğer cihazlara gitmiyordu.
@@ -11645,7 +11697,10 @@ function init() {
   } catch(e){}
 
   // Giriş: Supabase modunda e-posta+şifre; değilse eski PIN akışı
-  if (SUPABASE_MODE) { sbAuthGate(); } else { lockIfNeeded(); }
+  // v120 GUVENLIK (Y-2): sbAuthGate() await EDILMIYORDU. Panel, kimlik/rol daha
+  // belli degilken boyaniyordu; personel hesabinda sahibe-ozel alanlar bir an gorunebiliyordu.
+  // sbAuthGate her iki dalda da (oturum var / yok) hizlica cozulur — akis kilitlenmez.
+  if (SUPABASE_MODE) { await sbAuthGate(); } else { lockIfNeeded(); }
 
   // defaults for first run: add 4 instructors if none
   if (!state.instructors.length) {
@@ -11682,7 +11737,7 @@ function init() {
   }
 }
 __pilDailySnapshot(); // v104: gunun ilk acilisinda cihaz-ici gunluk yedek (bulut/giris beklemez)
-init();
+init().catch(function(e){ console.error('[init] acilis hatasi', e); });   // v120 Y-2: init artik async
 </script>
 
 <script>

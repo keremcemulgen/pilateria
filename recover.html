@@ -187,9 +187,28 @@ async function preserveCurrentPin(rows){
    if(data&&data.data&&('_pinHash'in data.data)&&rows.settings&&rows.settings.singleton) rows.settings.singleton._pinHash=data.data._pinHash; }catch(e){}
 }
 
+// v120 GÜVENLİK (Y-1): "giriş yapmış olmak" YETMEZ. Bu konsol 13 tablonun tamamına upsert eder;
+// personel hesabı da giriş yapabildiği için eskiden HERKES bulut verisini geri yükleyebiliyordu.
+// Artık profiles.role SUNUCUDAN taze okunur ve yalnız 'owner' devam edebilir.
+async function requireOwner(statusEl){
+ try{
+   const {data:s}=await sb.auth.getSession();
+   const uid=s&&s.session&&s.session.user&&s.session.user.id;
+   if(!uid){ if(statusEl) statusEl.innerHTML='<span class="warn">Önce giriş yap.</span>'; return false; }
+   const {data,error}=await sb.from('profiles').select('role').eq('id',uid).single();
+   const role=(data&&data.role)||null;
+   if(error||role!=='owner'){
+     if(statusEl) statusEl.innerHTML='<span class="danger">'+(role?'Bu işlem yalnız SAHİP hesabına açıktır. (Bu hesap: personel)':'Yetki okunamadı — işlem YAPILMADI.')+'</span>';
+     return false;
+   }
+   return true;
+ }catch(e){ if(statusEl) statusEl.innerHTML='<span class="danger">Yetki denetlenemedi — işlem YAPILMADI.</span>'; return false; }
+}
+
 async function doRestore(state, btn, label){
  const gs=document.getElementById('global-status');
  if(!session){ document.getElementById('login-status').innerHTML='<span class="warn">Önce yukarıdan giriş yap.</span>'; document.getElementById('email').scrollIntoView({behavior:'smooth'}); return; }
+ if(!(await requireOwner(gs))) return;   // v120 Y-1: sahip kapısı
  const c=cnt(state);
  if(!confirm('“'+(label||'Yedek')+'”\n\n'+c.members+' üye, '+c.groups+' grup, '+c.lessons+' ders, '+c.payments+' ödeme buluta yüklenecek.\n\nMevcut bulut verisiyle birleştirilir (silme yok). Devam edilsin mi?')) return;
  if(btn) btn.disabled=true; gs.textContent='Yükleniyor…';

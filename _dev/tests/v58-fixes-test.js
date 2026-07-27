@@ -71,7 +71,15 @@ setTimeout(async ()=>{ try {
     typeof w.requireAdminVerify==='function' && typeof w.confirmAdminVerify==='function' &&
     typeof w.__exportDataNow==='function' && typeof w.__importDataFile==='function' && typeof w.__resetAllDataNow==='function');
   // sbClient mock (SUPABASE_MODE=true dosyada; sbInit sbClient set ise onu dondurur)
-  w.eval(`sbClient={auth:{signInWithPassword:async({email,password})=>({error:(email==='admin@p.com'&&password==='dogru')?null:{message:'Invalid login credentials'}}),getSession:async()=>({data:{session:{ok:1}}})}};`);
+  // v120 K-3: kapi artik parolaya EK OLARAK profiles.role okur. Mock rolu disaridan
+  // degistirilebilir ki hem gecerli (owner) hem reddedilen (staff) yol denenebilsin.
+  w.eval(`window.__ROLE='owner'; sbClient={
+    auth:{
+      signInWithPassword:async({email,password})=>({error:(email==='admin@p.com'&&password==='dogru')?null:{message:'Invalid login credentials'}}),
+      getSession:async()=>({data:{session:{ok:1,user:{id:'u1',email:'admin@p.com'}}}})
+    },
+    from:(tab)=>({select:()=>({eq:()=>({single:async()=>({data:{role:window.__ROLE},error:null})})})})
+  };`);
   let called=0; w.__exportDataNow=()=>{called++;};
   w.eval("window.openModal=function(id){window.__lastOpened=id;};");
   w.exportData();
@@ -83,6 +91,36 @@ setTimeout(async ()=>{ try {
   d.getElementById('adv-pass').value='dogru';
   await w.confirmAdminVerify();
   t('DOGRU sifre: islem calisti', called===1, called);
+
+  // ==========================================================================
+  // v120 K-3 — ROL KAPISI. Bu kapi "yonetici dogrulamasi" diye sunuluyordu ama
+  // yalniz PAROLA dogruluyordu: gecerli parolasi olan HER personel Yedek Indir
+  // (TC kimlik, adres, saglik notu), Veri Yukle ve Tumunu Sifirla kapilarindan
+  // geciyordu. Artik e-posta acik oturumunkiyle eslesmeli VE rol 'owner' olmali.
+  // ==========================================================================
+  console.log('[C2] v120 K-3: rol kapisi');
+  w.eval("window.__ROLE='staff';");
+  called=0;
+  w.exportData();                       // bekleyen islemi yeniden kur
+  d.getElementById('adv-email').value='admin@p.com'; d.getElementById('adv-pass').value='dogru';
+  await w.confirmAdminVerify();
+  t('v120 K-3: PERSONEL dogru sifreyle bile GECEMEZ',
+    called===0 && /SAHİP/.test(d.getElementById('adv-msg').textContent), called+' | '+d.getElementById('adv-msg').textContent);
+  // reddedilen islem kuyruktan DUSMELI: sonradan owner olsa bile o islem calismaz
+  w.eval("window.__ROLE='owner';");
+  await w.confirmAdminVerify();
+  t('v120 K-3: reddedilen islem kuyruktan dustu (sonra owner olunca da calismaz)', called===0, called);
+  // hesap degistirerek atlatma: baska bir e-posta ile gecilemez
+  called=0;
+  w.exportData();
+  d.getElementById('adv-email').value='baska@p.com'; d.getElementById('adv-pass').value='dogru';
+  await w.confirmAdminVerify();
+  t('v120 K-3: acik oturumdan BASKA e-posta ile gecilemez',
+    called===0 && /açık oturumun/.test(d.getElementById('adv-msg').textContent), called+' | '+d.getElementById('adv-msg').textContent);
+  // ve dogru hesap + owner hala CALISIYOR (islev bozulmadi)
+  d.getElementById('adv-email').value='admin@p.com';
+  await w.confirmAdminVerify();
+  t('v120 K-3: SAHIP + kendi e-postasi HALA calisiyor (islev bozulmadi)', called===1, called);
 
   console.log('[D] HOCA ORANI: %0 YOK — default %30; elle override calisir');
   w.eval(`
