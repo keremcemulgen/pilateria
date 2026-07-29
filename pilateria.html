@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.29.46">
+<meta name="app-version" content="2026.07.29.47">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -2370,6 +2370,22 @@ function __pilTombRecord() {
     __pilPrevIds = now;
   } catch(e) { /* GÜVENLİ TARAF: mezar taşı yazılamadıysa silme de OLMAZ (kayıt korunur) */ }
 }
+// v124: SESSIZ COKME OLMASIN — her yakalanmamis hata kayda gecer + kullanici uyarilir (dk'da 1 kez)
+window.__pilErrors = window.__pilErrors || [];
+function __pilLogErr(kind, msg) {
+  try {
+    window.__pilErrors.push({ t: new Date().toISOString(), kind: String(kind), msg: String(msg).slice(0, 500) });
+    if (window.__pilErrors.length > 30) window.__pilErrors.shift();
+    const now = Date.now();
+    if (!window.__pilErrToastAt || now - window.__pilErrToastAt > 60000) {
+      window.__pilErrToastAt = now;
+      if (window.plToast) plToast('⚠️ Beklenmedik bir hata oluştu — verin güvende, gerekirse sayfayı yenile');
+    }
+    try { if (typeof __trace === 'function') __trace('⚠️ HATA(' + kind + '): ' + String(msg).slice(0, 120)); } catch(_) {}
+  } catch(_) {}
+}
+window.addEventListener('error', function(ev){ __pilLogErr('error', (ev && ev.message) || 'bilinmeyen'); });
+window.addEventListener('unhandledrejection', function(ev){ var r = ev && ev.reason; __pilLogErr('promise', (r && (r.stack || r.message)) || r || 'promise'); });
 function save() {
   try {
     // v113 TARIH KANONU: yalniz GERCEK kullanici duzenlemesi damgalanir (senkron-uygulama yazimi degil).
@@ -3404,15 +3420,17 @@ function switchPage(page) {
   });
   closeMoreMenu();
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+page));
-  if (page==='dashboard') renderDashboard();
-  if (page==='calendar') renderCalendar();
-  if (page==='groups') renderGroups();
-  if (page==='members') renderMembers();
-  if (page==='archive') { const __am=document.getElementById('archive-month'); if(__am){ __am.value = ((document.getElementById('member-month')||{}).value) || currentMonth(); } renderArchive(); }
-  if (page==='instructors') { renderInstructors(); renderSalaries(); }
-  if (page==='payments') renderPayments();
-  if (page==='reports') renderReports();
-  if (page==='settings') renderSettings();
+  // v124: bir sayfanin render hatasi GECISI COKERTMEZ — kaydet, devam et
+  const __sg = (f) => { try { f(); } catch(e) { if (typeof __pilLogErr === 'function') __pilLogErr('render:' + page, (e && e.stack) || e); } };
+  if (page==='dashboard') __sg(renderDashboard);
+  if (page==='calendar') __sg(renderCalendar);
+  if (page==='groups') __sg(renderGroups);
+  if (page==='members') __sg(renderMembers);
+  if (page==='archive') { const __am=document.getElementById('archive-month'); if(__am){ __am.value = ((document.getElementById('member-month')||{}).value) || currentMonth(); } __sg(renderArchive); }
+  if (page==='instructors') { __sg(renderInstructors); __sg(renderSalaries); }
+  if (page==='payments') __sg(renderPayments);
+  if (page==='reports') __sg(renderReports);
+  if (page==='settings') __sg(renderSettings);
   window.scrollTo(0,0);
 }
 document.getElementById('tabs').addEventListener('click', e => {
@@ -11343,19 +11361,42 @@ function markDirtyAndSchedulePush() {
 function setCloudDot(mode) {
   const el = document.getElementById('cloud-dot');
   if (!el) return;
-  if (!syncConfigured()) { el.style.display = 'none'; return; }
+  // v124: SUPABASE modunda gosterge CANLI — eski kod burada her zaman gizliyordu (kok neden: syncConfigured=false)
+  if (SUPABASE_MODE ? !sbClient : !syncConfigured()) { el.style.display = 'none'; return; }
   el.style.display = 'inline-block';
-  const last = syncCfg.lastSync ? new Date(syncCfg.lastSync).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}) : '';
+  const lastMs = SUPABASE_MODE ? (__sbLastPushAt || 0) : (syncCfg.lastSync || 0);
+  const last = lastMs ? new Date(lastMs).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}) : '';
   const m = {
-    ok:      ['☁️✓', 'Bulutla eşitlendi' + (last ? ' · ' + last : '')],
-    syncing: ['☁️…', 'Buluta yazılıyor...'],
-    pending: ['☁️●', 'Kaydedildi — buluta gönderilmeyi bekliyor'],
-    offline: ['☁️⚠', 'Gönderilemedi — bağlantı gelince otomatik gönderilir'],
-  }[mode] || ['☁️', 'Bulut senkron'];
+    ok:      ['☁️✓', '#2E7D32', 'Bulutla eşitlendi' + (last ? ' · ' + last : '')],
+    syncing: ['☁️…', '#e6a100', 'Buluta yazılıyor...'],
+    pending: ['☁️●', '#e6a100', 'Kaydedildi — buluta gönderilmeyi bekliyor'],
+    offline: ['☁️⚠', '#c62828', 'Gönderilemedi — bağlantı gelince otomatik gönderilir'],
+  }[mode] || ['☁️', '', 'Bulut senkron'];
   el.textContent = m[0];
-  el.title = m[1] + ' — dokun: şimdi senkronize et';
+  el.style.color = m[1];
+  el.style.fontWeight = '700';
+  el.title = m[2] + ' — dokun: şimdi senkronize et';
+  __renderSyncStatusLine(mode, last);
 }
-function cloudDotClick() { if (isDirty()) schedulePush(0); else { lastAutoPullTs = 0; autoPullIfNeeded('manual'); } }
+// v124: paneldeki yazili senkron durumu — nokta ile AYNI kaynaktan beslenir, ayri gercek uretmez
+function __renderSyncStatusLine(mode, last) {
+  const el = document.getElementById('dash-sync-status');
+  if (!el) return;
+  if (SUPABASE_MODE && !sbClient) { el.textContent = ''; return; }
+  if (mode === 'offline') {
+    el.innerHTML = '⚠️ <b style="color:#c62828;">Buluta GÖNDERİLEMİYOR</b> — değişiklikler bu cihazda bekliyor' + (last ? ' · son başarılı gönderim: ' + last : '') + ' · <a href="#" onclick="cloudDotClick();return false;">şimdi dene</a>';
+  } else if (mode === 'syncing' || mode === 'pending') {
+    el.textContent = '☁️ Buluta yazılıyor…';
+  } else {
+    el.textContent = '☁️ Bulut senkron aktif' + (last ? ' · son gönderim: ' + last : '');
+  }
+}
+function cloudDotClick() {
+  if (SUPABASE_MODE) { if (window.plToast) plToast('☁️ Eşitleniyor…'); try { sbResync('manual'); } catch(e) {} return; }
+  if (isDirty()) schedulePush(0); else { lastAutoPullTs = 0; autoPullIfNeeded('manual'); }
+}
+// v124: kalp atisi — gosterge 45 sn'de bir GERCEK durumdan tazelenir (takilip kalmis "ok" olamaz)
+try { setInterval(function(){ try { if (SUPABASE_MODE && !sbClient) return; setCloudDot(navigator.onLine === false ? 'offline' : (isDirty() ? 'pending' : 'ok')); } catch(e){} }, 45000); } catch(e) {}
 
 function schedulePush(delayMs) {
   if (!syncConfigured()) return;
@@ -11756,7 +11797,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.29.46';
+const APP_VERSION = '2026.07.29.47';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
