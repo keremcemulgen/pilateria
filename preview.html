@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.29.47-onizleme">
+<meta name="app-version" content="2026.07.29.48-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -2304,6 +2304,9 @@ function load() {
     console.error('[load] localStorage corruption:', e.message);
     try {
       // Bozuk kopyayı pilateria_corrupted_BACKUP olarak sakla
+      // v125: bozuk-yedek anahtarlari sinirsiz birikiyordu — yazarken de en fazla 2 tut
+      const __oldCb = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_corrupted_BACKUP_') === 0) __oldCb.push(k); }
+      __oldCb.sort(); while (__oldCb.length >= 2) { try { localStorage.removeItem(__oldCb.shift()); } catch(_) {} }
       localStorage.setItem('pilateria_preview_corrupted_BACKUP_' + Date.now(), raw.substring(0, 100000));
     } catch(_) {}
     setTimeout(() => {
@@ -2404,21 +2407,37 @@ function save() {
     markDirtyAndSchedulePush(); // v27 OTOMATİK SENKRON
     if (SUPABASE_MODE) sbSchedulePush(); // v33: Supabase anlık senkron
     if (SUPABASE_MODE && !window.__pilSuppressDirty && !__sbApplying) __trace('✎ YEREL değişiklik kaydedildi');
+    return true;
   } catch(e) {
     // BUG FIX (v9): QuotaExceededError ve diğer save hatalarına net uyarı
     console.error('[save] localStorage error:', e);
     if (e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message||''))) {
+      // v125: once KENDI KENDINE kurtar — agresif buda ve BIR kez yeniden dene
+      if (!window.__pilQuotaRetry) {
+        window.__pilQuotaRetry = true;
+        try {
+          __pilStoragePrune(true);
+          localStorage.setItem('pilateria_preview', JSON.stringify(state));
+          window.__pilQuotaRetry = false;
+          try { if (typeof __trace === 'function') __trace('🧹 DEPO DOLDU — eski yedekler budandi, kayit kurtarildi'); } catch(_) {}
+          if (window.plToast) plToast('🧹 Yerel depo doldu — eski yedekler budandı, kaydın kurtarıldı');
+          markDirtyAndSchedulePush();
+          if (SUPABASE_MODE) sbSchedulePush();
+          return true;
+        } catch(e2) { window.__pilQuotaRetry = false; }
+      }
       alert(
         '⚠️ YEREL DEPO DOLU\n\n' +
         'Tarayıcı yerel deposu (~5MB) doldu, yeni değişiklik kaydedilemedi.\n\n' +
         'Yapılacaklar:\n' +
-        '1. Eski yedekleri temizle: F12 → Application → Local Storage → eski "pilateria_corrupted_BACKUP_*" leri sil\n' +
+        '1. Otomatik budama da yetmedi — sayfayı tam yenile (Ctrl+Shift+R), sorun sürerse Claude\'a bildir\n' +
         '2. Eski ödeme/ders kayıtlarını arşivle (gelecekte arşivleme özelliği gelecek)\n' +
         '3. Verilerin bulutta güvende (otomatik senkron) — bu uyarı yalnız yerel depoyla ilgilidir'
       );
     } else {
       alert('⚠️ Kayıt sırasında hata: ' + (e && e.message || e));
     }
+    return false;
   }
 }
 function uid() { return Math.random().toString(36).slice(2,10); }
@@ -3686,10 +3705,18 @@ function getNextWeekMissing(){
   const start = addDays(ws, 7);   // gelecek hafta Pzt
   const end = addDays(ws, 14);    // sonraki Pzt (haric)
   const cm = currentMonth();
-  const hasInRange = (pred) => state.lessons.some(l => { if(!l||l.status==='cancelled') return false; const d=parseISO(l.date); return d>=start && d<end && pred(l); });
-  const groups = state.groups.filter(g => !isGroupInactiveInMonth(g, cm) && __activeRosterForMonth(g, cm).length>0 && !hasInRange(l => l.groupId===g.id));
+  // v125: TEK GECIS — grup/uye basina tam state.lessons taramasi kare karmasiklikti (ay 36'da ~1.5 sn olacakti)
+  const __gHas = new Set(), __mHas = new Set();
+  state.lessons.forEach(l => {
+    if (!l || l.status === 'cancelled') return;
+    const d = parseISO(l.date);
+    if (!(d >= start && d < end)) return;
+    if (l.groupId) __gHas.add(l.groupId);
+    else (l.memberIds || []).forEach(id => __mHas.add(id));
+  });
+  const groups = state.groups.filter(g => !isGroupInactiveInMonth(g, cm) && __activeRosterForMonth(g, cm).length>0 && !__gHas.has(g.id));
   const inAnyGroup = new Set(); state.groups.forEach(g => __activeRosterForMonth(g, cm).forEach(id=>inAnyGroup.add(id)));
-  const members = state.members.filter(m => !m.archived && isMemberEnrolledInMonth(m.id, cm) && !inAnyGroup.has(m.id) && !hasInRange(l => !l.groupId && (l.memberIds||[]).includes(m.id)));
+  const members = state.members.filter(m => !m.archived && isMemberEnrolledInMonth(m.id, cm) && !inAnyGroup.has(m.id) && !__mHas.has(m.id));
   return { start, end, groups, members };
 }
 function renderNextWeekMissing(){
@@ -3879,6 +3906,20 @@ function __plLessonMonth(l) { return (l && (l.packageMonth || String(l.date || '
 function getOverduePayments() {
   const today = todayISO();
   const out = [];
+  // v125: TEK GECISLIK INDEKSLER — eski kod grup ve uye basina TUM ders/odeme dizisini tariyordu
+  const __gLes = new Map(), __mLes = new Map();
+  state.lessons.forEach(l => {
+    if (!l || l.status === 'cancelled') return;
+    if (l.groupId) { let a = __gLes.get(l.groupId); if (!a) __gLes.set(l.groupId, a = []); a.push(l); }
+    else (l.memberIds || []).forEach(mid => { let a = __mLes.get(mid); if (!a) __mLes.set(mid, a = []); a.push(l); });
+  });
+  const __gPaid = new Map(), __mPaid = new Map();
+  state.payments.forEach(p => {
+    if (!p) return;
+    const ay = p.packageMonth || (p.date ? String(p.date).slice(0,7) : '');
+    if (p.groupId) { const k = p.groupId + '|' + ay; __gPaid.set(k, (__gPaid.get(k) || 0) + (+p.amount || 0)); }
+    else if (p.memberId) { const k = p.memberId + '|' + ay; __mPaid.set(k, (__mPaid.get(k) || 0) + (+p.amount || 0)); }
+  });
   // Derslerin AYLARI -> {ay: o ayin EN ERKEN ders tarihi}
   function __ovMonths(lessons) {
     const map = {};
@@ -3920,11 +3961,11 @@ function getOverduePayments() {
   }
   // GRUPLAR — o ay pasifse borc yok
   state.groups.forEach(g => {
-    const gLessons = state.lessons.filter(l => l.groupId === g.id && l.status !== 'cancelled');
+    const gLessons = __gLes.get(g.id) || [];
     if (!gLessons.length) return;
     const rows = __ovRows(__ovMonths(gLessons),
       ay => (isGroupInactiveInMonth(g, ay) ? 0 : groupExpectedTotal(g, ay)),
-      ay => groupPaidForMonth(g, ay));
+      ay => __gPaid.get(g.id + '|' + ay) || 0);
     if (!rows.length) return;
     const firstAy = rows[0].ay;
     const roster = (typeof __activeRosterForMonth === 'function') ? __activeRosterForMonth(g, firstAy) : [];
@@ -3936,11 +3977,11 @@ function getOverduePayments() {
   });
   // BIREYSEL — uye O AY aktif bir gruba bagliysa o ay GRUP satiri kapsar
   state.members.forEach(m => {
-    const mLessons = state.lessons.filter(l => l && !l.groupId && l.status !== 'cancelled' && (l.memberIds||[]).includes(m.id));
+    const mLessons = __mLes.get(m.id) || [];
     if (!mLessons.length) return;
     const rows = __ovRows(__ovMonths(mLessons),
       ay => (memberActiveGroupForMonth(m.id, ay) ? 0 : ((+memberMonthlyTotalPrice(m.id, ay) || 0) || (m.totalPrice ? +m.totalPrice : 0))),
-      ay => memberPaidForMonth(m.id, ay));
+      ay => __mPaid.get(m.id + '|' + ay) || 0);
     __ovPush({ label: m.name, groupId: '', memberId: m.id }, rows);
   });
   return out.sort((a,b)=>b.daysOverdue - a.daysOverdue);
@@ -4959,7 +5000,7 @@ function archiveGroupMonthly(id) {
   save();
   closeModal('modal-group');
   closeModal('modal-group-detail');
-  renderGroups(); renderMembers(); renderCalendar(); renderDashboard();
+  __refreshUIInPlace(); // v125: yalniz aktif sayfa — digerleri sayfaya girince zaten render olur
   alert(`✅ Grup ${cm} ayından itibaren pasife alındı${cancelled?` (${cancelled} planlı ders iptal edildi)`:''}. Geçmiş aylar değişmedi.`);
 }
 function unarchiveGroup(id) {
@@ -6111,7 +6152,7 @@ async function togglePaidTick(memberId, groupId, ev, monthAy) {
     const __rec2 = buildPaymentRecord('', memberId, groupId||'', todayISO(), __pk0, +__pk0.sessions||8, __kal, __kal, 'Nakit', '', '', 'Tik ile kalan tahsil', false);
     __rec2.autoTick = true; __rec2.packageMonth = ay;
     state.payments.push(__rec2);
-    save(); renderMembers(); renderPayments(); renderDashboard(); renderGroups(); refreshGroupDetailIfOpen();
+    save(); __refreshUIInPlace(); // v125
     return;
   }
   if (existing.length > 0) {
@@ -6193,7 +6234,7 @@ function quickDeletePayment(payId, memberId) {
   if (!confirm(`${fmtDate(p.date)} tarihli ${money(p.amount)} ₺ ödeme silinecek. Emin misin?`)) return;
   state.payments = state.payments.filter(x=>x.id!==payId);
   save();
-  renderMembers(); renderPayments(); renderDashboard(); renderGroups();
+  __refreshUIInPlace(); // v125
   // Üye detay modalı açıksa yenile
   if (document.getElementById('modal-member-detail').classList.contains('open')) {
     openMemberDetail(memberId);
@@ -9011,8 +9052,7 @@ function savePayment() {
   if (memberId && (data.packageMonth >= ROSTER_START_MONTH || ((state.members.find(x=>x.id===memberId)||{}).secondOfMember))) setMemberMonthly(memberId, data.packageMonth, { enrolled: true }); // v58: klon, odeme aldigi ayda da aktif olur
   save();
   closeModal('modal-payment');
-  renderPayments(); renderDashboard(); renderMembers(); renderCalendar(); if(typeof renderReports==='function') renderReports();
-  if (groupId) renderGroups();
+  __refreshUIInPlace(); // v125: yalniz aktif sayfa + acik detaylar
   // v12: Cross-modal sync — arkaplandaki grup/üye detayı varsa yenile
   refreshGroupDetailIfOpen();
   refreshMemberDetailIfOpen();
@@ -9083,7 +9123,7 @@ function saveGroupPaymentAll() {
   }
   save();
   closeModal('modal-payment');
-  renderPayments(); renderDashboard(); renderMembers(); renderGroups(); renderCalendar();
+  __refreshUIInPlace(); // v125
   // v12: Cross-modal sync
   refreshGroupDetailIfOpen();
   refreshMemberDetailIfOpen();
@@ -9095,7 +9135,7 @@ function deletePayment() {
   state.payments = state.payments.filter(p=>p.id!==id);
   save();
   closeModal('modal-payment');
-  renderPayments(); renderDashboard();
+  __refreshUIInPlace(); // v125
 }
 function renderPayments() {
   // member filter options
@@ -10694,6 +10734,27 @@ function __pilPreCloudRing(raw) {
 }
 
 // ===== v104 GARANTI KATMANLARI (Kerem): cihaz gunluk yedek halkasi + ikinci bulut (JSONBin) =====
+// v125: DEPOLAMA HIJYENI — budanmayan anahtarlar iPhone ~5MB kotasini zamanla dolduruyordu.
+function __pilLsKeys(prefix) {
+  const out = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) out.push(k); } } catch(e) {}
+  return out.sort();
+}
+function __pilStoragePrune(aggressive) {
+  try {
+    const cb = __pilLsKeys('pilateria_preview_corrupted_BACKUP_');
+    const keepCb = aggressive ? 0 : 1;
+    while (cb.length > keepCb) { try { localStorage.removeItem(cb.shift()); } catch(e) {} }
+    const dl = __pilLsKeys('pilateria_preview_daily_');
+    const keepDl = aggressive ? 1 : 3;
+    while (dl.length > keepDl) { try { localStorage.removeItem(dl.shift()); } catch(e) {} }
+    if (aggressive) {
+      // bulut (saatlik/gecelik/aybasi) + pre_cloud_1..5 halkasi koruyor; tek-slot eski yedekler kota aciliyken feda edilir
+      ['pilateria_preview_pre_pull_backup', 'pilateria_pre_overwrite_backup', 'pilateria_preview_pre_cloud_backup'].forEach(function(k){ try { localStorage.removeItem(k); } catch(e) {} });
+    }
+    return true;
+  } catch(e) { return false; }
+}
 function __pilDailySnapshot() {
   try {
     const day = new Date().toISOString().slice(0, 10);
@@ -10705,7 +10766,7 @@ function __pilDailySnapshot() {
     const mine = [];
     for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_daily_') === 0) mine.push(k); }
     mine.sort();
-    while (mine.length >= 5) localStorage.removeItem(mine.shift()); // en fazla 5 gun
+    while (mine.length >= 3) localStorage.removeItem(mine.shift()); // v125: en fazla 3 gun (sunucuda saatlik+gecelik+aybasi yedek var)
     try { localStorage.setItem(key, cur); }
     catch(e) { while (mine.length) localStorage.removeItem(mine.shift()); try { localStorage.setItem(key, cur); } catch(e2) {} } // kota korumasi
     try { __trace('📅 Cihaz günlük yedeği alındı: ' + day); } catch(e) {}
@@ -11809,7 +11870,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.29.47-onizleme';
+const APP_VERSION = '2026.07.29.48-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
@@ -11913,6 +11974,7 @@ async function init() {
     Promise.resolve() // ÖNİZLEME: SW kaydı yok — .register('sw.js').catch(err => console.log('[SW] kayıt hatası:', err));
   }
 }
+__pilStoragePrune(false); // v125: acilis budamasi — bozuk-yedek 1, gunluk halka 3
 __pilDailySnapshot(); // v104: gunun ilk acilisinda cihaz-ici gunluk yedek (bulut/giris beklemez)
 init().catch(function(e){ console.error('[init] acilis hatasi', e); });   // v120 Y-2: init artik async
 </script>

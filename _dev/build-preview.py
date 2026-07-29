@@ -20,7 +20,10 @@ def rep(old, new, label, count=1):
 _cg = h.count("localStorage.getItem('pilateria')")
 assert _cg >= 2, f'anahtar get: en az 2 beklenir, bulunan {_cg}'
 rep("localStorage.getItem('pilateria')", "localStorage.getItem('pilateria_preview')", 'anahtar get', count=_cg)
-rep("localStorage.setItem('pilateria',", "localStorage.setItem('pilateria_preview',", 'anahtar set', count=2)
+# v125: save() kota-kurtarma yeniden denemesi ucuncu setItem'i ekledi -> TUMU degistirilir (taban 2)
+_cs = h.count("localStorage.setItem('pilateria',")
+assert _cs >= 2, f'anahtar set: en az 2 beklenir, bulunan {_cs}'
+rep("localStorage.setItem('pilateria',", "localStorage.setItem('pilateria_preview',", 'anahtar set', count=_cs)
 rep("localStorage.removeItem('pilateria')", "localStorage.removeItem('pilateria_preview')", 'anahtar remove')
 rep("const DIRTY_KEY = 'pilateria_dirty';", "const DIRTY_KEY = 'pilateria_preview_dirty';", 'dirty key')
 rep("const CONFLICT_BACKUP_KEY = 'pilateria_conflict_backup';", "const CONFLICT_BACKUP_KEY = 'pilateria_preview_conflict';", 'conflict key')
