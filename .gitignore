@@ -1,3 +1,9 @@
 pilateria-dev.html
 pilateria-dev-false.html
 node_modules/
+
+# Ic dokuman hazirlik alani. Bu depo HERKESE ACIK; durum/handoff dokumanlari
+# acik kalan guvenlik bulgularini (O-*/K-*/Y-*) ve savunma detaylarini icerir,
+# bu yuzden ASLA yayinlanmaz. Kalici kopyalari Claude proje dokumanlarindadir:
+#   claude/pilateria-guncel-durum.md , claude/handoff-ek-vNNN.md
+_dev/_docs/
