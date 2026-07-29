@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.29.49">
+<meta name="app-version" content="2026.07.29.50">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -1306,6 +1306,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
   <div class="grid-stats">
     <div class="stat blue"><div class="label">Aktif Üye</div><div class="value" id="s-members">0</div></div>
     <div class="stat ok"><div class="label" id="s-revenue-label">Bu Ay Gelir (₺)</div><div class="value" id="s-revenue">0</div></div>
+    <div class="stat blue"><div class="label">Net Kâr (₺)</div><div class="value" id="s-netprofit">—</div></div>
     <div class="stat warn"><div class="label">Bu Hafta Dersler</div><div class="value" id="s-lessons">0</div></div>
     <div class="stat"><div class="label" id="s-occupancy-label">Bu Ay Doluluk</div><div class="value" id="s-occupancy">—</div></div>
     <div class="stat bad"><div class="label">Bitmek Üzere (≤2 ders)</div><div class="value" id="s-low">0</div></div>
@@ -1526,6 +1527,18 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
       </select>
     </div>
     <div id="pay-summary" class="grid-stats"></div>
+    <details id="expenses-card" style="margin:10px 0;padding:10px 12px;background:#FFF8F2;border:1px solid #F0DCC8;border-radius:10px;">
+      <summary style="cursor:pointer;font-weight:700;">💸 Giderler <span id="expenses-total" style="font-weight:400;color:var(--muted);margin-left:6px;"></span></summary>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:10px 0;">
+        <input type="date" id="exp-date">
+        <select id="exp-cat"></select>
+        <input type="number" id="exp-amount" placeholder="Tutar ₺" style="width:110px;">
+        <input id="exp-note" placeholder="Not (örn. Temmuz kirası)" style="flex:1;min-width:140px;">
+        <button class="btn small pl-owner-only" onclick="addExpense()">Ekle</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Hoca maaşları buraya YAZILMAZ — Hocalar sayfasındaki maaş ödemeleri net kâra otomatik girer (çift sayım olmaz).</div>
+      <div id="expenses-list"></div>
+    </details>
     <div class="table-wrap">
       <table class="resp-cards">
         <thead><tr>
@@ -1549,6 +1562,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
   </div>
   <div class="card">
     <h2>💰 Vergi Paneli (IBAN tahsilatları için)</h2>
+    <div id="net-profit-panel" style="margin:10px 0;"></div>
     <div id="tax-panel"></div>
     <div class="note-block">
       Vergi hesabı sadece <b>IBAN</b> olarak işaretlenen ödemeleri dikkate alır. Nakit ve kredi kartı bu panelde gösterilmez. KDV ve gelir vergisi oranlarını Ayarlar → Vergi Ayarları'ndan güncelleyebilirsin.
@@ -1934,6 +1948,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
       </div>
     </div>
     <div id="mp-tax-info" style="display:none;background:#e3f2fd;border-left:3px solid var(--blue);padding:8px 12px;border-radius:4px;margin-bottom:10px;font-size:12px;color:#0d47a1;"></div>
+      <label id="mp-refund-wrap" style="display:flex;align-items:center;gap:6px;margin:4px 0 8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="mp-refund" onchange="onRefundToggle()" style="width:auto;"> ↩️ İade kaydı (para çıkışı — tutar negatif yazılır, açıklama zorunlu)</label>
     <div class="field"><label>Not</label><input id="mp-note"></div>
     <div class="row end">
       <button class="btn danger" id="mp-delete-btn" style="margin-right:auto;display:none;" onclick="deletePayment()">🗑 Sil</button>
@@ -2145,6 +2160,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
 // ========== STATE ==========
 const DEFAULT_STATE = {
   monthInit: {}, // v23: hangi aylarin listesi baslatildi (>=2026-08)
+  expenses: [], // v127: giderler [{id,date,category,amount,note}]
   settings: {
     reformers: 5,
     open: 9,
@@ -2447,6 +2463,7 @@ function uid() { return Math.random().toString(36).slice(2,10); }
 // v11: Migration helper — buluttan çekme (pullFromCloud) sonrası da çağırılır
 // Idempotent: var olan v10+ alanlarını koruyor, sadece eksikleri tamamlıyor.
 function applyV10MigrationToState(s) {
+  if (!Array.isArray(s.expenses)) s.expenses = []; // v127: eski kayitli durumlarda gider dizisini tamamla
   // v25 MIGRATION (idempotent): eski GENEL notlar Haziran 2026 notuna tasinir — aylar arasi tasinma biter.
   try {
     (s.members||[]).forEach(m => {
@@ -3781,6 +3798,7 @@ function renderDashboard() {
   { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Geliri (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
   const rev = state.payments.filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === m).reduce((a,b)=>a+(+b.amount||0),0);
   document.getElementById('s-revenue').textContent = money(rev);
+  try { const __np = netProfitForMonth(m); const __npe = document.getElementById('s-netprofit'); if (__npe) __npe.textContent = money(__np.net); } catch(e) {} // v127
   // this week lessons
   const ws = startOfWeek(0), we = addDays(ws,7);
   const wl = state.lessons.filter(l=>{
@@ -8922,6 +8940,8 @@ function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
   // reset prorate
   const pcb = document.getElementById('mp-prorate');
   if (pcb) { pcb.checked = false; document.getElementById('mp-prorate-fields').style.display='none'; document.getElementById('mp-prorate-info').textContent=''; }
+  const rcb = document.getElementById('mp-refund'); // v127: iade kutusunu sifirla / duzenlemede esitle
+  if (rcb) { rcb.checked = false; const __eP = editId ? state.payments.find(p=>p.id===editId) : null; if (__eP && (+__eP.amount < 0 || __eP.refund)) { rcb.checked = true; document.getElementById('mp-amount').value = Math.abs(+__eP.amount || 0); document.getElementById('mp-amount').readOnly = false; } }
   // v18: grup uyesi icin tutar kilidi (yeni odemede)
   setupPayPriceLock(document.getElementById('mp-member').value || memberId, editId, groupId);
   renderTaxBreakdown();
@@ -9039,6 +9059,22 @@ function applyLockedShare() {
   if (info && g) info.textContent = `👯 ${groupDisplayName(g, (document.getElementById('mp-pkg-month')||{}).value || currentMonth())} üyesi — ${(__capL.defined > 0 && __capL.paid > 0 && __capL.kalan > 0.005) ? `tutar KALAN bakiyeye kilitli (${money(__capL.kalan)} ₺ — taksit tamamlama)` : `tutar grubun kişi başı payına kilitli (${money(share)} ₺)`}. Farklı tutar için "✏️ Farklı tutar gir" işaretle.`;
   renderTaxBreakdown();
 }
+// v127: IADE — tutar negatif kaydedilir, kalan bakiye artar; tavan/paket mantigi calismaz
+function onRefundToggle() {
+  const cb = document.getElementById('mp-refund');
+  const amountEl = document.getElementById('mp-amount');
+  const info = document.getElementById('mp-discount-info');
+  if (cb && cb.checked) {
+    amountEl.readOnly = false; amountEl.style.background = '#FDECEA';
+    if (info) info.textContent = '↩️ İade: girdiğin tutar NEGATİF kaydedilir; üyenin kalan bakiyesi artar. Açıklama (Not) zorunlu.';
+  } else {
+    amountEl.style.background = '';
+    setupPayPriceLock(document.getElementById('mp-member').value, document.getElementById('mp-id').value, document.getElementById('mp-group').value);
+    if (info) info.textContent = '';
+  }
+  renderTaxBreakdown();
+  renderPayBalanceStrip();
+}
 function onCustomPriceToggle() {
   const cb = document.getElementById('mp-custom-price');
   const amountEl = document.getElementById('mp-amount');
@@ -9122,7 +9158,10 @@ function savePayment() {
     if (!confirm('⚠️ Tutar 0 ₺ olarak kaydedilecek. Doğru mu?')) return;
   }
   // v110 (Kerem): TAKSIT SERBEST, TANIMLI FIYAT ASILAMAZ. Fiyat tanimsizsa eski mukerrer korumasi surer.
-  {
+  const isRefund = !!(document.getElementById('mp-refund') && document.getElementById('mp-refund').checked); // v127
+  if (isRefund && !(amount > 0)) { markInvalid('mp-amount', 'İade tutarı 0\'dan büyük olmalı'); return; }
+  if (isRefund && !note) { markInvalid('mp-note', 'İade için açıklama zorunlu'); alert('⛔ İade kaydı için Not alanına kısa bir açıklama yaz (örn. "2 ders iadesi").'); return; }
+  if (!isRefund) {
     const __pmMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
     const __cap = paymentCapCheck(memberId, groupId, __pmMonth, amount, id || '');
     if (__cap.defined > 0) {
@@ -9142,17 +9181,18 @@ function savePayment() {
     }
   }
   const partial = !!(document.getElementById('mp-prorate') && document.getElementById('mp-prorate').checked);
-  const data = buildPaymentRecord(id, memberId, groupId, date, pkgObj, sessions, listPrice, amount, method, campaignId, campaignName, note, partial);
+  const data = buildPaymentRecord(id, memberId, groupId, date, pkgObj, sessions, listPrice, (isRefund ? -Math.abs(amount) : amount), method, campaignId, campaignName, note, partial);
   // v22: packageMonth = kullanicinin SECTIGI paket ayi (gec odeme dogru aya yazilir)
   data.packageMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
+  if (isRefund) { data.refund = true; data.listPrice = 0; data.discount = 0; data.sessions = 0; } // v127
   // v10: Arşivdeki üye için ödeme yapılıyorsa otomatik aktive et
   if (memberId && isMemberArchived(memberId)) unarchiveMember(memberId);
   if (id) { const i = state.payments.findIndex(x=>x.id===id); state.payments[i] = data; }
   else state.payments.push(data);
   // v22: Paket baslangici ODEME TARIHINDEN BAGIMSIZ (elle > ilk ders > ayin 1'i)
   const __pkgStart = resolvePkgStartDate(groupId ? 'group' : 'member', groupId || memberId, data.packageMonth);
-  if (groupId && !id && !partial) ensureGroupPackageStart(groupId, __pkgStart);
-  if (!partial) {
+  if (groupId && !id && !partial && !isRefund) ensureGroupPackageStart(groupId, __pkgStart);
+  if (!partial && !isRefund) {
     if (groupId) {
       const g = state.groups.find(x => x.id === groupId);
       if (g && !(g.packages||[]).find(p => p.month === data.packageMonth)) {
@@ -9166,7 +9206,7 @@ function savePayment() {
     }
   }
   // v23: odeme alinan uye, paket ayinin listesine otomatik girer
-  if (memberId && (data.packageMonth >= ROSTER_START_MONTH || ((state.members.find(x=>x.id===memberId)||{}).secondOfMember))) setMemberMonthly(memberId, data.packageMonth, { enrolled: true }); // v58: klon, odeme aldigi ayda da aktif olur
+  if (!isRefund) if (memberId && (data.packageMonth >= ROSTER_START_MONTH || ((state.members.find(x=>x.id===memberId)||{}).secondOfMember))) setMemberMonthly(memberId, data.packageMonth, { enrolled: true }); // v58: klon, odeme aldigi ayda da aktif olur
   save();
   closeModal('modal-payment');
   __refreshUIInPlace(); // v125: yalniz aktif sayfa + acik detaylar
@@ -9178,6 +9218,7 @@ function saveGroupPaymentAll() {
   clearModalErrors('modal-payment');
   const groupId = document.getElementById('mp-group').value;
   if (!groupId) { alert('Grup bilgisi yok.'); return; }
+  if (document.getElementById('mp-refund') && document.getElementById('mp-refund').checked) { alert('↩️ İade kaydı tek üye için "Kaydet" ile yapılır (toplu değil).'); return; } // v127
   const g = state.groups.find(x=>x.id===groupId);
   if (!g || !groupActiveMemberCount(g)) { alert('Grupta üye yok.'); return; }
   const date = document.getElementById('mp-date').value;
@@ -9254,6 +9295,67 @@ function deletePayment() {
   closeModal('modal-payment');
   __refreshUIInPlace(); // v125
 }
+// ===== v127: GIDER TAKIBI =====
+const EXPENSE_CATS = ['Kira','Elektrik/Su/Doğalgaz','Malzeme/Ekipman','Temizlik','Pazarlama','Vergi/SGK','Diğer'];
+function expensesForMonth(monthISO) {
+  return (state.expenses||[]).filter(e => e && String(e.date||'').slice(0,7) === monthISO);
+}
+function expensesTotalForMonth(monthISO) {
+  return Math.round(expensesForMonth(monthISO).reduce((a,e)=>a+(+e.amount||0),0) * 100) / 100;
+}
+function instructorPayoutsTotalForMonth(monthISO) {
+  const pr = String(monthISO||'').split('-').map(Number);
+  return Math.round(((state.instructorPayouts||[]).filter(p => p && p.year === pr[0] && p.month === pr[1]).reduce((a,p)=>a+(+p.amount||0),0)) * 100) / 100;
+}
+function netProfitForMonth(monthISO) {
+  const rev = (state.payments||[]).filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === monthISO).reduce((a,b)=>a+(+b.amount||0),0);
+  const pay = instructorPayoutsTotalForMonth(monthISO);
+  const exp = expensesTotalForMonth(monthISO);
+  return { rev: Math.round(rev*100)/100, pay: pay, exp: exp, net: Math.round((rev - pay - exp)*100)/100 };
+}
+function renderExpenses(monthISO) {
+  const el = document.getElementById('expenses-list');
+  if (!el) return;
+  const cEl = document.getElementById('exp-cat');
+  if (cEl && !cEl.options.length) cEl.innerHTML = EXPENSE_CATS.map(c => `<option>${c}</option>`).join('');
+  const dEl = document.getElementById('exp-date'); if (dEl && !dEl.value) dEl.value = todayISO();
+  const ay = monthISO || ((document.getElementById('pay-month')||{}).value) || currentMonth();
+  const list = expensesForMonth(ay).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const totEl = document.getElementById('expenses-total');
+  if (totEl) totEl.innerHTML = list.length ? `${ay}: <b>${money(expensesTotalForMonth(ay))} ₺</b> (${list.length} kayıt)` : `${ay}: kayıt yok`;
+  el.innerHTML = list.map(e => `<div class="row" style="gap:8px;align-items:center;margin:3px 0;font-size:13px;flex-wrap:wrap;">
+    <span style="min-width:86px;">${fmtDate(e.date)}</span>
+    <span class="badge" style="background:#ECEFF1;color:#37474F;">${escapeHtml(e.category||'Diğer')}</span>
+    <b>${money(+e.amount||0)} ₺</b>
+    <span style="color:var(--muted);flex:1;">${escapeHtml(e.note||'')}</span>
+    <button class="btn small secondary pl-owner-only" onclick="removeExpense('${e.id}')">Sil</button>
+  </div>`).join('');
+}
+function addExpense() {
+  const date = (document.getElementById('exp-date')||{}).value;
+  const cat = (document.getElementById('exp-cat')||{}).value || 'Diğer';
+  const amount = +((document.getElementById('exp-amount')||{}).value) || 0;
+  const note = ((document.getElementById('exp-note')||{}).value||'').trim();
+  if (!date) { alert('Gider tarihi seç.'); return; }
+  if (amount <= 0) { alert('Tutar 0\'dan büyük olmalı.'); return; }
+  state.expenses = state.expenses || [];
+  state.expenses.push({ id: uid(), date: date, category: cat, amount: Math.round(amount*100)/100, note: note });
+  save();
+  const aEl = document.getElementById('exp-amount'); if (aEl) aEl.value = '';
+  const nEl = document.getElementById('exp-note'); if (nEl) nEl.value = '';
+  renderExpenses(String(date).slice(0,7));
+  try { __refreshUIInPlace(); } catch(e) {}
+  if (window.plToast) plToast('💸 Gider kaydedildi');
+}
+function removeExpense(id) {
+  const e = (state.expenses||[]).find(x => x && x.id === id);
+  if (!e) return;
+  if (!confirm(fmtDate(e.date) + ' — ' + (e.category||'') + ' ' + money(+e.amount||0) + ' ₺ gider kaydı silinecek. Emin misin?')) return;
+  state.expenses = (state.expenses||[]).filter(x => !(x && x.id === id));
+  save();
+  renderExpenses();
+  try { __refreshUIInPlace(); } catch(err) {}
+}
 function renderPayments() {
   // member filter options
   const mf = document.getElementById('pay-member-filter');
@@ -9261,6 +9363,7 @@ function renderPayments() {
   mf.innerHTML = '<option value="">Tüm üyeler</option>' + state.members.slice().sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   mf.value = cur;
   const mm = document.getElementById('pay-month').value;
+  try { renderExpenses(mm || currentMonth()); } catch(e) {} // v127
   const fm = document.getElementById('pay-member-filter').value;
   let list = state.payments.slice().sort((a,b)=>b.date.localeCompare(a.date));
   if (mm) list = list.filter(p=>paymentMonthOf(p)===mm); // v58 KANON: PAKET AYINA gore listele (gec odeme dogru ayda)
@@ -9414,6 +9517,18 @@ function renderReports() {
   const kdvRate = state.settings.kdvRate ?? 20;
   const gvRate = state.settings.gvRate ?? 15;
 
+  // v127: NET KAR — tahsilat − hoca odemeleri − giderler (panel geliri artik brut degil)
+  (function(){
+    const np = document.getElementById('net-profit-panel');
+    if (!np) return;
+    const N = netProfitForMonth(m);
+    np.innerHTML = `<h3 style="margin:4px 0 8px;">💰 Net Kâr (${m})</h3><div class="grid-stats">
+      <div class="stat blue"><div class="label">Tahsilat</div><div class="value">${money(N.rev)} ₺</div></div>
+      <div class="stat warn"><div class="label">Hoca Ödemeleri</div><div class="value">−${money(N.pay)} ₺</div></div>
+      <div class="stat warn"><div class="label">Giderler</div><div class="value">−${money(N.exp)} ₺</div></div>
+      <div class="stat ${N.net >= 0 ? 'ok' : 'warn'}"><div class="label">NET KÂR</div><div class="value">${money(N.net)} ₺</div></div>
+    </div>`;
+  })();
   document.getElementById('tax-panel').innerHTML = `
     <div class="grid-stats">
       <div class="stat blue"><div class="label">IBAN Tahsilat (KDV dahil)</div><div class="value">${money(ibanGross)} ₺</div></div>
@@ -10602,7 +10717,7 @@ let __sbShadow = {};   // tablo → { id → JSON.stringify(data) }  (diff + ech
 let __sbBaseReady = false;
 let __sbPushTimer = null;
 let __sbApplying = false; // realtime uygularken save-döngüsünü önle
-const SB_TABLES = ['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
+const SB_TABLES = ['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings','expenses']; // v127: expenses eklendi
 
 // ===== v.20 EŞZAMANLILIK: zaman-damgalı çakışma çözümü + yeniden-tazeleme =====
 let __sbVer = {};      // tablo -> { id -> _v (updatedAt ms) }
@@ -10620,7 +10735,7 @@ function __sbHash(o) {           // djb2 — hızlı; yalnız "değişti mi?" so
   for (let i = 0; i < s0.length; i++) h = (((h << 5) + h) ^ s0.charCodeAt(i)) >>> 0;
   return h.toString(36) + ':' + s0.length;
 }
-function __sbMergeColls() { return ['members','groups','lessons','instructors','payments','packageTypes','campaigns']; }
+function __sbMergeColls() { return ['members','groups','lessons','instructors','payments','packageTypes','campaigns','expenses']; } // v127: gider kayitlari da kayit-bazli birlesir
 // AÇILIŞ PARMAK İZİ: uygulama açıldığında yerel veri NEYDİ. `let state = load()` hemen ardından alınır.
 function __sbFingerprint(st) {
   if (!st) return null;
@@ -10788,6 +10903,7 @@ function sbStateToRows() {
   (state.packageTypes || []).forEach(pt => { rows.package_types[pt.id] = pt; });
   (state.campaigns || []).forEach(c => { rows.campaigns[c.id] = c; });
   (state.waTemplates || []).forEach((w, ix) => { const id = w.id || ('wt-' + ix); rows.wa_templates[id] = w; });
+  (state.expenses || []).forEach(e => { if (e && e.id) rows.expenses[e.id] = e; }); // v127
   const st = JSON.parse(JSON.stringify(state.settings || {}));
   st._pinHash = state._pinHash; st.monthInit = state.monthInit || {};
   rows.settings['singleton'] = st;
@@ -10806,6 +10922,7 @@ function sbRowsToState(all) {
   fresh.packageTypes = Object.values(by('package_types'));
   fresh.campaigns = Object.values(by('campaigns'));
   fresh.waTemplates = Object.values(by('wa_templates'));
+  fresh.expenses = Object.values(by('expenses')); // v127
   const st = by('settings')['singleton'];
   if (st) {
     const s2 = JSON.parse(JSON.stringify(st));
@@ -11302,6 +11419,7 @@ function sbApplyOne(t, id) {
   else if (t === 'package_types') { state.packageTypes = state.packageTypes || []; upsert(state.packageTypes, S('package_types')); }
   else if (t === 'campaigns') { state.campaigns = state.campaigns || []; upsert(state.campaigns, S('campaigns')); }
   else if (t === 'wa_templates') { state.waTemplates = state.waTemplates || []; upsert(state.waTemplates, S('wa_templates')); }
+  else if (t === 'expenses') { state.expenses = state.expenses || []; upsert(state.expenses, S('expenses')); } // v127
   else if (t === 'settings') { const st = S('settings'); if (st) { const s2 = JSON.parse(JSON.stringify(st)); if (s2._pinHash) state._pinHash = s2._pinHash; if (s2.monthInit) state.monthInit = s2.monthInit; delete s2._pinHash; delete s2.monthInit; state.settings = Object.assign({}, state.settings, s2); } }
 }
 function sbSubscribeAll() {
@@ -11996,7 +12114,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.29.49';
+const APP_VERSION = '2026.07.29.50';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;

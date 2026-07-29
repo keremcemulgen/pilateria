@@ -66,7 +66,7 @@
 <script>
 const SUPABASE_URL='https://nvbnmhaxumrfsxdzrzzj.supabase.co';
 const SUPABASE_KEY='sb_publishable_OdVQd9vKYQF1HZLZT_Ewkg_L-6qqVHL';
-const SB_TABLES=['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
+const SB_TABLES=['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings','expenses'];
 let sb=null, session=null;
 try{ sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}}); }
 catch(e){ document.getElementById('global-status').innerHTML='<span class="danger">Supabase kütüphanesi yüklenemedi: '+e+'</span>'; }
@@ -97,6 +97,7 @@ function buildRows(state){
   (state.packageTypes||[]).forEach(pt=>{if(!pt||!pt.id)return;rows.package_types[pt.id]=pt;});
   (state.campaigns||[]).forEach(c=>{if(!c||!c.id)return;rows.campaigns[c.id]=c;});
   (state.waTemplates||[]).forEach((w,ix)=>{const id=w.id||('wt-'+ix);rows.wa_templates[id]=w;});
+  (state.expenses||[]).forEach(e=>{if(e&&e.id)rows.expenses[e.id]=e;});
   const st=JSON.parse(JSON.stringify(state.settings||{}));st._pinHash=state._pinHash;st.monthInit=state.monthInit||{};rows.settings['singleton']=st;
   return rows;
 }
@@ -118,6 +119,7 @@ function snapshotToState(snap){
   st.packageTypes=Object.values(by('package_types'));
   st.campaigns=Object.values(by('campaigns'));
   st.waTemplates=Object.values(by('wa_templates'));
+  st.expenses=Object.values(by('expenses'));
   const s=by('settings')['singleton']; if(s){ st.settings=s; st._pinHash=s._pinHash; st.monthInit=s.monthInit||{}; }
   return st;
 }

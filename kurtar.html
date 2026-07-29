@@ -102,7 +102,7 @@
 <script>
 const SUPABASE_URL='https://nvbnmhaxumrfsxdzrzzj.supabase.co';
 const SUPABASE_KEY='sb_publishable_OdVQd9vKYQF1HZLZT_Ewkg_L-6qqVHL';
-const SB_TABLES=['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings'];
+const SB_TABLES=['members','member_finance','groups','group_finance','lessons','instructors','instructor_finance','payments','instructor_payouts','package_types','campaigns','wa_templates','settings','expenses'];
 const KEY_TABLES=['members','groups','lessons','payments','instructors'];
 const TR={members:'üye',groups:'grup',lessons:'ders',payments:'ödeme',instructors:'hoca'};
 let sb=null, session=null, cloudRows=null, sources=[], analysisRows=[];
@@ -145,6 +145,7 @@ function buildRows(state){
   (state.packageTypes||[]).forEach(pt=>{if(!pt||!pt.id)return;rows.package_types[pt.id]=pt;});
   (state.campaigns||[]).forEach(c=>{if(!c||!c.id)return;rows.campaigns[c.id]=c;});
   (state.waTemplates||[]).forEach((w,ix)=>{const id=w.id||('wt-'+ix);rows.wa_templates[id]=w;});
+  (state.expenses||[]).forEach(e=>{if(e&&e.id)rows.expenses[e.id]=e;});
   const st=JSON.parse(JSON.stringify(state.settings||{}));st._pinHash=state._pinHash;st.monthInit=state.monthInit||{};rows.settings['singleton']=st;
   return rows;
 }
@@ -152,7 +153,7 @@ function buildRows(state){
 // ---- bulut satir formati -> state (sbRowsToState esi; recover.html ile ayni) ----
 function snapshotToState(snap){
   const by=(t)=>{const m={};(snap&&snap[t]||[]).forEach(r=>{if(r&&r.id!=null)m[r.id]=r.data;});return m;};
-  return rowsMapToState({members:by('members'),member_finance:by('member_finance'),groups:by('groups'),group_finance:by('group_finance'),lessons:by('lessons'),instructors:by('instructors'),instructor_finance:by('instructor_finance'),payments:by('payments'),instructor_payouts:by('instructor_payouts'),package_types:by('package_types'),campaigns:by('campaigns'),wa_templates:by('wa_templates'),settings:by('settings')});
+  return rowsMapToState({members:by('members'),member_finance:by('member_finance'),groups:by('groups'),group_finance:by('group_finance'),lessons:by('lessons'),instructors:by('instructors'),instructor_finance:by('instructor_finance'),payments:by('payments'),instructor_payouts:by('instructor_payouts'),package_types:by('package_types'),campaigns:by('campaigns'),wa_templates:by('wa_templates'),settings:by('settings'),expenses:by('expenses')});
 }
 function rowsMapToState(M){
   const mM=(base,fin)=>{const m=JSON.parse(JSON.stringify(base||{}));if(fin){if(fin.totalPrice!==undefined)m.totalPrice=fin.totalPrice;m.packages=fin.packages||[];m.monthly=m.monthly||{};for(const ay in(fin.monthly||{}))m.monthly[ay]=Object.assign({},m.monthly[ay]||{},fin.monthly[ay]);}else{m.packages=m.packages||[];}return m;};
