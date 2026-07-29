@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.27.45">
+<meta name="app-version" content="2026.07.29.46">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -1895,7 +1895,8 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
         <select id="mp-campaign" onchange="applyCampaign()"></select>
       </div>
       <div class="field"><label>Liste Fiyatı — Kişi Başı (₺)</label><input type="number" id="mp-list" min="0" step="0.01" readonly style="background:#fafafa;color:var(--muted)"></div>
-      <div class="field"><label>Tutar — Kişi Başı (₺) *</label><input type="number" id="mp-amount" min="0" step="0.01" oninput="onAmountEdit()"><label id="mp-custom-price-wrap" style="display:none;font-weight:400;font-size:12px;margin-top:4px;cursor:pointer;align-items:center;gap:6px;"><input type="checkbox" id="mp-custom-price" style="width:auto" onchange="onCustomPriceToggle()"> ✏️ Özel fiyat girmek istiyorum</label></div>
+      <div class="field"><label>Tutar — Kişi Başı (₺) *</label><input type="number" id="mp-amount" min="0" step="0.01" oninput="onAmountEdit()"><label id="mp-custom-price-wrap" style="display:none;font-weight:400;font-size:12px;margin-top:4px;cursor:pointer;align-items:center;gap:6px;"><input type="checkbox" id="mp-custom-price" style="width:auto" onchange="onCustomPriceToggle()"> ✏️ Farklı tutar gir (taksit / özel fiyat)</label></div>
+      <div id="mp-balance" style="display:none;margin:2px 0 6px;padding:8px 10px;border-radius:8px;background:#FFF8E1;font-size:12.5px;line-height:1.55;"></div>
       <div class="field">
         <label>Ödeme Yöntemi</label>
         <select id="mp-method" onchange="renderTaxBreakdown()">
@@ -3060,6 +3061,34 @@ function paymentCapCheck(memberId, groupId, monthISO, newAmount, excludePayId) {
   const kalan = Math.max(0, Math.round((defined - paid) * 100) / 100);
   const ok = (paid + (+newAmount || 0)) <= defined + 0.005;
   return { ok, defined, paid, kalan };
+}
+// v123: TAKSIT GORUNURLUGU — odeme penceresinde bakiye seridi (motor v110'dan beri var, arayuzu yoktu)
+function renderPayBalanceStrip() {
+  const el = document.getElementById('mp-balance');
+  if (!el) return;
+  const memberId = (document.getElementById('mp-member')||{}).value || '';
+  const groupId = (document.getElementById('mp-group')||{}).value || '';
+  const editId = (document.getElementById('mp-id')||{}).value || '';
+  const ay = ((document.getElementById('mp-pkg-month')||{}).value) || String((document.getElementById('mp-date')||{}).value || todayISO()).slice(0,7);
+  if (!memberId) { el.style.display = 'none'; return; }
+  const cap = paymentCapCheck(memberId, groupId, ay, 0, editId);
+  const exNote = editId ? ' <span style="opacity:.7">(düzenlenen kayıt hariç)</span>' : '';
+  el.style.display = 'block';
+  if (cap.defined > 0) {
+    if (cap.kalan <= 0.005) {
+      el.style.background = '#E8F5E9';
+      el.innerHTML = `📦 ${ay} paketi: <b>${money(cap.defined)} ₺</b> · Ödenen: <b>${money(cap.paid)} ₺</b>${exNote} — ✅ tamamen ödendi`;
+    } else if (cap.paid > 0) {
+      el.style.background = '#FFF8E1';
+      el.innerHTML = `📦 ${ay} paketi: <b>${money(cap.defined)} ₺</b> · Ödenen: <b>${money(cap.paid)} ₺</b>${exNote} · Kalan: <b>${money(cap.kalan)} ₺</b> — 🟡 taksit devam ediyor`;
+    } else {
+      el.style.background = '#F1F8FF';
+      el.innerHTML = `📦 ${ay} paketi: <b>${money(cap.defined)} ₺</b> · Kalan: <b>${money(cap.kalan)} ₺</b> — 💡 daha az girersen kalanı sonra <b>taksitle</b> alabilirsin`;
+    }
+  } else {
+    el.style.background = '#FDECEA';
+    el.innerHTML = `ℹ️ Bu üyenin ${ay} için tanımlı fiyatı yok — taksit takibi için üyeye aylık fiyat tanımla (fiyat tanımlıyken taksit, kalana kadar serbesttir).`;
+  }
 }
 function memberPaidInMonth(memberId, monthISO){
   const ay = monthISO || currentMonth();
@@ -5463,16 +5492,18 @@ function renderMembersCardsMobile(rows, monthISO) {
     }
     const paid = +r.paid || 0;
     const fee = (r.ownPrice !== undefined && r.ownPrice !== '') ? (+r.ownPrice||0) : (+r.totalPrice || 0); // v.40 grup uyesinde KENDI fiyati
-    const isPaid = r.type === 'group' ? paid > 0 : ((+r.remaining||0) <= 0 && paid > 0);
+    const __kalanTL = r.type === 'group' ? Math.max(0, fee - paid) : Math.max(0, +r.remaining || 0); // v123
+    const isPaid = fee > 0 ? (paid >= fee - 0.005) : paid > 0; // v123: v110 kurali mobilde de — kismi YESIL OLMAZ
+    const isPartial = !isPaid && paid > 0 && fee > 0; // v123
     html += `<div class="mc-card ${r.type==='group'?'mc-in-group':''}" onclick="openMemberDetail('${r.memberId}')">
       <div class="mc-top">
         <span class="mc-name">${escapeHtml(r.name||'')}</span>
-        <span class="mc-status ${isPaid?'ok':'due'}">${isPaid?'✅ Ödendi':'⏳ Bekliyor'}</span>
+        <span class="mc-status ${isPaid?'ok':'due'}">${isPaid?'✅ Ödendi':(isPartial?('🟡 Kısmi '+money(paid)+'/'+money(fee)):'⏳ Bekliyor')}</span>
       </div>
       <div class="mc-mid">
         <span>Ücret <b>${money(fee)} ₺</b></span>
         <span>Ödenen <b>${money(paid)} ₺</b></span>
-        ${r.type!=='group' ? `<span>Kalan <b class="${(+r.remaining||0)>0?'mc-due':''}">${money(+r.remaining||0)} ₺</b></span>` : ''}
+        <span>Kalan <b class="${__kalanTL>0?'mc-due':''}">${money(__kalanTL)} ₺</b></span>
       </div>
       <div class="mc-actions" onclick="event.stopPropagation()">
         <button class="btn small pl-owner-only" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')">+ ₺ Ödeme</button>
@@ -5924,7 +5955,7 @@ function openMemberDetail(id) {
     <div class="grid-stats">
       <div class="stat blue"><div class="label">Kalan Ders (${ctxAy})</div><div class="value">${remCanon}</div>${(function(){try{const f=sessionsFinishState('member',id,ctxAy);return f.closedEarly?`<div style="font-size:9.5px;color:var(--warn);margin-top:2px;">⭐ ${f.keptRights} hak işletmeye</div>`:''}catch(e){return ''}})()}</div>
       <div class="stat ok"><div class="label">Yapılan Ders (${ctxAy})</div><div class="value">${doneCount}</div></div>
-      <div class="stat warn"><div class="label">Ödeme (${ctxAy}) ₺</div><div class="value">${money(totalPaid)}</div></div>
+      <div class="stat warn"><div class="label">Ödeme (${ctxAy}) ₺</div><div class="value">${money(totalPaid)}</div>${(function(){try{const __b=memberBalanceForMonth(id, ctxAy);return __b>0?('<div style="font-size:10px;color:#c62828;font-weight:700;margin-top:2px;">Kalan '+money(__b)+' ₺ — taksit devam</div>'):''}catch(e){return ''}})()}</div>
     </div>
     <div class="row" style="margin:8px 0;flex-wrap:wrap;gap:12px;">
       <span><b>Telefon:</b> ${escapeHtml(m.phone||'—')}</span>
@@ -7821,6 +7852,7 @@ function openGroupDetail(id, monthISO) {
     const __ayOf = pp => (pp.packageMonth || (pp.date ? String(pp.date).slice(0,7) : ''));
     const ayPays = state.payments.filter(p => p.memberId===m.id && p.groupId===id && (!monthISO || __ayOf(p) === monthISO));
     const hasGroupPay = ayPays.length > 0;
+    const __paidTL = ayPays.reduce((a,b)=>a+(+b.amount||0),0); // v123
     // v43: KALAN DERS = GRUBUN kalani (tek birim, odemeden bagimsiz) — tum uyelerde ayni. Odeme AYRI (asagidaki tik).
     const rem = sessionsRemainingFor('group', id, monthISO || currentMonth());
     const paid = hasGroupPay;
@@ -7831,25 +7863,29 @@ function openGroupDetail(id, monthISO) {
           : `<span class="badge" style="background:#E3F2FD;color:#1565C0;" title="Ders hakkının tamamı takvime yazıldı — paket BİTMEDİ: ${__fs.done} yapıldı, ${__fs.planned} ders planlı">⏳ ${__fs.done}/${__fs.quota} · planlandı</span>`)
       : rem<=2 ? `<span class="badge warn">${rem}</span>`
       : `<span class="badge ok">${rem}</span>`;
-    const tickLabel = hasGroupPay ? '✅ Ödendi' : '⬜ Ödeme al';
-    const tickStyle = hasGroupPay
-      ? 'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;'
-      : 'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;';
     const __rowPrice = __ayPrice(m.id);
+    const __full = (+__rowPrice > 0) ? (__paidTL >= (+__rowPrice) - 0.005) : hasGroupPay; // v123: v110 kurali grup detayinda da
+    const __partial = !__full && __paidTL > 0; // v123
+    const tickLabel = __full ? '✅ Ödendi' : (__partial ? ('🟡 Kısmi ' + money(__paidTL) + '/' + money(+__rowPrice)) : '⬜ Ödeme al');
+    const tickStyle = __full
+      ? 'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;'
+      : (__partial
+        ? 'background:#FFF8E1;color:#b8860b;border:1px solid #e0c060;'
+        : 'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;');
     const hasPrice = (+__rowPrice > 0);
     const priceLabel = hasPrice
-      ? `<b>${money(+__rowPrice)} ₺</b>`
+      ? `<b>${money(+__rowPrice)} ₺</b>` + (__partial ? `<br><span style="font-size:11px;color:#c62828;">Kalan ${money(Math.max(0, (+__rowPrice) - __paidTL))} ₺</span>` : '')
       : '<span style="color:#c62828;font-style:italic;">tanımsız</span>';
     const priceBtnLabel = hasPrice ? '✏️' : '➕ Fiyat';
     const priceBtnStyle = hasPrice
       ? 'background:#fff;color:#555;border:1px solid #ccc;'
       : 'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;font-weight:600;';
-    return `<tr style="background:${hasGroupPay?'#f5fbf5':'#fffdf5'};">
+    return `<tr style="background:${__full?'#f5fbf5':'#fffdf5'};">
       <td><b>${m.name}</b></td>
       <td>${m.phone||'—'}</td>
       <td>${badge}</td>
       <td>${priceLabel}</td>
-      <td><button class="btn small" style="${tickStyle}padding:4px 10px;font-weight:600;" onclick="togglePaidTick('${m.id}','${id}',event,'${monthISO||''}')" title="${hasGroupPay?((monthISO||'bu ay')+' ödemesini kaldır'):('Bu üye için '+(monthISO||'bu ay')+' ödeme kaydı yarat')}">${tickLabel}</button></td>
+      <td><button class="btn small" style="${tickStyle}padding:4px 10px;font-weight:600;" onclick="togglePaidTick('${m.id}','${id}',event,'${monthISO||''}')" title="${__full?((monthISO||'bu ay')+' ödemesini kaldır'):(__partial?'Kalanı tahsil et — taksit tamamlama':('Bu üye için '+(monthISO||'bu ay')+' ödeme kaydı yarat'))}">${tickLabel}</button></td>
       <td><button class="btn small secondary" onclick="event.stopPropagation();openMemberDetail('${m.id}')" title="Üye detayı — grup detayı arka planda açık kalır">Detay</button></td>
     </tr>`;
   }).join('') || '<tr><td colspan="6"><div class="empty" style="padding:20px;">Gruba henüz üye eklenmedi.</div></td></tr>';
@@ -8692,6 +8728,12 @@ function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
     onPkgChange();
     const _own = memberMonthlyTotalPrice(memberId, (document.getElementById('mp-date').value||'').slice(0,7)||currentMonth()) || ((state.members.find(x=>x.id===memberId)||{}).totalPrice);
     if (_own) { document.getElementById('mp-list').value = _own; document.getElementById('mp-amount').value = _own; }
+    // v123: taksit — onceki odeme varsa KALANI on-doldur (grup akisinde applyLockedShare yapar)
+    if (!groupId) {
+      const __ay123 = (document.getElementById('mp-pkg-month')||{}).value || (document.getElementById('mp-date').value||'').slice(0,7) || currentMonth();
+      const __cap123 = paymentCapCheck(memberId, '', __ay123, 0, '');
+      if (__cap123.defined > 0 && __cap123.paid > 0 && __cap123.kalan > 0.005) document.getElementById('mp-amount').value = __cap123.kalan;
+    }
   }
   // reset prorate
   const pcb = document.getElementById('mp-prorate');
@@ -8699,6 +8741,7 @@ function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
   // v18: grup uyesi icin tutar kilidi (yeni odemede)
   setupPayPriceLock(document.getElementById('mp-member').value || memberId, editId, groupId);
   renderTaxBreakdown();
+  renderPayBalanceStrip(); // v123
   openModal('modal-payment');
 }
 // ========== TAX HELPERS ==========
@@ -8802,11 +8845,14 @@ function applyLockedShare() {
   const amountEl = document.getElementById('mp-amount');
   const listEl = document.getElementById('mp-list');
   if (share) { listEl.value = share; amountEl.value = share; }
+  // v123: taksit — onceki odeme varsa KALANA kilitle (ikinci taksit tek dokunus)
+  const __capL = paymentCapCheck(mid, gid, month, 0, (document.getElementById('mp-id')||{}).value || '');
+  if (__capL.defined > 0 && __capL.paid > 0 && __capL.kalan > 0.005) amountEl.value = __capL.kalan;
   amountEl.readOnly = true;
   amountEl.style.background = '#fafafa';
   const g = state.groups.find(x=>x.id===gid);
   const info = document.getElementById('mp-discount-info');
-  if (info && g) info.textContent = `👯 ${groupDisplayName(g, (document.getElementById('mp-pkg-month')||{}).value || currentMonth())} üyesi — tutar grubun kişi başı payına kilitli (${money(share)} ₺). Farklı tutar için "Özel fiyat" işaretle.`;
+  if (info && g) info.textContent = `👯 ${groupDisplayName(g, (document.getElementById('mp-pkg-month')||{}).value || currentMonth())} üyesi — ${(__capL.defined > 0 && __capL.paid > 0 && __capL.kalan > 0.005) ? `tutar KALAN bakiyeye kilitli (${money(__capL.kalan)} ₺ — taksit tamamlama)` : `tutar grubun kişi başı payına kilitli (${money(share)} ₺)`}. Farklı tutar için "✏️ Farklı tutar gir" işaretle.`;
   renderTaxBreakdown();
 }
 function onCustomPriceToggle() {
@@ -8816,7 +8862,7 @@ function onCustomPriceToggle() {
     amountEl.readOnly = false;
     amountEl.style.background = '';
     const info = document.getElementById('mp-discount-info');
-    if (info) info.textContent = '✏️ Özel fiyat girebilirsin — kaydedilen tutar bu olacak.';
+    if (info) info.textContent = '✏️ Tutarı serbestçe girebilirsin — kalandan az girersen taksit olarak kaydedilir.';
     try { amountEl.focus(); amountEl.select(); } catch(e) {}
   } else {
     applyLockedShare();
@@ -8857,7 +8903,11 @@ function onPayMemberChange() {
     const month = ((document.getElementById('mp-pkg-month')||{}).value) || String(document.getElementById('mp-date').value || todayISO()).slice(0,7); // v37: paket ayi
     const own = memberMonthlyTotalPrice(mid, month) || ((state.members.find(x=>x.id===mid)||{}).totalPrice);
     if (own) { document.getElementById('mp-list').value = own; document.getElementById('mp-amount').value = own; }
+    // v123: taksit — onceki odeme varsa KALANI on-doldur
+    const __capC = paymentCapCheck(mid, '', month, 0, '');
+    if (__capC.defined > 0 && __capC.paid > 0 && __capC.kalan > 0.005) document.getElementById('mp-amount').value = __capC.kalan;
   }
+  renderPayBalanceStrip(); // v123
 }
 function savePayment() {
   clearModalErrors('modal-payment');
@@ -11706,7 +11756,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.27.45';
+const APP_VERSION = '2026.07.29.46';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
