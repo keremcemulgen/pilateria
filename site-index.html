@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pilateria Pilates Studio — Ankara Çankaya</title>
+<meta name="description" content="Pilateria Pilates Stüdyosu: en fazla 4 kişilik gruplarla reformer, bireysel ve duo dersler, hamile pilatesi. Randevu için WhatsApp'tan yazın.">
+<meta name="theme-color" content="#FBF5E7">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-v6GhtUTYQOqQj9BEMAcABPxF/1zFuX+Re6+nW+5tjR0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-src https://www.google.com; form-action 'none'; base-uri 'none'; object-src 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="icon" href="pilateria-figure.png">
+
+<meta property="og:title" content="Pilateria Pilates Studio — Ankara Çankaya">
+<meta property="og:description" content="Ankara Çankaya'da beş reformerlı stüdyo. En fazla dört kişilik gruplar, 45 dakikalık dersler.">
+<meta property="og:image" content="pilateria-logo-full.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="tr_TR">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Manrope:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ==========================================================
+   PİLATERİA — tasarım tokenları
+   Palet doğrudan AMBLEMDEN alındı (piksel örneklemesi):
+     krem  #FBF5E7  · amblem zemini
+     kayısı #E8A074 · figürün gövde rengi
+     tarçın #C9703F · kayısının koyu/okunur tonu
+     adaçayı #A8C098 · amblemdeki açık yeşil
+     yaprak #5A7050 · figürün kontur yeşili
+     zeytin #3E4A3A · en koyu ton, metin rengi
+   Tipografi: Cormorant Garamond (başlık, amblemdeki serif imzayla uyumlu) · Manrope (metin)
+   İmza: amblemin kendisi + arkasında nefes halkası (4 sn / 6 sn)
+   ========================================================== */
+:root{
+  --krem:#FBF5E7;
+  --kum:#F4EAD6;
+  --kayisi:#E8A074;
+  --tarcin:#C9703F;
+  --adacayi:#A8C098;
+  --yaprak:#5A7050;
+  --zeytin:#3E4A3A;
+
+  --display:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --metin:"Manrope",system-ui,-apple-system,sans-serif;
+
+  --olcu:1180px;
+  --bolum-y:clamp(70px,9vw,130px);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--krem);color:var(--zeytin);
+  font-family:var(--metin);font-weight:400;
+  font-size:clamp(16px,1.05vw,17.5px);line-height:1.7;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+img{max-width:100%;display:block}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--tarcin);outline-offset:3px;border-radius:2px}
+.kap{width:100%;max-width:var(--olcu);margin-inline:auto;padding-inline:clamp(20px,5vw,40px)}
+
+.etiket{
+  font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;font-weight:600;
+  color:var(--tarcin);display:flex;align-items:center;gap:12px;
+}
+.etiket::before{content:"";width:24px;height:2px;background:var(--kayisi)}
+
+h1,h2,h3{font-family:var(--display);font-weight:400;line-height:1.08;letter-spacing:-.01em}
+h2{font-size:clamp(2.3rem,4.8vw,3.7rem);margin-block:18px 26px}
+h3{font-size:1.45rem;font-weight:500;letter-spacing:0}
+.vurgu{color:var(--tarcin)}
+
+/* ---------- üst bar ---------- */
+header{
+  position:fixed;inset:0 0 auto 0;z-index:50;padding-block:16px;
+  transition:background .35s ease,padding .35s ease,box-shadow .35s ease;
+}
+header.kaydi{
+  background:rgba(251,245,231,.9);backdrop-filter:blur(12px);
+  padding-block:10px;box-shadow:0 1px 0 rgba(90,112,80,.18);
+}
+.ustbar{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.marka{display:flex;align-items:center;gap:11px;text-decoration:none}
+.marka img{width:34px;height:34px;object-fit:contain}
+.marka .ad{display:flex;flex-direction:column;line-height:1.1}
+.marka b{font-family:var(--display);font-weight:500;font-size:clamp(.98rem,2.9vw,1.28rem);letter-spacing:.05em}
+.marka small{font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--yaprak);margin-top:4px;font-weight:500}
+nav{display:flex;gap:28px;align-items:center}
+nav a{
+  text-decoration:none;font-size:.88rem;font-weight:500;color:var(--yaprak);
+  position:relative;padding-block:4px;transition:color .25s ease;
+}
+nav a::after{content:"";position:absolute;left:0;bottom:0;width:0;height:2px;background:var(--kayisi);transition:width .3s ease}
+nav a:hover{color:var(--zeytin)}
+nav a:hover::after{width:100%}
+
+/* ---------- buton ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:var(--metin);font-size:.92rem;font-weight:600;
+  padding:15px 27px;border-radius:999px;text-decoration:none;cursor:pointer;
+  border:2px solid transparent;transition:background .28s ease,color .28s ease,transform .28s ease,border-color .28s ease;
+}
+.btn-dolu{background:var(--kayisi);color:#33291F;border-color:var(--kayisi)}
+.btn-dolu:hover{background:var(--tarcin);border-color:var(--tarcin);color:#FFF6EC;transform:translateY(-2px)}
+.btn-bos{color:var(--yaprak);border-color:rgba(90,112,80,.4)}
+.btn-bos:hover{background:rgba(168,192,152,.28);border-color:var(--yaprak);transform:translateY(-2px)}
+.btn svg{width:17px;height:17px;flex:none}
+
+/* ---------- hero ---------- */
+.hero{
+  position:relative;min-height:100svh;display:flex;align-items:center;
+  padding-block:130px 70px;overflow:hidden;
+}
+.hero-izgara{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(28px,5vw,64px);align-items:center}
+.hero h1{font-size:clamp(3.1rem,7.4vw,5.4rem);margin-block:22px 22px;font-weight:400}
+.hero p.giris{font-size:clamp(1.02rem,1.4vw,1.14rem);color:#54604F;max-width:44ch;margin-bottom:34px}
+.hero-butonlar{display:flex;flex-wrap:wrap;gap:13px}
+
+/* İMZA: amblem + nefes halkası */
+.amblem-alan{position:relative;display:grid;place-items:center;aspect-ratio:1}
+.amblem-alan img{width:62%;max-width:300px;position:relative;z-index:2;filter:drop-shadow(0 18px 34px rgba(90,112,80,.16))}
+.nefes{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+.nefes circle{fill:none;transform-origin:50% 50%}
+.nefes .h1{stroke:var(--kayisi);stroke-width:.7;stroke-opacity:.55}
+.nefes .h2{stroke:var(--adacayi);stroke-width:.6;stroke-opacity:.75}
+.nefes .h3{stroke:var(--kayisi);stroke-width:.5;stroke-opacity:.3}
+.nefes .dolgu{fill:var(--kum);stroke:none}
+@keyframes nefesAl{0%{scale:.74;opacity:.5}40%{scale:1;opacity:1}100%{scale:.74;opacity:.5}}
+.nefes .h1{animation:nefesAl 10s cubic-bezier(.37,0,.63,1) infinite}
+.nefes .h2{animation:nefesAl 10s cubic-bezier(.37,0,.63,1) infinite .35s}
+.nefes .h3{animation:nefesAl 10s cubic-bezier(.37,0,.63,1) infinite .7s}
+.nefes-not{margin-top:30px;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--yaprak);opacity:.75}
+
+/* ---------- bölüm ortak ---------- */
+section{padding-block:var(--bolum-y);position:relative}
+.cizgi{height:2px;background:linear-gradient(90deg,transparent,rgba(232,160,116,.5),transparent)}
+
+/* ---------- hakkımızda ---------- */
+.hakkinda{display:grid;grid-template-columns:1fr 1.15fr;gap:clamp(30px,6vw,86px);align-items:start}
+.hakkinda p+p{margin-top:18px}
+.hakkinda p{color:#54604F}
+.rakamlar{display:flex;flex-wrap:wrap;gap:36px;margin-top:42px}
+.rakam .buyuk{font-family:var(--display);font-size:3.1rem;font-weight:500;color:var(--tarcin);line-height:1}
+.rakam .kucuk{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--yaprak);margin-top:7px}
+
+/* ---------- manifesto bandı ---------- */
+.manifesto{background:var(--zeytin);color:#EFEADF;text-align:center}
+.manifesto h2{color:#FFF6EC;margin-bottom:30px}
+.manifesto .vurgu{color:var(--kayisi)}
+.manifesto-ic{max-width:760px}
+.manifesto p{color:#D8D3C6;margin-inline:auto;max-width:56ch}
+.manifesto p+p{margin-top:16px}
+.manifesto .kapanis{margin-top:30px;font-family:var(--display);font-size:1.35rem;line-height:1.5;color:var(--adacayi)}
+
+/* ---------- ders girişi ---------- */
+.ders-giris{max-width:64ch;color:#54604F;margin-bottom:34px}
+.ders-giris p+p{margin-top:16px}
+.ders-giris p:first-child{font-family:var(--display);font-size:1.5rem;color:var(--yaprak);line-height:1.4}
+
+/* ---------- hizmetler ---------- */
+.hizmetler{background:var(--kum)}
+.kartlar{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-top:14px}
+.kart{
+  background:var(--krem);border:2px solid rgba(90,112,80,.14);border-radius:20px;
+  padding:34px 28px 30px;transition:border-color .3s ease,transform .3s ease;
+}
+.kart:hover{border-color:var(--kayisi);transform:translateY(-4px)}
+.kart .ikon{width:32px;height:32px;color:var(--tarcin);margin-bottom:20px}
+.kart h3{margin-bottom:10px}
+.kart p{font-size:.94rem;color:#54604F}
+.kart .sure{margin-top:18px;font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--yaprak);font-weight:600}
+
+/* ---------- eğitmenler ---------- */
+.egitmen-giris{max-width:62ch;color:#54604F;margin-bottom:8px}
+.egitmen-giris strong{color:var(--yaprak);font-weight:600}
+.egitmenler-liste{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:clamp(24px,4vw,48px);margin-top:16px}
+.egitmen{padding-top:26px;border-top:2px solid rgba(232,160,116,.45)}
+.monogram{
+  width:64px;height:64px;border-radius:50%;background:var(--adacayi);color:#2F3B2C;
+  display:grid;place-items:center;font-family:var(--display);font-weight:500;font-size:1.42rem;letter-spacing:.04em;
+  margin-bottom:20px;transition:background .3s ease,color .3s ease;
+}
+.egitmen:hover .monogram{background:var(--kayisi);color:#33291F}
+.egitmen h3{margin-bottom:5px}
+.egitmen .rol{font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tarcin);font-weight:600}
+.egitmen p{font-size:.93rem;color:#54604F}
+
+/* ---------- iletişim ---------- */
+.iletisim{background:var(--zeytin);color:#EFEADF}
+.iletisim h2,.iletisim .vurgu{color:#FFF6EC}
+.iletisim .vurgu{color:var(--kayisi)}
+.iletisim .etiket{color:var(--kayisi)}
+.iletisim .etiket::before{background:var(--kayisi)}
+.iletisim-kutu{display:grid;grid-template-columns:1fr 1.05fr;gap:clamp(32px,5vw,66px);align-items:start}
+.bilgi-satir{padding-block:18px;border-bottom:1px solid rgba(239,234,223,.16)}
+.bilgi-satir:first-of-type{border-top:1px solid rgba(239,234,223,.16)}
+.bilgi-satir dt{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--adacayi);margin-bottom:6px}
+.bilgi-satir dd{font-size:1.02rem}
+.bilgi-satir dd a{text-decoration:none;border-bottom:1px solid rgba(232,160,116,.6);padding-bottom:2px}
+.bilgi-satir dd a:hover{color:var(--kayisi)}
+.saatler{font-size:.95rem;line-height:1.9;color:#D8D3C6}
+.harita{width:100%;aspect-ratio:4/3;border:0;border-radius:18px}
+.iletisim .btn{margin-top:32px}
+
+/* ---------- alt bilgi ---------- */
+footer{padding-block:38px;font-size:.84rem;color:var(--yaprak)}
+.ust-eylem{display:flex;align-items:center;gap:14px}
+.ig-link{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:var(--yaprak);transition:background .25s ease,color .25s ease}
+.ig-link svg{width:20px;height:20px}
+.ig-link:hover{background:var(--kayisi);color:#33291F}
+.footer-baglantilar{display:flex;gap:20px}
+.footer-ic{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+footer a{text-decoration:none}
+footer a:hover{color:var(--tarcin)}
+
+/* ---------- sabit whatsapp ---------- */
+.wa-sabit{
+  position:fixed;right:20px;bottom:20px;z-index:60;width:56px;height:56px;border-radius:50%;
+  background:var(--kayisi);color:#33291F;display:grid;place-items:center;text-decoration:none;
+  box-shadow:0 10px 26px rgba(62,74,58,.28);transition:transform .3s ease,background .3s ease;
+}
+.wa-sabit:hover{transform:scale(1.07);background:var(--tarcin);color:#FFF6EC}
+.wa-sabit svg{width:27px;height:27px}
+
+/* ---------- giriş animasyonu ---------- */
+.bel{opacity:0;transform:translateY(24px);transition:opacity .85s ease,transform .85s cubic-bezier(.22,.61,.36,1)}
+.bel.gorundu{opacity:1;transform:none}
+
+@media (max-width:520px){
+  .ig-link{display:none}
+  .marka img{width:30px;height:30px}
+}
+@media (max-width:860px){
+  nav{display:none}
+  .hero-izgara,.hakkinda,.iletisim-kutu{grid-template-columns:1fr}
+  .hero{min-height:auto;padding-block:132px 80px}
+  .amblem-alan{order:-1;max-width:290px;margin-inline:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .bel{opacity:1;transform:none}
+  .nefes circle{scale:.92}
+}
+</style>
+</head>
+<body>
+
+<header id="ustbar">
+  <div class="kap ustbar">
+    <a class="marka" href="#tepe">
+      <img src="pilateria-figure.png" alt="">
+      <span class="ad">
+        <b>Pilateria Pilates Studio</b>
+        <small>by Derya Öztepe</small>
+      </span>
+    </a>
+    <nav>
+      <a href="#hakkimizda">Hakkımızda</a>
+      <a href="#hizmetler">Hizmetler</a>
+      <a href="#egitmenler">Eğitmenler</a>
+      <a href="#iletisim">İletişim</a>
+    </nav>
+    <div class="ust-eylem">
+      <a class="ig-link" id="ig-ust" href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor" stroke="none"/></svg></a>
+      <a class="btn btn-bos wa-baglanti" href="#" style="padding:11px 21px">Randevu al</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero" id="tepe">
+  <div class="kap hero-izgara">
+    <div>
+      <p class="etiket">Reformer &amp; Mat Pilates Stüdyosu</p>
+      <h1>Nefesle başlar,<br><span class="vurgu">dengeyle</span> devam eder.</h1>
+      <p class="giris">
+        Ankara Çankaya'da, beş reformerlı stüdyomuzda en fazla dört kişilik gruplarla
+        çalışıyoruz; böylece her derste eğitmen sizin bedeninizi görüyor. İlk ders bir
+        değerlendirme: neyi, neden ve hangi hızda yapacağınıza birlikte karar veriyoruz.
+      </p>
+      <div class="hero-butonlar">
+        <a class="btn btn-dolu wa-baglanti" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.23 8.23 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z"/></svg>
+          WhatsApp'tan randevu al
+        </a>
+        <a class="btn btn-bos" href="#hizmetler">Hizmetleri gör</a>
+      </div>
+      <p class="nefes-not">İçine dört sayarak · dışına altı</p>
+    </div>
+
+    <div class="amblem-alan">
+      <svg class="nefes" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="dolgu" cx="50" cy="50" r="38"/>
+        <circle class="h1" cx="50" cy="50" r="30"/>
+        <circle class="h2" cx="50" cy="50" r="40"/>
+        <circle class="h3" cx="50" cy="50" r="48"/>
+      </svg>
+      <img src="pilateria-figure.png" alt="Pilateria amblemi">
+    </div>
+  </div>
+</section>
+
+<div class="kap"><div class="cizgi"></div></div>
+
+<section id="hakkimizda">
+  <div class="kap hakkinda">
+    <div class="bel">
+      <p class="etiket">Hakkımızda</p>
+      <h2>Hareketin ötesinde,<br><span class="vurgu">sana ait bir alan.</span></h2>
+    </div>
+    <div class="bel">
+      <p>
+        Pilateria Pilates Studio, Pilates'i yalnızca bir egzersiz olarak değil; bedenini
+        tanımanın, güçlenmenin ve kendine ayırdığın zamanı daha değerli hâle getirmenin
+        bir yolu olarak gören bir anlayışla kuruldu.
+      </p>
+      <p>
+        Temelinde, her bedenin farklı olduğu ve bu nedenle hareketin de kişinin ihtiyaçlarına
+        göre şekillenmesi gerektiği düşüncesi var. Bu anlayışla derslerimizde doğru teknik,
+        kontrollü hareket ve beden farkındalığını önemsiyor; bireysel, duet ve butik grup
+        çalışmalarıyla üyelerimizi yakından tanıyabildiğimiz bir çalışma düzeni benimsiyoruz.
+      </p>
+      <p>
+        Pilateria'yı yalnızca nasıl hareket ettiğimiz değil, hareket ederken nasıl hissettiğimiz
+        de şekillendiriyor. Bu nedenle stüdyonun her detayında özenli, samimi ve rahat
+        hissedilebilecek bir atmosfer yaratmayı önemsiyoruz.
+      </p>
+      <p>
+        Günlük hayatın temposu içinde kendine ayırdığın zamanın gerçekten sana ait olduğu;
+        bedenine odaklanabildiğin, hareketi hayatının keyifli ve sürdürülebilir bir parçası
+        hâline getirebildiğin bir alan…
+      </p>
+      <p>
+        Burada amacımız herkesi aynı kalıba sokmak değil; kendi bedeninin daha güçlü, dengeli
+        ve farkında hâline ulaşmana eşlik etmek. Pilateria, tam da bu düşünceden doğdu.
+      </p>
+      <div class="rakamlar">
+        <div class="rakam"><div class="buyuk">5</div><div class="kucuk">Reformer</div></div>
+        <div class="rakam"><div class="buyuk">4</div><div class="kucuk">Kişilik grup sınırı</div></div>
+        <div class="rakam"><div class="buyuk">45′</div><div class="kucuk">Ders süresi</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="manifesto">
+  <div class="kap manifesto-ic bel">
+    <h2>Kendine ayırdığın zaman,<br><span class="vurgu">gerçekten sana ait olsun.</span></h2>
+    <p>
+      Pilateria'yı yalnızca egzersiz yapılan bir stüdyo olarak değil; yoğun hayatın içinde
+      kendine dönebileceğin bir alan olarak tasarladık.
+    </p>
+    <p>
+      Modern, özenli ve samimi atmosferimizde amacımız, kendini rahat hissettiğin ve
+      bedenine iyi gelen bir deneyim yaratmak.
+    </p>
+    <p class="kapanis">
+      Burada kimseyle yarışmıyorsun.<br>
+      Yalnızca kendi bedeninin daha güçlü ve dengeli hâline doğru ilerliyorsun.
+    </p>
+  </div>
+</section>
+
+<section id="hizmetler" class="hizmetler">
+  <div class="kap">
+    <div class="bel">
+      <p class="etiket">Hizmetlerimiz</p>
+      <h2>Her beden farklı.<br><span class="vurgu">Hareket de öyle olmalı.</span></h2>
+    </div>
+
+    <div class="ders-giris bel">
+      <p>Her bedenin hikâyesi, ihtiyacı ve hedefi farklı.</p>
+      <p>
+        Pilateria'da dersleri bedeninin ihtiyaçlarını, hareket geçmişini ve hedeflerini
+        dikkate alarak planlıyor; doğru teknik, kontrollü hareket ve bilinçli ilerlemeyi
+        merkeze alıyoruz.
+      </p>
+      <p>
+        Çünkü bizim için iyi bir Pilates dersi yalnızca kaslarının çalıştığını hissettiğin
+        bir saat değil; bedenini daha iyi tanıdığın, güçlendiğin ve günlük hayatındaki
+        değişimi hissetmeye başladığın bir sürecin parçası.
+      </p>
+    </div>
+    <div class="kartlar bel">
+      <article class="kart">
+        <svg class="ikon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="7" r="3.2"/><path d="M5 20c0-3.6 3.1-6.2 7-6.2s7 2.6 7 6.2"/></svg>
+        <h3>Bireysel Pilates</h3>
+        <p>
+          Dersler, ihtiyaçların, hareket düzeyin ve hedeflerin doğrultusunda sana özel olarak
+          planlanır. Birebir eğitmen takibi sayesinde hareketler kontrollü bir şekilde
+          ilerletilir ve süreç boyunca gelişimin yakından takip edilir.
+        </p>
+        <p class="sure">Tek kişi · 45 dakika</p>
+      </article>
+
+      <article class="kart">
+        <svg class="ikon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2 19c0-3 2.7-5 6-5M22 19c0-3-2.7-5-6-5"/></svg>
+        <h3>Duet Pilates</h3>
+        <p>
+          Pilates deneyimini bir partnerle paylaşırken kişisel takibi koruyan bir çalışma
+          modelidir. İki kişinin ihtiyaçları ve seviyeleri dikkate alınarak ders içeriği
+          şekillendirilir.
+        </p>
+        <p class="sure">İki kişi · 45 dakika</p>
+      </article>
+
+      <article class="kart">
+        <svg class="ikon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="6.5" r="2.6"/><circle cx="5" cy="10.5" r="2.4"/><circle cx="19" cy="10.5" r="2.4"/><path d="M7.5 19c0-2.5 2-4.4 4.5-4.4s4.5 1.9 4.5 4.4M1.5 19c0-2 1.4-3.6 3.5-3.6M22.5 19c0-2-1.4-3.6-3.5-3.6"/></svg>
+        <h3>3 ve 4 Kişilik Grup Pilates</h3>
+        <p>
+          Sınırlı katılımcıyla gerçekleştirilen grup derslerinde, birlikte hareket etmenin
+          enerjisi eğitmen takibiyle buluşur. Küçük grup yapısı sayesinde her katılımcının
+          hareketlerine ve gelişimine özen gösterilir.
+        </p>
+        <p class="sure">Üç veya dört kişi · 45 dakika</p>
+      </article>
+
+      <article class="kart">
+        <svg class="ikon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M12 21c-4.5-3.2-7-6.1-7-9.4A4.6 4.6 0 0 1 12 8a4.6 4.6 0 0 1 7 3.6c0 3.3-2.5 6.2-7 9.4z"/></svg>
+        <h3>Hamile Pilatesi</h3>
+        <p>
+          Gebelik döneminde bedenin değişen ihtiyaçları dikkate alınarak kontrollü ve bilinçli
+          bir hareket süreci oluşturulur. Dersler, gebelik haftası ve bireysel ihtiyaçlar göz
+          önünde bulundurularak planlanır.
+        </p>
+        <p class="sure">Gebelik haftasına göre · 45 dakika</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="egitmenler">
+  <div class="kap">
+    <div class="bel">
+      <h2>Eğitmenler</h2>
+    </div>
+    <p class="egitmen-giris bel">
+      Üç eğitmenimiz de <strong>Türkiye Cimnastik Federasyonu</strong> pilates eğitmenliği
+      sertifikasına sahip. Ayrı uzmanlık alanlarına bölünmüyoruz: bireysel, duo, grup ve
+      hamile derslerinin hepsini üçü de veriyor.
+    </p>
+
+    <div class="egitmenler-liste bel">
+      <article class="egitmen">
+        <div class="monogram">DÖ</div>
+        <h3>Derya Öztepe</h3>
+        <p class="rol">Kurucu &amp; Pilates Eğitmeni · TCF Sertifikalı</p>
+      </article>
+      <article class="egitmen">
+        <div class="monogram">İK</div>
+        <h3>İclal Koç</h3>
+        <p class="rol">Pilates Eğitmeni · TCF Sertifikalı</p>
+      </article>
+      <article class="egitmen">
+        <div class="monogram">EK</div>
+        <h3>Esra Karababa</h3>
+        <p class="rol">Pilates Eğitmeni · TCF Sertifikalı</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="iletisim" class="iletisim">
+  <div class="kap iletisim-kutu">
+    <div class="bel">
+      <p class="etiket">İletişim</p>
+      <h2>Gelin, bir<br><span class="vurgu">deneme dersi</span> yapalım.</h2>
+      <dl>
+        <div class="bilgi-satir"><dt>Adres</dt><dd id="adres-metni">— stüdyo adresi —</dd></div>
+        <div class="bilgi-satir"><dt>Telefon</dt><dd><a id="tel-baglanti" href="#">— telefon —</a></dd></div>
+        <div class="bilgi-satir"><dt>Instagram</dt><dd><a id="ig-iletisim" href="#" target="_blank" rel="noopener noreferrer">@pilateriapilates</a></dd></div>
+        <div class="bilgi-satir"><dt>Çalışma saatleri</dt><dd class="saatler" id="saatler-metni"></dd></div>
+      </dl>
+      <a class="btn btn-dolu wa-baglanti" href="#">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.23 8.23 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23z"/></svg>
+        WhatsApp'tan yazın
+      </a>
+    </div>
+    <div class="bel">
+      <iframe class="harita" id="harita" title="Pilateria konumu" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src=""></iframe>
+    </div>
+  </div>
+</section>
+
+<div class="kap"><div class="cizgi"></div></div>
+
+<footer>
+  <div class="kap footer-ic">
+    <span>© <span id="yil">2026</span> Pilateria Pilates Studio · Derya Öztepe</span>
+    <span class="footer-baglantilar">
+      <a id="ig-alt" href="#" target="_blank" rel="noopener noreferrer">Instagram</a>
+      <a href="#tepe">Başa dön</a>
+    </span>
+  </div>
+</footer>
+
+<a class="wa-sabit wa-baglanti" href="#" aria-label="WhatsApp'tan randevu al">
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.23 8.23 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.13-.15.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z"/></svg>
+</a>
+
+<script>
+/* ==========================================================
+   BURAYI DOLDURUN — sitedeki tüm iletişim bilgisi tek yerde.
+   ========================================================== */
+if (self !== top) { top.location = self.location; }
+
+const PILATERIA = {
+  whatsapp: "905318960521",          // ülke koduyla, + ve boşluk olmadan
+  telefon:  "0531 896 05 21",        // ekranda görünecek hâli
+  adres:    "Şenel İş Merkezi, Mebusevleri, Ergin Sok. No: 24/4, 06570 Çankaya / Ankara",
+  haritaSrc: "https://www.google.com/maps?q=Pilateria%20Pilates%20Studio%2C%20Ergin%20Sk.%20No%3A24/4%2C%20Mebusevleri%2C%2006570%20%C3%87ankaya/Ankara&hl=tr&z=17&output=embed",
+  haritaYol: "https://maps.app.goo.gl/SzZtNyruSSmPSSX8A",  // "Yol tarifi" bağlantısı
+  saatler: [
+    "Pazartesi – Cumartesi · 10:00 – 21:00",
+    "Pazar · kapalı"
+  ],
+  instagram: "https://www.instagram.com/pilateriapilates/",
+  mesaj: "Merhaba, Pilateria'da deneme dersi için bilgi almak istiyorum."
+};
+
+(function(){
+  const wa = "https://wa.me/" + PILATERIA.whatsapp + "?text=" + encodeURIComponent(PILATERIA.mesaj);
+  document.querySelectorAll(".wa-baglanti").forEach(a=>{
+    a.href = wa; a.target = "_blank"; a.rel = "noopener noreferrer";
+  });
+
+  ["ig-ust","ig-iletisim","ig-alt"].forEach(id=>{
+    const a = document.getElementById(id);
+    if(a){ a.href = PILATERIA.instagram; a.target = "_blank"; a.rel = "noopener noreferrer"; }
+  });
+
+  const tel = document.getElementById("tel-baglanti");
+  tel.textContent = PILATERIA.telefon;
+  tel.href = "tel:" + PILATERIA.telefon.replace(/\s/g,"");
+
+  const adresEl = document.getElementById("adres-metni");
+  adresEl.textContent = PILATERIA.adres;
+  if (PILATERIA.haritaYol){
+    const yol = document.createElement("a");
+    yol.href = PILATERIA.haritaYol; yol.target = "_blank"; yol.rel = "noopener noreferrer";
+    yol.textContent = "Yol tarifi al";
+    yol.style.cssText = "display:inline-block;margin-top:8px;font-size:.86rem";
+    adresEl.append(document.createElement("br"), yol);
+  }
+  document.getElementById("saatler-metni").innerHTML =
+    PILATERIA.saatler.map(s=>s.replace(/[<>&]/g,"")).join("<br>");
+  document.getElementById("yil").textContent = new Date().getFullYear();
+
+  const harita = document.getElementById("harita");
+  if (PILATERIA.haritaSrc) harita.src = PILATERIA.haritaSrc;
+  else harita.replaceWith(Object.assign(document.createElement("div"), {
+    className: "harita",
+    style: "display:grid;place-items:center;background:rgba(239,234,223,.08);border:1px dashed rgba(232,160,116,.5);color:#D8D3C6;font-size:.85rem;text-align:center;padding:24px",
+    textContent: "Harita bağlantısı eklenince burada görünecek."
+  }));
+})();
+
+const ust = document.getElementById("ustbar");
+addEventListener("scroll", () => ust.classList.toggle("kaydi", scrollY > 40), {passive:true});
+
+const gozlemci = new IntersectionObserver((girisler)=>{
+  girisler.forEach(g=>{ if(g.isIntersecting){ g.target.classList.add("gorundu"); gozlemci.unobserve(g.target); } });
+}, {threshold:.14, rootMargin:"0px 0px -60px 0px"});
+document.querySelectorAll(".bel").forEach(e=>gozlemci.observe(e));
+</script>
+</body>
+</html>
