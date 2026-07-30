@@ -43,7 +43,9 @@ setTimeout(()=>{ try {
   const cellM = calHtml.match(new RegExp('<button class="pcal-cell[^"]*"[^>]*onclick="pcalSelectDay\\(\'' + today + '\'\\)"[^>]*>[\\s\\S]*?</button>'));
   t('bugunun hucresinde 2 nokta (iptal sayilmaz)', !!cellM && /••/.test(cellM[0]) && !/•••/.test(cellM[0]), cellM ? cellM[0].replace(/</g,' ').slice(0,80) : 'hucre yok');
   const ag = d.getElementById('pcal-agenda').innerHTML;
-  t('kart: 10:00 (AYSE+BANU)(HOCA+)', /10:00 \(AYSE\+BANU\)\(HOCA\+\)/.test(ag), ag.replace(/</g,' ').slice(0,120));
+  t('kart: 10:00 · AYSE, BANU (parantez/arti YOK)', /10:00 · AYSE, BANU/.test(ag), ag.replace(/</g,' ').slice(0,120));
+  t('"HOCA+" kaligrafisi YOK (v133 Kerem)', !/\+\)/.test(ag) && !/HOCA\+/.test(ag));
+  t('hoca alt satirda duz yazi', /2\/2 · HOCA · Planlandı/.test(ag), ag.replace(/</g,' ').slice(0,160));
   t('iptal karti gri+iptal', /pcst-cancelled/.test(ag) && /iptal/.test(ag));
   t('yapildi karti ayri sinif', /pcst-completed/.test(ag));
   t('kart dokununca ders modali', ag.includes("openLessonModal('L1')"));
@@ -73,6 +75,8 @@ setTimeout(()=>{ try {
   console.log('[5] STATIK');
   t('mobil CSS blogu var', html.includes('pl-cal-mobile-css'));
   t('haftada mobil sadelestirme kurali', html.includes('.cal-lesson .l-top, .cal-lesson .l-members, .cal-lesson .l-inst { display:none; }'));
+  t('planli kart ACIK yesil (v133)', html.includes('.pcal-card { background:#9fd8c0; color:#0e3b2e;'));
+  t('yapilan kart orta yesil', html.includes('.pcal-card.pcst-completed { background:var(--acc); color:var(--acc-contrast,#fff); }'));
 
   console.log('');
   console.log('SONUC: '+pass+' gecti, '+fail+' kaldi');

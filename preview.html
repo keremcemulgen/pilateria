@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.30.55-onizleme">
+<meta name="app-version" content="2026.07.30.56-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -1228,10 +1228,10 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
 .pcal-dots { min-height:10px; font-size:9px; letter-spacing:1px; color:var(--acc); line-height:1; }
 .pcal-dots i { font-style:normal; vertical-align:top; }
 .pcal-daylbl { font-size:12px; font-weight:800; color:var(--muted); letter-spacing:.5px; margin:4px 2px 2px; text-transform:uppercase; }
-.pcal-card { background:var(--acc); color:var(--acc-contrast,#fff); border-radius:12px; padding:10px 14px; margin:6px 0; cursor:pointer; }
+.pcal-card { background:#9fd8c0; color:#0e3b2e; border-radius:12px; padding:10px 14px; margin:6px 0; cursor:pointer; }
 .pcal-card .pcal-c1 { font-size:14.5px; font-weight:600; line-height:1.35; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .pcal-card .pcal-c2 { font-size:12px; opacity:.85; margin-top:2px; }
-.pcal-card.pcst-completed { background:var(--acc-strong,#0a5f52); }
+.pcal-card.pcst-completed { background:var(--acc); color:var(--acc-contrast,#fff); }
 .pcal-card.pcst-missed { background:var(--bad,#C4634F); color:#fff; }
 .pcal-card.pcst-cancelled { background:#9aa1a6; color:#14181b; }
 .pcal-card.pcst-cancelled .pcal-c1 { text-decoration:line-through; }
@@ -4647,14 +4647,14 @@ function __pcalLessonCard(l) {
   const cancelled = st === 'cancelled';
   const ay = l.packageMonth || String(l.date || '').slice(0,7);
   const kisiler = l.groupId
-    ? (function(){ const ns = (l.memberIds||[]).map(memberName).filter(Boolean); return ns.length ? ns.join('+') : (groupNameForMonth(l.groupId, ay) || 'Grup'); })()
-    : ((l.memberIds||[]).map(memberName).filter(Boolean).join('+') || '(boş)');
+    ? (function(){ const ns = (l.memberIds||[]).map(memberName).filter(Boolean); return ns.length ? ns.join(', ') : (groupNameForMonth(l.groupId, ay) || 'Grup'); })()
+    : ((l.memberIds||[]).map(memberName).filter(Boolean).join(', ') || 'Boş ders');
   const hoca = l.instructorId ? instructorName(l.instructorId) : '';
   const bit = (function(){ try { const m0 = timeToMinutes(l.time) + (+l.durationMin || +state.settings.lessonDuration || 60); return String(Math.floor(m0/60)).padStart(2,'0') + ':' + String(m0%60).padStart(2,'0'); } catch(e) { return ''; } })();
   const dolu = (l.memberIds||[]).filter(Boolean).length;
   return `<div class="pcal-card pcst-${st}" onclick="openLessonModal('${l.id}')">
-    <div class="pcal-c1">${l.time} (${escapeHtml(kisiler)})${hoca ? `(${escapeHtml(hoca)}+)` : ''}${cancelled ? ' iptal' : ''}</div>
-    <div class="pcal-c2">${l.time}${bit ? '–' + bit : ''} · ${dolu}/${l.size || state.settings.reformers} · ${(LESSON_STATUS[st]||{}).label || ''}</div>
+    <div class="pcal-c1">${l.time} · ${escapeHtml(kisiler)}${cancelled ? ' — iptal' : ''}</div>
+    <div class="pcal-c2">${l.time}${bit ? '–' + bit : ''} · ${dolu}/${l.size || state.settings.reformers}${hoca ? ' · ' + escapeHtml(hoca) : ''} · ${(LESSON_STATUS[st]||{}).label || ''}</div>
   </div>`;
 }
 function __pcalAgendaHtml(dayISO) {
@@ -12529,7 +12529,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.30.55-onizleme';
+const APP_VERSION = '2026.07.30.56-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
