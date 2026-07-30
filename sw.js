@@ -2,11 +2,13 @@
 // v51 KOK FIX: eski SW, Supabase GET okumalarini da cache'liyordu; ag kesintisinde ESKI veriyi servis edip
 // state'i geri sariyordu. Artik yalniz kendi kaynagimizdaki (app dosyalari) GET'ler yonetilir; Supabase/harici
 // istekler HIC dokunulmadan dogrudan aga gider (veri tazeligi ZORUNLU).
-const CACHE_NAME = 'pilateria-v130-2026-07-30-53';
+const CACHE_NAME = 'pilateria-v131-2026-07-30-54';
 const ASSETS = [
   './',
   './index.html',
   './pilateria.html',
+  './recover.html',
+  './kurtar.html',
   './supabase-vendor.js',
   './manifest.json',
   './pilateria-figure.png',
@@ -41,8 +43,10 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request)
       .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then(c => c.put(e.request, copy)).catch(() => {});
+        if (res && res.ok) { // v131 O-7: hata yanitlari (404/500) cache'e girmez — bozuk sayfa kalicilasamaz
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(e.request, copy)).catch(() => {});
+        }
         return res;
       })
       .catch(() => caches.match(e.request).then(r => r || new Response('Çevrimdışı — uygulama yüklenemedi', { status: 503 })))

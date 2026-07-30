@@ -82,7 +82,8 @@ rep("navigator.serviceWorker.register('sw.js')", "Promise.resolve() // ÖNİZLEM
 # Bütünlük
 # v122: v120'de init() async oldu (init().catch(...)) — eski 'init();' kontrolu sessizce
 # basarisiz oluyor, preview.html BAYAT kaliyor ve preview-test eski surumu test ediyordu.
-assert h.count('</script>') == 3 and re.search(r'\binit\(\)\s*[;.]', h) and h.rstrip().endswith('</html>')  # 2 inline + 1 vendor
+# v131: cerceve kirici head'e 3. inline script'i ekledi -> toplam 4 (3 inline + 1 vendor)
+assert h.count('</script>') == 4 and re.search(r'\binit\(\)\s*[;.]', h) and h.rstrip().endswith('</html>')  # 3 inline + 1 vendor
 assert "localStorage.setItem('pilateria'," not in h
 open('preview.html', 'w', encoding='utf-8').write(h)
 print('preview.html uretildi:', len(h), 'karakter, surum', ver + '-onizleme')

@@ -7,7 +7,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.30.53">
+<meta name="app-version" content="2026.07.30.54">
+<script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -2665,7 +2666,51 @@ function __sanitizeStr(v) {
   if (typeof v !== 'string') return v;
   return v.replace(/[<>]/g, '').replace(/[\u0000-\u001F\u007F]/g, function(c){ return (c==='\n'||c==='\t') ? c : ''; });
 }
+// v131 O-3: ID TEMIZLIGI — id'leri normalde uid() uretir (guvenli); ama id bulut/ice-aktarma/kurtarma
+// yoluyla da gelebilir ve onclick="fn('${id}')" kalibinin 58 ornegi var. Bozuk id, TUM referanslariyla
+// birlikte AYNI eslemeyle temizlenir — iliskiler (ders-uye, odeme-uye, grup-uye...) kopmaz.
+function __pilIdOk(v) {
+  return typeof v === 'string' && v.length > 0 && v.length <= 64 && /^[A-Za-z0-9_.:-]+$/.test(v) && v !== '__proto__' && v !== 'constructor' && v !== 'prototype';
+}
+function __pilCleanId(v) {
+  const sv = String(v == null ? '' : v);
+  let c = sv.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 56);
+  let h = 0;
+  for (let i = 0; i < sv.length; i++) h = ((h * 31) + sv.charCodeAt(i)) >>> 0;
+  return (c || 'id') + '_' + h.toString(36);
+}
+function __pilSanitizeIds(st) {
+  try {
+    const map = {};
+    const colls = ['members','groups','lessons','payments','instructors','packageTypes','campaigns','waTemplates','expenses','instructorPayouts'];
+    colls.forEach(function(k) {
+      (Array.isArray(st[k]) ? st[k] : []).forEach(function(r) {
+        if (r && r.id != null && !__pilIdOk(String(r.id))) map[String(r.id)] = __pilCleanId(r.id);
+      });
+    });
+    if (!Object.keys(map).length) return;
+    const fix = function(v) { return (v != null && map[String(v)] !== undefined) ? map[String(v)] : v; };
+    const fixArr = function(a) { return Array.isArray(a) ? a.map(fix) : a; };
+    colls.forEach(function(k) {
+      (Array.isArray(st[k]) ? st[k] : []).forEach(function(r) {
+        if (!r) return;
+        r.id = fix(r.id);
+        if ('groupId' in r) r.groupId = fix(r.groupId);
+        if ('memberId' in r) r.memberId = fix(r.memberId);
+        if ('instructorId' in r) r.instructorId = fix(r.instructorId);
+        if ('campaignId' in r) r.campaignId = fix(r.campaignId);
+        if ('defaultPackageId' in r) r.defaultPackageId = fix(r.defaultPackageId);
+        if ('defaultInstructorId' in r) r.defaultInstructorId = fix(r.defaultInstructorId);
+        if (Array.isArray(r.memberIds)) r.memberIds = fixArr(r.memberIds);
+        if (r.monthly && typeof r.monthly === 'object') { for (const ay in r.monthly) { const mm = r.monthly[ay]; if (mm && mm.packageId != null) mm.packageId = fix(mm.packageId); } }
+        if (r.monthlyMembers && typeof r.monthlyMembers === 'object') { for (const ay in r.monthlyMembers) r.monthlyMembers[ay] = fixArr(r.monthlyMembers[ay]); }
+      });
+    });
+    try { if (typeof __trace === 'function') __trace('🧹 v131: ' + Object.keys(map).length + ' bozuk id referanslariyla temizlendi'); } catch(e) {}
+  } catch(e) {}
+}
 function sanitizeStateText(st) {
+  __pilSanitizeIds(st); // v131 O-3
   if (!st || typeof st !== 'object') return st;
   const FIELDS = {
     members: ['name','phone','tcno','adres','health','note'],
@@ -7955,6 +8000,10 @@ async function markGroupPackageExtended(groupId, monthISO, mark) {
     pkg.status = 'extended';
     pkg.price = 0;
     pkg.extendedNote = note;
+    // v131 (v122 notu): UYE-AY IKIZI — uyelerin o ayki fiyat override'i da 0'lanir (markMemberPackageExtended
+    // bunu zaten yapiyordu, grup surumu yapmiyordu); yoksa "paket uzadi (0 TL)" derken uyeden hala para istenir.
+    // __extZero bayragi geri almayi guvenli kilar: yalniz bizim koydugumuz 0'lar silinir.
+    try { resolveGroupMembersForMonth(g, monthISO).forEach(function(mid){ if (!mid) return; const mm = state.members.find(function(x){return x.id===mid;}); const cur = mm && mm.monthly && mm.monthly[monthISO]; if (cur && cur.totalPrice !== undefined && cur.totalPrice !== null && cur.totalPrice !== '' && !cur.__extZero) return; setMemberMonthly(mid, monthISO, { totalPrice: 0, __extZero: true }); }); } catch(e) {}
   } else {
     pkg.status = 'active';
     delete pkg.extendedNote;
@@ -7962,6 +8011,8 @@ async function markGroupPackageExtended(groupId, monthISO, mark) {
     const newPrice = await plPrompt('Yeni paket fiyatı (₺):', g.customTotalPrice || 0, { type: 'number' });
     if (newPrice === null) return;
     pkg.price = +newPrice || 0;
+    // v131: ikizin geri alinisi — yalniz __extZero isaretli 0-override'lar silinir (elle girilmis fiyatlara dokunulmaz)
+    try { resolveGroupMembersForMonth(g, monthISO).forEach(function(mid){ const mm = state.members.find(function(x){return x.id===mid;}); const cur = mm && mm.monthly && mm.monthly[monthISO]; if (cur && cur.__extZero) { delete cur.totalPrice; delete cur.__extZero; } }); } catch(e) {}
   }
   save();
   refreshGroupDetailIfOpen();
@@ -9290,6 +9341,12 @@ function savePayment() {
   // v22: packageMonth = kullanicinin SECTIGI paket ayi (gec odeme dogru aya yazilir)
   data.packageMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
   if (isRefund) { data.refund = true; data.listPrice = 0; data.discount = 0; data.sessions = 0; } // v127
+  // v131: TAKSIT INDIRIM DEGILDIR — v110 kanonu geregi tanimli fiyat varken dusuk tutar taksittir;
+  // v123 kalan-on-dolumuyla buildPaymentRecord'un (liste−tutar) farki sahte "indirim" uretiyordu (rapor sisiyordu).
+  if (!isRefund && !data.campaignId) {
+    const __capDsc = paymentCapCheck(memberId, groupId, data.packageMonth, 0, id || '');
+    if (__capDsc.defined > 0) data.discount = 0;
+  }
   // v10: Arşivdeki üye için ödeme yapılıyorsa otomatik aktive et
   if (memberId && isMemberArchived(memberId)) unarchiveMember(memberId);
   if (id) { const i = state.payments.findIndex(x=>x.id===id); state.payments[i] = data; }
@@ -9374,6 +9431,7 @@ function saveGroupPaymentAll() {
     const __mPkg = (function(){ const pid = memberPkgIdForMonth(mid, packageMonth); return (pid && state.packageTypes.find(p=>p.id===pid)) || pkgObj; })(); // v111: uyenin kendi paketi
     const rec = buildPaymentRecord('', mid, groupId, date, __mPkg, sessions, listPrice, __amt, method, campaignId, campaignName, note, false);
     rec.packageMonth = packageMonth;
+    if (!campaignId) { const __cDsc = paymentCapCheck(mid, groupId, packageMonth, 0, ''); if (__cDsc.defined > 0) rec.discount = 0; } // v131: taksit indirim degildir
     state.payments.push(rec);
     if (isMemberArchived(mid)) unarchiveMember(mid);
     if (packageMonth >= ROSTER_START_MONTH) setMemberMonthly(mid, packageMonth, { enrolled: true }); // v23
@@ -11033,7 +11091,9 @@ function __sbHarvestVer(all) {
   });
 }
 // Iki kaydin _v'sine gore kazanan (esitlikte b = uzak/son gelen). Saf fonksiyon - testlenir.
-function sbPickWinner(a, b) { return (((b && b._v) || 0) >= ((a && a._v) || 0)) ? b : a; }
+// v131: sbPickWinner OLU KODDU (hic cagrilmiyordu) — kaldirildi.
+// v131 O-6: __proto__/constructor/prototype anahtarlari nesne haritalarina yazilamaz (prototype pollution)
+function __sbBadKey(k) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
 // Baglanti koptuktan sonra / one gelince / online olunca kacirilan olaylari tazele.
 async function sbResync(reason) {
   if (!SUPABASE_MODE || !sbClient || __sbResyncBusy) return;
@@ -11074,7 +11134,7 @@ async function sbResync(reason) {
     let __resyncOk = true;
     for (const t of SB_TABLES) {
       all[t] = {};
-      try { const r = await sbClient.from(t).select('id,data').order('id'); if (r && r.error) __resyncOk = false; (r.data || []).forEach(row => { all[t][row.id] = row.data; }); }
+      try { const r = await sbClient.from(t).select('id,data').order('id'); if (r && r.error) __resyncOk = false; (r.data || []).forEach(row => { if (!row || __sbBadKey(String(row.id))) return; all[t][row.id] = row.data; }); }
       catch(e) { __resyncOk = false; console.error('[sb] resync select', t, e); }
     }
     if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); return; }
@@ -11352,7 +11412,7 @@ async function sbLoadAll() {
     try {
       const r = await sbClient.from(t).select('id,data').order('id'); // v40: deterministik yukleme sirasi
       if (r && r.error) __loadOk = false;
-      (r.data || []).forEach(row => { all[t][row.id] = row.data; });
+      (r.data || []).forEach(row => { if (!row || __sbBadKey(String(row.id))) return; all[t][row.id] = row.data; });
     } catch(e) { __loadOk = false; console.error('[sb] select', t, e); }
   }
   // v51 VERI GUVENLIGI: bir tablo bile CEKILEMEDIYSE state'i EZME — yerel (localStorage) korunur, subscribe + 8sn sonra tekrar dene
@@ -11660,6 +11720,7 @@ function sbSubscribeAll() {
         if (SB_TABLES.indexOf(t) === -1) return;
         const row = payload.new && payload.new.id ? payload.new : null;
         const oldId = payload.old && payload.old.id;
+        if ((row && __sbBadKey(String(row.id))) || (oldId && __sbBadKey(String(oldId)))) return; // v131 O-6
         __sbShadow[t] = __sbShadow[t] || {}; __sbVer[t] = __sbVer[t] || {};
         let __applyId = null;
         if (payload.eventType === 'DELETE') {
@@ -12113,9 +12174,17 @@ async function verifyPin(pin, stored) {
     let diff = 0; for (let i=0;i<calc.length;i++) diff |= calc.charCodeAt(i) ^ stored.charCodeAt(i);
     return diff === 0;
   }
-  // Eski format: duz SHA-256
+  // Eski format: duz SHA-256 — v131 O-2: dogru girildigi ANDA tuzlu PBKDF2'ye YUKSELTILIR (eski hash birakilmaz)
   const h = await pinHash(pin);
-  return h === stored;
+  if (h !== stored) return false;
+  try {
+    const up = await pinHashV2(pin);
+    if (typeof up === 'string' && up.startsWith('pbkdf2$')) {
+      try { localStorage.setItem(PIN_HASH_KEY, up); } catch(e) {}
+      if (typeof state !== 'undefined' && state && state._pinHash === stored) { state._pinHash = up; try { save(); } catch(e) {} }
+    }
+  } catch(e) {}
+  return true;
 }
 function getStoredPinHash() {
   // Öncelik: bulutla senkron olan state._pinHash; yoksa localStorage yedeği
@@ -12342,7 +12411,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.30.53';
+const APP_VERSION = '2026.07.30.54';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
