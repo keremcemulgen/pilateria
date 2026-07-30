@@ -55,6 +55,26 @@ setTimeout(async ()=>{ try {
   console.log('[5] panel kancasi');
   t('renderDashboard __waMorningFetch cagirir', html.includes('__waMorningFetch(); } catch(e){}'));
 
+  console.log('[6] GRUP MESAJI HAZIRLAYICI (v130)');
+  stubSb({ data: { id: today, data: { mode:'shadow', toplam:5, uygun:5, sorunlu:0, gonderilen:0,
+    gruplar: [
+      { groupId:'g1', ad:'BANU - DILA', saat:'10:00', mesaj:'Günaydın 🌸 Bugün 10:00 dersimiz var. Görüşmek üzere! — PİLATERİA' },
+      { groupId:'g2', ad:'HULYA - NAZ', saat:'12:15', mesaj:'Günaydın 🌸 Bugün 12:15 dersimiz var. Görüşmek üzere! — PİLATERİA' }
+    ],
+    kisiler: [] } }, error: null });
+  await w.eval('__waMorningFetch()');
+  t('kartta "2 grup mesajı hazır"', /2<\/b> grup mesajı hazır/.test(card.innerHTML), card.textContent.slice(0,120));
+  w.waMorningDetail();
+  const m2 = d.getElementById('modal-wa-morning');
+  t('modalde grup satirlari', !!m2 && /BANU - DILA/.test(m2.innerHTML) && /HULYA - NAZ/.test(m2.innerHTML));
+  t('Kopyala dugmeleri var', !!m2 && (m2.innerHTML.match(/waCopyGroupMsg\(/g)||[]).length === 2);
+  t('grup sohbetine otomatik gonderim olmadigi aciklanir', !!m2 && /otomatik gönderemez/.test(m2.innerHTML));
+  w.eval("Object.defineProperty(navigator, 'clipboard', { value: { writeText: function(t){ window.__copied = t; return Promise.resolve(); } }, configurable: true });");
+  w.waCopyGroupMsg(0);
+  await new Promise(res => setTimeout(res, 50));
+  t('kopyalanan metin dogru', /Bugün 10:00 dersimiz var/.test(w.eval("window.__copied || ''")), w.eval("(window.__copied||'').slice(0,50)"));
+  if (m2) m2.remove();
+
   console.log('');
   console.log('SONUC: '+pass+' gecti, '+fail+' kaldi');
   process.exit(fail?1:0);
