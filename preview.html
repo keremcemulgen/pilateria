@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.29.51-onizleme">
+<meta name="app-version" content="2026.07.30.52-onizleme">
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
      kişisel veri artık hiçbir üçüncü tarafa çıkmaz. Nesne/embed yok; base/form kısıtlı; çerçeveleme engelli.
@@ -1372,6 +1372,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
     </div>
     <div id="dash-sync-status" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
     <div id="dash-birthdays" style="display:none;margin-top:6px;font-size:12.5px;"></div>
+    <div id="dash-wa-morning" style="display:none;margin-top:6px;font-size:12.5px;"></div>
     <div style="margin-top:6px;font-size:11px;color:var(--muted);">☁️ <b>Otomatik senkron:</b> her değişiklik kendiliğinden buluta kaydedilir; diğer cihazlar öne gelince kendiliğinden güncellenir. Durum: başlıktaki bulut simgesi.</div>
     <div style="margin-top:10px;font-size:12px;color:var(--muted);">💡 İpucu: Sağ alttaki <b>+</b> butonunu her sayfadan kullanabilirsin. <b>Esc</b> tuşu modal/menü kapatır.</div>
   </div>
@@ -3789,6 +3790,55 @@ function __renderBirthdays() {
   el.style.display = 'block';
   el.innerHTML = '🎂 <b>Doğum günü:</b> ' + list.sort((a,b)=>a.i-b.i).map(x => `${escapeHtml(x.name)} (${x.label})`).join(' · ');
 }
+// v129: SABAH WHATSAPP RAPORU — sunucu 08:00'de yazar (pilateria_wa_morning), istemci YALNIZ OKUR.
+// wa_config'e istemci ASLA erisemez (RLS politikasiz); burada yalniz wa_morning_log okunur.
+async function __waMorningFetch() {
+  const el = document.getElementById('dash-wa-morning');
+  if (!el) return;
+  if (!SUPABASE_MODE || !sbClient) { el.style.display = 'none'; return; }
+  try {
+    const r = await sbClient.from('wa_morning_log').select('id,data').eq('id', todayISO()).maybeSingle();
+    if (!r || r.error || !r.data || !r.data.data) { el.style.display = 'none'; return; }
+    const d = r.data.data;
+    window.__waMorningData = d;
+    const shadow = d.mode !== 'live';
+    const bad = +d.sorunlu || 0;
+    el.style.display = 'block';
+    el.innerHTML = (shadow
+        ? '📱 <b>Sabah mesajları</b> <span style="background:#FFF8E1;color:#8a6d00;border-radius:99px;padding:0 8px;font-size:11px;font-weight:700;">GÖLGE MOD</span> bugün <b>' + (+d.toplam || 0) + '</b> üyeye gidecekti'
+        : '📱 <b>Sabah mesajları:</b> <b>' + (+d.gonderilen || 0) + '</b> gönderildi')
+      + (bad ? ' · <span style="color:#c62828;font-weight:700;">' + bad + ' sorunlu numara</span>' : '')
+      + ' · <a href="#" onclick="waMorningDetail();return false;">listele</a>';
+  } catch(e) { el.style.display = 'none'; }
+}
+function waMorningDetail() {
+  const d = window.__waMorningData;
+  if (!d) return;
+  const old = document.getElementById('modal-wa-morning'); if (old) old.remove();
+  const mdl = document.createElement('div');
+  mdl.id = 'modal-wa-morning'; mdl.className = 'modal-bg open';
+  const rows = (d.kisiler || []).map(function(k) {
+    const bad = /hatali|hata/.test(k.durum || '');
+    return `<tr style="${bad ? 'background:#FDECEA;' : ''}">
+      <td><b>${escapeHtml(k.ad || '')}</b></td>
+      <td>${escapeHtml(k.saat || '')}</td>
+      <td>${escapeHtml(k.tel || '—')}</td>
+      <td>${escapeHtml(k.durum || '')}${(bad && k.memberId) ? ` <button class="btn small secondary" onclick="document.getElementById('modal-wa-morning').remove();openMemberModal('${k.memberId}')" title="Üyeye telefon numarası ekle">📞 Ekle</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+  mdl.innerHTML = `<div class="modal" style="max-width:600px;max-height:82vh;overflow:auto;">
+    <h3>📱 Sabah mesajları — ${todayISO()} (${d.mode === 'live' ? 'CANLI' : 'GÖLGE MOD'})</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin:4px 0 8px;">${d.mode === 'live'
+      ? 'Bu sabah 08:00\'de gönderilen mesajlar.'
+      : 'GÖLGE MOD: hiçbir mesaj GÖNDERİLMEDİ — gerçek gönderim açık olsaydı bu liste giderdi. Sorunlu numaraları 📞 Ekle ile tamamla.'}</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Üye</th><th>Saat</th><th>Telefon</th><th>Durum</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4"><div class="empty">Bugün dersi olan üye yok.</div></td></tr>'}</tbody>
+    </table></div>
+    <div class="row" style="justify-content:flex-end;margin-top:8px;"><button class="btn secondary" onclick="document.getElementById('modal-wa-morning').remove()">Kapat</button></div>
+  </div>`;
+  document.body.appendChild(mdl);
+}
 function renderNextWeekMissing(){
   const el = document.getElementById('nextweek-missing-list'); if(!el) return;
   const { start, end, groups, members } = getNextWeekMissing();
@@ -3806,6 +3856,7 @@ function renderNextWeekMissing(){
 function renderDashboard() {
   try { renderNextWeekMissing(); } catch(e){}
   try { __renderBirthdays(); } catch(e){}
+  try { __waMorningFetch(); } catch(e){}
   // Tutar gizleme butonu metnini güncelle
   document.querySelectorAll('.mask-amounts-btn').forEach(b => {
     b.textContent = __maskAmounts ? '👁 Tutarları Göster' : '🙈 Tutarları Gizle';
@@ -12269,7 +12320,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.29.51-onizleme';
+const APP_VERSION = '2026.07.30.52-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
