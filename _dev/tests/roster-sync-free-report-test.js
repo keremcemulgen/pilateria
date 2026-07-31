@@ -19,6 +19,11 @@ let pass = 0, fail = 0;
 function t(name, cond) { if (cond) { pass++; console.log('  OK ', name); } else { fail++; console.log('  FAIL', name); } }
 
 setTimeout(() => { try {
+  // v134 duzeltmesi: test 31 Temmuz'da kirildi — "ay sonu tarihli dersler hep ileridedir" varsayimi
+  // ayin SON GUNUNDE cokuyordu. Ileri dersler artik bugunden turetilir (sarkan ders packageMonth=CM tasir).
+  const CM = w.eval('currentMonth()');
+  const T1 = w.eval("(function(){const p0=todayISO().split('-').map(Number);const d0=new Date(p0[0],p0[1]-1,p0[2]+1);return isoDate(d0);})()");
+  const T2 = w.eval("(function(){const p0=todayISO().split('-').map(Number);const d0=new Date(p0[0],p0[1]-1,p0[2]+2);return isoDate(d0);})()");
   w.eval('window.alert = function(m){}'); w.alert = m => alerts.push(String(m)); w.eval('window.__PL_DLG_AUTO__ = (o)=>o&&o.input?null:true;');
   w.eval(`
     state.settings.reformers = 5; state.settings.lessonDuration = 45;
@@ -31,14 +36,14 @@ setTimeout(() => { try {
       {id:'r4',name:'MERT CAN',joinDate:'2026-05-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:3000}
     );
     state.groups.push({id:'gr',name:autoGroupName(['r1','r2']),size:3,memberIds:['r1','r2'],defaultInstructorId:'h1',defaultPackageId:'',defaultTime:'10:00',defaultDays:[2],
-      packages:[{month:'2026-07',startDate:'2026-07-01',sessions:8,price:99999,status:'active'}],rescheduleUsed:0,cancelUsed:0,customTotalPrice:77777,monthlyNotes:{}});
+      packages:[{month:'${CM}',startDate:'${CM}-01',sessions:8,price:99999,status:'active'}],rescheduleUsed:0,cancelUsed:0,customTotalPrice:77777,monthlyNotes:{}});
     // dersler: gecmis Haziran (completed) + Haziran paketi planli + Temmuz planli x2
     // v106: planli Temmuz dersleri AY SONU tarihli — yeni uyenin KATILIM TARIHI (bugun) hangi gun olursa olsun sonrasinda kalirlar
     state.lessons.push(
       {id:'L-old',date:'2026-06-10',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-06',status:'completed',note:''},
       {id:'L-junP',date:'2026-07-02',time:'11:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-06',status:'planned',note:''},
-      {id:'L-jul1',date:'2026-07-30',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-07',status:'planned',note:''},
-      {id:'L-jul2',date:'2026-07-31',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'2026-07',status:'planned',note:''}
+      {id:'L-jul1',date:'${T1}',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'${CM}',status:'planned',note:''},
+      {id:'L-jul2',date:'${T2}',time:'10:00',durationMin:45,instructorId:'h1',size:3,memberIds:['r1','r2'],groupId:'gr',packageMonth:'${CM}',status:'planned',note:''}
     );
     window.S = () => state;
   `);
@@ -46,10 +51,10 @@ setTimeout(() => { try {
   const L = id => w.S().lessons.find(x=>x.id===id);
 
   console.log('[1] GRUP TOPLAMI = UYE TOPLAMI (paket 99999 / custom 77777 degil)');
-  t('Temmuz toplami 8000 (4000+4000)', w.groupExpectedTotal(g(),'2026-07') === 8000);
-  t('uye fiyati degisince toplam OTOMATIK', (w.eval(`setMemberMonthly('r1','2026-07',{totalPrice:4500});`), w.groupExpectedTotal(g(),'2026-07') === 8500));
-  w.eval(`delete state.members.find(x=>x.id==='r1').monthly['2026-07'];`);
-  t('uyeler sayfasi grup satiri ayni toplami gosterir', (w.buildMemberRows('2026-07').find(r=>r.groupId==='gr'&&r.type==='group')||{}).totalPrice === 8000);
+  t('Temmuz toplami 8000 (4000+4000)', w.groupExpectedTotal(g(), CM) === 8000);
+  t('uye fiyati degisince toplam OTOMATIK', (w.eval(`setMemberMonthly('r1','${CM}',{totalPrice:4500});`), w.groupExpectedTotal(g(), CM) === 8500));
+  w.eval(`delete state.members.find(x=>x.id==='r1').monthly['${CM}'];`);
+  t('uyeler sayfasi grup satiri ayni toplami gosterir', (w.buildMemberRows(CM).find(r=>r.groupId==='gr'&&r.type==='group')||{}).totalPrice === 8000);
 
   console.log('[2] UYE EKLE -> planli dersler + isim OTOMATIK guncel');
   t('grup adi otomatik (RANA KAYA - DERYA AK)', g().name === 'RANA KAYA - DERYA AK');
@@ -59,14 +64,14 @@ setTimeout(() => { try {
   t('Temmuz planli ders 2 guncel', L('L-jul2').memberIds.includes('r3'));
   t('GECMIS completed ders DOKUNULMADI', !L('L-old').memberIds.includes('r3') && L('L-old').memberIds.length===2);
   t('HAZIRAN PAKETI planli dersi DOKUNULMADI (ay izolasyonu)', !L('L-junP').memberIds.includes('r3'));
-  t('isim otomatik guncellendi (v41: ay gorunumu)', w.groupDisplayName(g(), '2026-07') === 'RANA KAYA - DERYA AK - SELIN OZ', w.groupDisplayName(g(), '2026-07'));
-  t('toplam yeni uyeyle guncel (8000+5000)', w.groupExpectedTotal(g(),'2026-07') === 13000);
+  t('isim otomatik guncellendi (v41: ay gorunumu)', w.groupDisplayName(g(), CM) === 'RANA KAYA - DERYA AK - SELIN OZ', w.groupDisplayName(g(), CM));
+  t('toplam yeni uyeyle guncel (8000+5000)', w.groupExpectedTotal(g(), CM) === 13000);
 
   console.log('[3] UYE BASKA GRUBA TASININCA eski grubun dersleri/adi guncel');
   w.eval(`state.groups.push({id:'gr2',name:autoGroupName(['r4']),size:2,memberIds:['r4'],defaultInstructorId:'h1',defaultPackageId:'',defaultTime:'',defaultDays:[],packages:[],rescheduleUsed:0,cancelUsed:0,monthlyNotes:{}});`);
   w.assignMemberToSlot('r1','gr2',1);
   t('eski grubun planli dersinden cikti', !L('L-jul1').memberIds.includes('r1'));
-  t('eski grup adi guncel (v41: ay gorunumu DERYA AK - SELIN OZ)', w.groupDisplayName(g(), '2026-07') === 'DERYA AK - SELIN OZ', w.groupDisplayName(g(), '2026-07'));
+  t('eski grup adi guncel (v41: ay gorunumu DERYA AK - SELIN OZ)', w.groupDisplayName(g(), CM) === 'DERYA AK - SELIN OZ', w.groupDisplayName(g(), CM));
   t('gecmis ders yine dokunulmadi (r1 durur)', L('L-old').memberIds.includes('r1'));
 
   console.log('[4] PASIFE ALINCA (deleteMember) = v42 SADECE O AY: o ayin planli derslerinden duser, kadroda KALIR');
@@ -80,8 +85,8 @@ setTimeout(() => { try {
   w.eval(`
     state.groups.push({id:'gbig',name:'BIG',size:4,memberIds:['r2','r4'],defaultInstructorId:'h1',defaultPackageId:'',defaultTime:'',defaultDays:[],packages:[],rescheduleUsed:0,cancelUsed:0,monthlyNotes:{}});
     state.lessons.push(
-      {id:'L-oth',date:'2026-07-31',time:'10:00',durationMin:45,instructorId:'h1',size:4,memberIds:['x1','x2','x3','x4'],groupId:'',packageMonth:'2026-07',status:'planned',note:''},
-      {id:'L-big',date:'2026-07-31',time:'10:15',durationMin:45,instructorId:'h1',size:4,memberIds:['r2','r4'],groupId:'gbig',packageMonth:'2026-07',status:'planned',note:''}
+      {id:'L-oth',date:'${T1}',time:'10:00',durationMin:45,instructorId:'h1',size:4,memberIds:['x1','x2','x3','x4'],groupId:'',packageMonth:'${CM}',status:'planned',note:''},
+      {id:'L-big',date:'${T1}',time:'10:15',durationMin:45,instructorId:'h1',size:4,memberIds:['r2','r4'],groupId:'gbig',packageMonth:'${CM}',status:'planned',note:''}
     );
   `);
   alerts.length = 0;
