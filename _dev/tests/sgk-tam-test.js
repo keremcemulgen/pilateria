@@ -84,6 +84,12 @@ setTimeout(()=>{ try {
   console.log('[6] EKRAN');
   const sal = d.getElementById('salaries-content').innerHTML;
   t('satirda 🛡️ TAM rozeti + borc yazisi', /🛡️ TAM ✓/.test(sal) && /hoca borcu/.test(sal));
+  t('satirda GERCEK SGK da yazar (v139: tam 9000 / gercek 2480)', /SGK tam/.test(sal) && /gerçek 2\.480|gerçek 2480/.test(sal.replace(/&nbsp;/g,' ')), (sal.match(/SGK tam[\s\S]{0,60}/)||['yok'])[0].replace(/<[^>]*>/g,' '));
+  t('ay seridi SGK kutusunda gercek toplam 2560 (v139)', /gerçek: 2\.560|gerçek: 2560/.test(sal.replace(/&nbsp;/g,' ')));
+  w.payInstructor('h2', cm, 60000);
+  const mdl139 = d.getElementById('modal-inst-pay');
+  t('odeme modalinda gercek SGK parantezde (v139: gercek 80)', !!mdl139 && /gerçek 80/.test(mdl139.innerHTML.replace(/&nbsp;/g,' ')), mdl139 ? ((mdl139.innerHTML.match(/SGK[\s\S]{0,80}/)||['SGK yok'])[0].replace(/<[^>]*>/g,' ')) : 'modal yok');
+  if (mdl139) mdl139.remove();
   t('ay seridinde Geri Alinacak 39795.5 (30875.5+8920)', /Hocalardan Geri Alınacak/.test(sal) && /39\.795,5|39795.5|39.795,50/.test(sal.replace(/&nbsp;/g,' ')), sal.match(/Geri Alınacak[\s\S]{0,120}/) ? sal.match(/Geri Alınacak[\s\S]{0,120}/)[0].replace(/<[^>]*>/g,' ') : 'yok');
 
   console.log('[7] KAPAT: normal moda doner');
