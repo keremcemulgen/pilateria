@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.31.58-onizleme">
+<meta name="app-version" content="2026.07.31.59-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -6829,6 +6829,22 @@ function addSgkExpenseForMonth(yyyymm) {
   try { __refreshUIInPlace(); } catch(e) {}
   if (window.plToast) plToast('SGK gidere yazıldı — net kâra işlendi');
 }
+// v136: hoca MAASINI gidere yaz — kisi bazli, istege bagli. Tutar = o ayin HAKEDISI (v41 motoru).
+// Not [MAAS-OTO-AY-hocaId] isareti tasir: mukerrer korumasi + net karda cift sayim onleme (asagida).
+function addInstructorSalaryExpense(instructorId, yyyymm) {
+  const inst = state.instructors.find(function(i){ return i.id === instructorId; });
+  if (!inst) return;
+  const hak = Math.round((((instructorEarningsForMonth(instructorId, yyyymm) || {}).total) || 0) * 100) / 100;
+  if (hak <= 0) { alert('Bu ay için hakediş yok — gidere yazılacak maaş bulunamadı.'); return; }
+  state.expenses = state.expenses || [];
+  const isaret = 'MAAS-OTO-' + yyyymm + '-' + instructorId;
+  if (state.expenses.find(function(e){ return e && e.note && String(e.note).indexOf('[' + isaret + ']') !== -1; })) { alert('Bu hocanın bu ayki maaşı zaten gidere yazılmış (Ödemeler > Giderler).'); return; }
+  if (!confirm(`${yyyymm} ${inst.name} maaşı (hakediş) ${money(hak)} ₺ gider olarak kaydedilecek (Hoca Maaşı). Net kârda mükerrer sayılmaz — maaşlar zaten Hoca Ödemeleri satırında düşülüyor. Onaylıyor musun?`)) return;
+  state.expenses.push({ id: uid(), date: yyyymm + '-28', category: 'Hoca Maaşı', amount: hak, note: inst.name + ' maaşı [' + isaret + ']' });
+  save(); renderSalaries();
+  try { __refreshUIInPlace(); } catch(e) {}
+  if (window.plToast) plToast(inst.name + ' maaşı gidere yazıldı');
+}
 function renderSalaries() {
   const monthInput = document.getElementById('sal-month');
   const m = monthInput.value || currentMonth();
@@ -6864,7 +6880,7 @@ function renderSalaries() {
       <td><span style="color:var(--ok)">✅ ${done}</span> &nbsp; <span style="color:var(--bad)">🔥 ${missed}</span></td>
       <td><b>${money(total)} ₺</b>${__pr134.aktif && total > 0 ? `<br><small style="color:var(--muted);">🏦 ${money(__pr134.iban)} · 💵 ${money(__pr134.nakit)} · ${__pr134.saat} sa${(+state.settings.sgkHourlyCost > 0) ? ' · SGK ' + money(__pr134.sgk) : ''}</small>` : ''}</td>
       <td>${paidBadge}</td>
-      <td>${actionBtn}</td>
+      <td>${actionBtn}${(function(){ if (total <= 0) return ''; const yazildi = (state.expenses||[]).some(function(e){ return e && e.note && String(e.note).indexOf('[MAAS-OTO-' + m + '-' + inst.id + ']') !== -1; }); return yazildi ? ` <span class="badge" style="background:#ECEFF1;color:#37474F;" title="Bu ayın maaşı gider listesinde">🧾 Giderde</span>` : ` <button class="btn small secondary" onclick="addInstructorSalaryExpense('${inst.id}','${m}')" title="Bu ayın hakedişini Hoca Maaşı gideri olarak kaydet (net kârda mükerrer sayılmaz)">🧾 Gidere Yaz</button>`; })()}</td>
     </tr>`;
   }).join('');
   const grandTotal = state.instructors.reduce((a,i)=>a+instructorEarningsForMonth(i.id, m).total, 0);
@@ -9766,7 +9782,7 @@ function renderTrendChart(anchorAy) {
     </svg>`;
 }
 // ===== v127: GIDER TAKIBI =====
-const EXPENSE_CATS = ['Kira','Elektrik/Su/Doğalgaz','Malzeme/Ekipman','Temizlik','Pazarlama','Vergi/SGK','Diğer'];
+const EXPENSE_CATS = ['Kira','Elektrik/Su/Doğalgaz','Malzeme/Ekipman','Temizlik','Pazarlama','Vergi/SGK','Hoca Maaşı','Diğer'];
 function expensesForMonth(monthISO) {
   return (state.expenses||[]).filter(e => e && String(e.date||'').slice(0,7) === monthISO);
 }
@@ -9780,8 +9796,11 @@ function instructorPayoutsTotalForMonth(monthISO) {
 function netProfitForMonth(monthISO) {
   const rev = (state.payments||[]).filter(p => (p.packageMonth || (p.date ? String(p.date).slice(0,7) : '')) === monthISO).reduce((a,b)=>a+(+b.amount||0),0);
   const pay = instructorPayoutsTotalForMonth(monthISO);
-  const exp = expensesTotalForMonth(monthISO);
-  return { rev: Math.round(rev*100)/100, pay: pay, exp: exp, net: Math.round((rev - pay - exp)*100)/100 };
+  // v136: [MAAS-OTO-...] isaretli maas giderleri net kar formulunden HARIC —
+  // maaslar zaten 'pay' (Hoca Odemeleri) bileseninde dusuluyor; gider defteri/CSV tam kalir.
+  const expMaas = Math.round(expensesForMonth(monthISO).filter(function(e){ return e && e.note && String(e.note).indexOf('MAAS-OTO-') !== -1; }).reduce(function(a,e){ return a + (+e.amount||0); }, 0) * 100) / 100;
+  const exp = Math.round((expensesTotalForMonth(monthISO) - expMaas) * 100) / 100;
+  return { rev: Math.round(rev*100)/100, pay: pay, exp: exp, expMaas: expMaas, net: Math.round((rev - pay - exp)*100)/100 };
 }
 function renderExpenses(monthISO) {
   const el = document.getElementById('expenses-list');
@@ -9995,7 +10014,7 @@ function renderReports() {
     np.innerHTML = `<h3 style="margin:4px 0 8px;">💰 Net Kâr (${m})</h3><div class="grid-stats">
       <div class="stat blue"><div class="label">Tahsilat</div><div class="value">${money(N.rev)} ₺</div></div>
       <div class="stat warn"><div class="label">Hoca Ödemeleri</div><div class="value">−${money(N.pay)} ₺</div></div>
-      <div class="stat warn"><div class="label">Giderler</div><div class="value">−${money(N.exp)} ₺</div></div>
+      <div class="stat warn"><div class="label">Giderler</div><div class="value">−${money(N.exp)} ₺</div>${N.expMaas > 0 ? `<div style="font-size:10px;color:var(--muted);">+${money(N.expMaas)} ₺ maaş kaydı — Hoca Ödemeleri'nde sayılır</div>` : ''}</div>
       <div class="stat ${N.net >= 0 ? 'ok' : 'warn'}"><div class="label">NET KÂR</div><div class="value">${money(N.net)} ₺</div></div>
     </div>`;
   })();
@@ -12604,7 +12623,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.31.58-onizleme';
+const APP_VERSION = '2026.07.31.59-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
