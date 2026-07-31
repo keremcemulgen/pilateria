@@ -262,11 +262,17 @@ const SECRET_RE = [
   { name: 'GitHub klasik token (ghp_)', re: /ghp_[A-Za-z0-9]{30,}/ },
   { name: 'Supabase service_role JWT', re: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]*service_role/ },
   { name: 'JSONBin master key ($2a$/$2b$)', re: /\$2[aby]\$\d{2}\$[A-Za-z0-9./]{40,}/ },
-  { name: 'izleme sirri (duz metin)', re: /2205c0724a6e73dc33dd2a44fb7d/ },
+  // izleme sirri: 2026-07-31 denetim bulgusu — sir HERKESE ACIK depoda YER ALAMAZ.
+  // Desen gitignore'lu _dev/_docs/izleme-sirri.txt dosyasindan okunur; dosya yoksa kontrol atlanir.
+  ...(function(){ try {
+    const sir = fs.readFileSync(path.join(__dirname, '..', '_docs', 'izleme-sirri.txt'), 'utf-8').trim();
+    return sir ? [{ name: 'izleme sirri (duz metin)', re: new RegExp(sir) }] : [];
+  } catch (e) { console.log('  (izleme sirri deseni yok — kontrol atlandi)'); return []; } })(),
 ];
 for (const s of SECRET_RE) {
   const hits = files.filter(f => {
     if (path.basename(f) === path.basename(__filename)) return false; // testin kendi deseni
+    if (f.split(path.sep).indexOf('_docs') !== -1) return false; // _dev/_docs gitignore'lu — depoya girmez, yerel sir dosyasi burada
     try { return s.re.test(fs.readFileSync(f, 'utf-8')); } catch (e) { return false; }
   });
   T('Y-5 SIR TARAMASI: ' + s.name + ' depoda YOK' +
