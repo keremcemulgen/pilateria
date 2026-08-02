@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.07.31.62-onizleme">
+<meta name="app-version" content="2026.08.02.63-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -1482,6 +1482,14 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
         <option value="unpaid">Ödemesi Eksik</option>
       </select>
     </div>
+    <details id="month-notes-card" style="margin:0 0 12px;padding:10px 12px;background:#FFFDF2;border:1px solid #EFE3B8;border-radius:10px;">
+      <summary style="cursor:pointer;font-weight:700;">🗒️ Ay Notları <span id="month-notes-sub" style="font-weight:400;color:var(--muted);margin-left:6px;"></span></summary>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:10px 0;align-items:flex-start;">
+        <textarea id="mn-text" placeholder="Bu aya özel not... (üyeye değil, aya aittir)" style="flex:1;min-width:200px;min-height:44px;"></textarea>
+        <button class="btn small pl-owner-only" onclick="addMonthNote()">Ekle</button>
+      </div>
+      <div id="month-notes-list"></div>
+    </details>
     <div id="members-stats" class="grid-stats" style="margin-bottom:12px;"></div>
     <div id="members-cards" class="m-cards"></div>
     <div class="table-wrap" id="members-table-wrap">
@@ -5709,11 +5717,85 @@ function ensureMemberMonthSelect() {
   }
   sel.innerHTML = options.join('');
 }
+// ========== AY NOTLARI (v140) ==========
+// Kerem: uyeler sayfasinda AYA OZEL not defteri — telefon not uygulamasi gibi.
+// Kayitlar settings.monthNotes = { 'YYYY-MM': [{id, text, createdAt, updatedAt?}] } yapisinda.
+function __mnMonth() { return (document.getElementById('member-month')||{}).value || currentMonth(); }
+function monthNotesFor(ay) {
+  const all = state.settings.monthNotes || {};
+  return Array.isArray(all[ay]) ? all[ay] : [];
+}
+function addMonthNote() {
+  const el = document.getElementById('mn-text');
+  const text = ((el && el.value) || '').trim();
+  if (!text) { alert('Not boş — önce bir şeyler yaz.'); return; }
+  const ay = __mnMonth();
+  state.settings.monthNotes = state.settings.monthNotes || {};
+  if (!Array.isArray(state.settings.monthNotes[ay])) state.settings.monthNotes[ay] = [];
+  state.settings.monthNotes[ay].push({ id: uid(), text: text, createdAt: new Date().toISOString() });
+  if (el) el.value = '';
+  save(); renderMonthNotes(ay);
+  if (window.plToast) plToast('🗒️ Not kaydedildi — ' + ay);
+}
+function removeMonthNote(ay, id) {
+  const list = monthNotesFor(ay);
+  const n = list.find(function(x){ return x.id === id; });
+  if (!n) return;
+  if (!confirm('Bu not silinsin mi?\n\n' + String(n.text).slice(0, 120))) return;
+  state.settings.monthNotes[ay] = list.filter(function(x){ return x.id !== id; });
+  if (!state.settings.monthNotes[ay].length) delete state.settings.monthNotes[ay];
+  save(); renderMonthNotes(ay);
+}
+function editMonthNote(ay, id) {
+  const box = document.getElementById('mn-item-' + id);
+  const n = monthNotesFor(ay).find(function(x){ return x.id === id; });
+  if (!box || !n) return;
+  box.innerHTML = `<textarea id="mn-edit-${id}" style="width:100%;min-height:60px;box-sizing:border-box;">${escapeHtml(n.text)}</textarea>
+    <div class="row" style="gap:6px;justify-content:flex-end;margin-top:4px;">
+      <button class="btn small secondary" onclick="renderMonthNotes('${ay}')">Vazgeç</button>
+      <button class="btn small" onclick="saveMonthNoteEdit('${ay}','${id}')">Kaydet</button>
+    </div>`;
+  const ta = document.getElementById('mn-edit-' + id); if (ta) ta.focus();
+}
+function saveMonthNoteEdit(ay, id) {
+  const ta = document.getElementById('mn-edit-' + id);
+  const text = ((ta && ta.value) || '').trim();
+  if (!text) { alert('Not boş bırakılamaz — silmek için Sil düğmesini kullan.'); return; }
+  const n = monthNotesFor(ay).find(function(x){ return x.id === id; });
+  if (!n) return;
+  n.text = text; n.updatedAt = new Date().toISOString();
+  save(); renderMonthNotes(ay);
+  if (window.plToast) plToast('🗒️ Not güncellendi');
+}
+function __mnStamp(iso) {
+  try { const d = new Date(iso); return fmtDate(isoDate(d)) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); }
+  catch(e) { return String(iso || '').slice(0, 10); }
+}
+function renderMonthNotes(ay) {
+  const listEl = document.getElementById('month-notes-list');
+  if (!listEl) return;
+  ay = ay || __mnMonth();
+  const list = monthNotesFor(ay).slice().sort(function(a,b){ return String(b.createdAt||'').localeCompare(String(a.createdAt||'')); });
+  const sub = document.getElementById('month-notes-sub');
+  if (sub) sub.textContent = ay + (list.length ? ' · ' + list.length + ' not' : ' · not yok');
+  listEl.innerHTML = list.length ? list.map(function(n){
+    return `<div class="mn-item" id="mn-item-${n.id}" style="background:#fff;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin:6px 0;">
+      <div style="white-space:pre-wrap;font-size:13.5px;">${escapeHtml(n.text)}</div>
+      <div class="row" style="gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--muted);">🗓️ ${__mnStamp(n.createdAt)}${n.updatedAt ? ' · düzenlendi ' + __mnStamp(n.updatedAt) : ''}</span>
+        <span style="flex:1;"></span>
+        <button class="btn small secondary pl-owner-only" onclick="editMonthNote('${ay}','${n.id}')">✏️ Düzenle</button>
+        <button class="btn small danger pl-owner-only" onclick="removeMonthNote('${ay}','${n.id}')">Sil</button>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty" style="padding:10px;">Bu ay için not yok. Yukarıdan ekleyebilirsin.</div>';
+}
 function renderMembers() {
   ensureMemberMonthSelect();
   const q = (document.getElementById('member-search').value||'').toLowerCase();
   const f = document.getElementById('member-filter').value;
   const monthISO = document.getElementById('member-month').value || '';
+  try { renderMonthNotes(monthISO || currentMonth()); } catch(e) {} // v140
   let rows = buildMemberRows(monthISO);
   if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q) || (r.groupName||'').toLowerCase().includes(q));
   if (f==='group') rows = rows.filter(r => r.type==='group');
@@ -12901,8 +12983,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.07.31.62-onizleme';
+const APP_VERSION = '2026.08.02.63-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
+if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
 let knownRemoteVersion = APP_VERSION;
 
