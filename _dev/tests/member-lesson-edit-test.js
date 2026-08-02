@@ -14,15 +14,16 @@ let pass=0,fail=0;
 function t(n,c,x){ if(c){pass++;console.log('  OK ',n);} else {fail++;console.log('  FAIL',n,x!==undefined?'-> '+x:'');} }
 setTimeout(()=>{ try {
   w.eval('window.S=()=>state;');
+  const CM=w.eval('currentMonth()'); // 2026-08-02: tarih-dayaniklilik
   w.eval("['renderMembers','renderGroups','renderDashboard','renderCalendar'].forEach(fn=>window[fn]=function(){}); window.save=function(){};");
   w.eval(`
     state.settings=state.settings||{}; state.settings.lessonDuration=45; state.instructors=[{id:'h',name:'DERYA'}];
-    state.members=[{id:'m1',name:'AYSE',joinDate:'2026-01-01',archived:false,totalPrice:4500,packages:[],monthly:{'2026-07':{enrolled:true}}}];
+    state.members=[{id:'m1',name:'AYSE',joinDate:'2026-01-01',archived:false,totalPrice:4500,packages:[],monthly:{'${CM}':{enrolled:true}}}];
     state.groups=[];
-    state.lessons=[{id:'L1',date:'2026-07-05',time:'10:00',status:'planned',instructorId:'h',groupId:'',memberIds:['m1'],packageMonth:'2026-07',packageOwnerType:'member',packageOwnerId:'m1',size:1},
-                   {id:'L2',date:'2026-07-08',time:'11:00',status:'completed',instructorId:'h',groupId:'',memberIds:['m1'],packageMonth:'2026-07',packageOwnerType:'member',packageOwnerId:'m1'}]; // L2 size YOK
+    state.lessons=[{id:'L1',date:'${CM}-05',time:'10:00',status:'planned',instructorId:'h',groupId:'',memberIds:['m1'],packageMonth:'${CM}',packageOwnerType:'member',packageOwnerId:'m1',size:1},
+                   {id:'L2',date:'${CM}-08',time:'11:00',status:'completed',instructorId:'h',groupId:'',memberIds:['m1'],packageMonth:'${CM}',packageOwnerType:'member',packageOwnerId:'m1'}]; // L2 size YOK
     state.payments=[];
-    var ms=document.getElementById('member-month'); if(ms) ms.value='2026-07';
+    var ms=document.getElementById('member-month'); if(ms){ ms.innerHTML='<option value="'+currentMonth()+'">bu ay</option>'; ms.value=currentMonth(); }
   `);
 
   console.log('[1] Uye detayinda her ders satirinda "Duzenle" butonu');
@@ -41,7 +42,7 @@ setTimeout(()=>{ try {
   w.openLessonModal('L1');
   t('modal-lesson acildi', w.__opened==='modal-lesson', w.__opened);
   t('baslik "Dersi Düzenle"', d.getElementById('ml-title').textContent==='Dersi Düzenle', d.getElementById('ml-title').textContent);
-  t('tarih yuklendi', d.getElementById('ml-date').value==='2026-07-05', d.getElementById('ml-date').value);
+  t('tarih yuklendi', d.getElementById('ml-date').value===CM+'-05', d.getElementById('ml-date').value);
   t('Sil butonu gorunur (edit)', d.getElementById('ml-delete-btn').style.display!=='none');
 
   console.log('[3] saveLesson/markLessonStatus/deleteLesson artik uye detayini tazeler');

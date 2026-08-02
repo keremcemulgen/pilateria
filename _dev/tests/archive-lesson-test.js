@@ -23,7 +23,7 @@ setTimeout(async ()=>{ try {
   const PM_PREV = w.eval("prevMonthISO(currentMonth())");
   const TODAY = w.eval('todayISO()');
   const addD = (n)=> w.eval(`isoDate(addDays(parseISO('${TODAY}'), ${n}))`);
-  const mkMember = (id,name)=>({id,name,joinDate:'2026-01-01',archived:false,packages:[],monthly:{}});
+  const mkMember = (id,name)=>({id,name,joinDate:'2026-01-01',archived:false,packages:[],monthly:{[CM]:{enrolled:true}}}); // v58 kanonu: CM kadrosu ACIK yazilir (2026-08-02)
 
   const seed = ()=>{
     w.eval(`

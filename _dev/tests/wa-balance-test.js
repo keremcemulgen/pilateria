@@ -107,8 +107,8 @@ setTimeout(function(){ try {
   console.log('[5] GRUP bakiyesi TL kalir (regresyon kalkani)');
   w.eval(PKG + `
     state.members=[
-      {id:'g1',name:'AYSE',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}},
-      {id:'g2',name:'FATMA',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+      {id:'g1',name:'AYSE',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}},
+      {id:'g2',name:'FATMA',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[{id:'gr1',name:'AYSE - FATMA',size:2,memberIds:['g1','g2'],monthlyNotes:{}}];
     state.payments=[{id:'PG',memberId:'g1',groupId:'gr1',amount:3000,date:'${TODAY}',packageMonth:'${AY}'}];
     state.lessons=[{id:'GL',date:'${TODAY}',time:'19:15',groupId:'gr1',memberIds:['g1','g2'],status:'planned',packageMonth:'${AY}'}];

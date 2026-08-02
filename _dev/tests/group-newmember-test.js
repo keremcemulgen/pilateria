@@ -16,10 +16,11 @@ let pass=0,fail=0;
 function t(n,c,x){ if(c){pass++;console.log('  OK ',n);} else {fail++;console.log('  FAIL',n,x!==undefined?'-> '+x:'');} }
 setTimeout(()=>{ try {
   w.eval('window.S=()=>state;');
+  const CM=w.eval('currentMonth()'); // 2026-08-02: tarih-dayaniklilik (yeni uyenin joinDate ayi = bugun)
   w.eval("['renderDashboard','renderCalendar'].forEach(fn=>window[fn]=function(){});");
   w.eval(`state.packageTypes=[{id:'p1',name:'8 Ders',sessions:8,price:4500},{id:'p2',name:'12 Ders',sessions:12,price:6500}];
     state.members=[]; state.groups=[]; state.lessons=[]; state.payments=[];
-    const mmSel=document.getElementById('member-month'); if(mmSel){mmSel.innerHTML='<option value="2026-07">7</option>';mmSel.value='2026-07';}`);
+    const mmSel=document.getElementById('member-month'); if(mmSel){mmSel.innerHTML='<option value="'+currentMonth()+'">bu ay</option>';mmSel.value=currentMonth();}`);
 
   console.log('[1] grup penceresi acik, "+ Yeni Üye" tam formu acar (pending bayrak)');
   w.openGroupModal(); // yeni grup
@@ -41,7 +42,7 @@ setTimeout(()=>{ try {
   t('uye paketi kaydedildi (defaultPackageId p1)', nm.defaultPackageId==='p1', nm && nm.defaultPackageId);
 
   console.log('[3] grup sayfasinda fiyat TANIMSIZ degil');
-  t('memberMonthlyTotalPrice 4500 (tanimsiz degil)', w.memberMonthlyTotalPrice(nm.id,'2026-07')===4500, w.memberMonthlyTotalPrice(nm.id,'2026-07'));
+  t('memberMonthlyTotalPrice 4500 (tanimsiz degil)', w.memberMonthlyTotalPrice(nm.id,CM)===4500, w.memberMonthlyTotalPrice(nm.id,CM));
 
   console.log('[4] grup penceresinde yeni uye OTOMATIK isaretli');
   const checkedNow = [...d.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value);
@@ -54,7 +55,7 @@ setTimeout(()=>{ try {
   w.saveGroup();
   const g = w.S().groups[0];
   t('yeni uye grup kadrosunda', (g.memberIds||[]).includes(nm.id), JSON.stringify(g.memberIds));
-  t('grup toplami 4500 (uye fiyati yansidi, tanimsiz yok)', w.groupExpectedTotal(g,'2026-07')===4500, w.groupExpectedTotal(g,'2026-07'));
+  t('grup toplami 4500 (uye fiyati yansidi, tanimsiz yok)', w.groupExpectedTotal(g,CM)===4500, w.groupExpectedTotal(g,CM));
 
   console.log('[6] İptal ederse bayrak takili kalmaz (stale add yok)');
   w.quickAddMemberFromGroup(g.id);

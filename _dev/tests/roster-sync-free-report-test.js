@@ -30,10 +30,10 @@ setTimeout(() => { try {
     state.settings.open = 9; state.settings.close = 21; state.settings.workDays = [1,2,3,4,5,6];
     state.instructors.push({id:'h1',name:'BUSE'});
     state.members.push(
-      {id:'r1',name:'RANA KAYA',joinDate:'2026-05-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:4000},
-      {id:'r2',name:'DERYA AK',joinDate:'2026-05-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:4000},
-      {id:'r3',name:'SELIN OZ',joinDate:'2026-05-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:5000},
-      {id:'r4',name:'MERT CAN',joinDate:'2026-05-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:3000}
+      {id:'r1',name:'RANA KAYA',joinDate:'2026-05-01',packages:[],monthly:{'${CM}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:4000},
+      {id:'r2',name:'DERYA AK',joinDate:'2026-05-01',packages:[],monthly:{'${CM}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:4000},
+      {id:'r3',name:'SELIN OZ',joinDate:'2026-05-01',packages:[],monthly:{'${CM}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:5000},
+      {id:'r4',name:'MERT CAN',joinDate:'2026-05-01',packages:[],monthly:{'${CM}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:3000}
     );
     state.groups.push({id:'gr',name:autoGroupName(['r1','r2']),size:3,memberIds:['r1','r2'],defaultInstructorId:'h1',defaultPackageId:'',defaultTime:'10:00',defaultDays:[2],
       packages:[{month:'${CM}',startDate:'${CM}-01',sessions:8,price:99999,status:'active'}],rescheduleUsed:0,cancelUsed:0,customTotalPrice:77777,monthlyNotes:{}});
@@ -53,7 +53,7 @@ setTimeout(() => { try {
   console.log('[1] GRUP TOPLAMI = UYE TOPLAMI (paket 99999 / custom 77777 degil)');
   t('Temmuz toplami 8000 (4000+4000)', w.groupExpectedTotal(g(), CM) === 8000);
   t('uye fiyati degisince toplam OTOMATIK', (w.eval(`setMemberMonthly('r1','${CM}',{totalPrice:4500});`), w.groupExpectedTotal(g(), CM) === 8500));
-  w.eval(`delete state.members.find(x=>x.id==='r1').monthly['${CM}'];`);
+  w.eval(`state.members.find(x=>x.id==='r1').monthly['${CM}']={enrolled:true};`);
   t('uyeler sayfasi grup satiri ayni toplami gosterir', (w.buildMemberRows(CM).find(r=>r.groupId==='gr'&&r.type==='group')||{}).totalPrice === 8000);
 
   console.log('[2] UYE EKLE -> planli dersler + isim OTOMATIK guncel');
