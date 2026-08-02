@@ -35,7 +35,7 @@ setTimeout(()=>{ try {
   t('L2 icin openLessonModal(\'L2\')', md.includes("openLessonModal('L2')"));
   t('size tanimsiz L2: "undefined kisilik" YOK', !/undefined kişilik/.test(md), (md.match(/[^>]*undefined[^<]*/)||['temiz'])[0]);
   t('L2 "1 kişilik" (memberIds fallback)', /1 kişilik/.test(md));
-  t('baslik ipucu "Düzenle ile" var', /Düzenle ile tarih\/saat\/durum\/hoca/.test(md));
+  t('baslik ipucu "Düzenle ile" var (v142: kirilimli baslik)', /Düzenle ile değiştir/.test(md));
 
   console.log('[2] Duzenle tam ders editorunu (modal-lesson) acar — bireysel dersi yukler');
   w.eval("window.openModal=function(id){window.__opened=id;};");
