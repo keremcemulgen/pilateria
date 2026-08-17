@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.17.69">
+<meta name="app-version" content="2026.08.17.70">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -4029,10 +4029,25 @@ function renderDashboard() {
   const occ = monthOccupancy(m);
   document.getElementById('s-occupancy').textContent = occ.capacity > 0 ? `%${Math.round(occ.ratio*100)}` : '—';
   // low remaining
-  // v146 (Kerem): olcut YAPILDI+YANDI TOPLAMI — planli dersler olcute GIRMEZ (ne sayar ne engeller).
-  // done === hak-1 -> son dersine geldi; done >= hak (veya v108 erken kapanis) -> bitti.
+  // v147 (Kerem): AY-BAGIMSIZ — birimin SU AN uzerinde oldugu paket (en son ders yazilan ay)
+  // izlenir; sarkan (onceki ay) paketler de listede, takvimdeki gibi 📦 etiketiyle.
+  // Olcut v146 kanonu: YAPILDI+YANDI toplami; planli tuketime sayilmaz ama paket GECISINI belirler.
   const __lf = (function(){
     const rows = [];
+    const __nowAy = currentMonth();
+    const __minFin = (function(){ const p = __nowAy.split('-'); let y = +p[0], a = +p[1] - 1;
+      if (!a) { y--; a = 12; } return y + '-' + String(a).padStart(2, '0'); })(); // "Bitti" yas siniri: bu ay + 1 onceki
+    const __curAy = function(tip, id){ // birimin iptal-olmayan dersi bulunan EN SON paket ayi
+      let mx = '';
+      (state.lessons || []).forEach(function(l){
+        if (!l || l.status === 'cancelled') return;
+        if (tip === 'group') { if (l.groupId !== id) return; }
+        else { if (l.groupId) return; if (!(l.memberIds || []).includes(id)) return; }
+        const pm = l.packageMonth || String(l.date || '').slice(0, 7);
+        if (pm && pm > mx) mx = pm;
+      });
+      return mx;
+    };
     const __st = function(fin){
       if (!fin || fin.quota < 1 || fin.done < 1) return 0; // hic tuketimi olmayan listelenmez
       if (fin.done >= fin.quota || (fin.closedEarly && fin.planned === 0)) return 2; // BITTI
@@ -4040,21 +4055,25 @@ function renderDashboard() {
       return 0;
     };
     state.groups.forEach(function(g){
-      if (isGroupInactiveInMonth(g, m)) return;
-      const ros = (typeof activeGroupRosterForMonth === 'function') ? activeGroupRosterForMonth(g, m) : (g.memberIds||[]);
+      const ay = __curAy('group', g.id); if (!ay) return;
+      if (isGroupInactiveInMonth(g, ay)) return;
+      const ros = (typeof activeGroupRosterForMonth === 'function') ? activeGroupRosterForMonth(g, ay) : (g.memberIds||[]);
       if (!ros.length) return; // yetim/bos kadrolu grup listeyi kirletmesin (v143 vakasi)
-      const fin = sessionsFinishState('group', g.id, m);
+      const fin = sessionsFinishState('group', g.id, ay);
       const st = __st(fin); if (!st) return;
-      rows.push({ tip:'group', id:g.id, ad: groupDisplayName(g, m), st: st, fin: fin });
+      if (st === 2 && ay < __minFin) return; // cok eski bitmis — artik konu degil
+      rows.push({ tip:'group', id:g.id, ad: groupDisplayName(g, ay), ay: ay, st: st, fin: fin });
     });
     state.members.forEach(function(mm){
-      if (!isMemberEnrolledInMonth(mm.id, m)) return;
-      if (memberActiveGroupForMonth(mm.id, m)) return; // grup birimi grup satirinda temsil edilir
-      const fin = sessionsFinishState('member', mm.id, m);
+      const ay = __curAy('member', mm.id); if (!ay) return;
+      if (!isMemberEnrolledInMonth(mm.id, ay)) return;
+      if (memberActiveGroupForMonth(mm.id, ay)) return; // grup birimi grup satirinda temsil edilir
+      const fin = sessionsFinishState('member', mm.id, ay);
       const st = __st(fin); if (!st) return;
-      rows.push({ tip:'member', id:mm.id, ad: mm.name, st: st, fin: fin });
+      if (st === 2 && ay < __minFin) return;
+      rows.push({ tip:'member', id:mm.id, ad: mm.name, ay: ay, st: st, fin: fin });
     });
-    rows.sort(function(a,b){ return (a.st - b.st) || String(a.ad).localeCompare(String(b.ad), 'tr'); }); // 1-kalanlar ustte, sonra bitenler
+    rows.sort(function(a,b){ return (a.st - b.st) || String(a.ay).localeCompare(String(b.ay)) || String(a.ad).localeCompare(String(b.ad), 'tr'); }); // 1-kalanlar ustte; eski ay once (daha acil)
     return rows;
   })();
   document.getElementById('s-low').textContent = __lf.length;
@@ -4125,16 +4144,19 @@ function renderDashboard() {
   // low members
   const lowEl = document.getElementById('low-members');
   const __lfCnt = document.getElementById('lowfin-count');
-  if (__lfCnt) __lfCnt.textContent = '(' + __lf.filter(function(r){return r.tip==='group';}).length + ' grup, ' + __lf.filter(function(r){return r.tip==='member';}).length + ' üye · ' + m + ')';
-  if (!__lf.length) lowEl.innerHTML = '<div class="empty">👍 Bu ay 1 dersi kalan ya da hakkı biten yok.</div>';
+  if (__lfCnt) __lfCnt.textContent = '(' + __lf.filter(function(r){return r.tip==='group';}).length + ' grup, ' + __lf.filter(function(r){return r.tip==='member';}).length + ' üye)';
+  if (!__lf.length) lowEl.innerHTML = '<div class="empty">👍 Şu an 1 dersi kalan ya da hakkı biten yok.</div>';
   else lowEl.innerHTML = __lf.map(function(r){
     const say = r.fin ? (r.fin.done + '/' + r.fin.quota) : ''; // yapildi+yandi / hak
+    const sarkan = (r.ay && r.ay !== currentMonth())
+      ? '<span class="badge" style="background:#FFF8E1;color:#7a5b00;">📦 ' + pkgMonthLabel(r.ay) + '</span>' : ''; // takvimdeki gibi sarkan paket etiketi
     const roz = r.st === 1
       ? '<span class="badge warn">⏳ ' + say + ' — 1 ders kaldı</span>'
       : '<span class="badge ok">✅ ' + say + ' — Bitti</span>';
-    const ac = r.tip === 'group' ? ("openGroupDetail('" + r.id + "','" + m + "')") : ("openMemberDetail('" + r.id + "')");
+    const ac = r.tip === 'group' ? ("openGroupDetail('" + r.id + "','" + r.ay + "')") : ("openMemberDetail('" + r.id + "')");
     return '<div class="row between" style="padding:7px 8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="' + ac + '" title="Detayı aç — yeni paket/ödeme oradan">'
-      + '<span>' + (r.tip === 'group' ? '👯' : '👤') + ' ' + escapeHtml(r.ad) + '</span>' + roz + '</div>';
+      + '<span>' + (r.tip === 'group' ? '👯' : '👤') + ' ' + escapeHtml(r.ad) + '</span>'
+      + '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">' + sarkan + roz + '</span></div>';
   }).join('');
 }
 
@@ -13066,7 +13088,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.17.69';
+const APP_VERSION = '2026.08.17.70';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
