@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.16.67">
+<meta name="app-version" content="2026.08.17.68">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -1354,7 +1354,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
     <div class="stat blue"><div class="label">Net Kâr (₺)</div><div class="value" id="s-netprofit">—</div></div>
     <div class="stat warn"><div class="label">Bu Hafta Dersler</div><div class="value" id="s-lessons">0</div></div>
     <div class="stat"><div class="label" id="s-occupancy-label">Bu Ay Doluluk</div><div class="value" id="s-occupancy">—</div></div>
-    <div class="stat bad"><div class="label">Bitmek Üzere (≤2 ders)</div><div class="value" id="s-low">0</div></div>
+    <div class="stat bad"><div class="label">1 Kalan / Biten</div><div class="value" id="s-low">0</div></div>
   </div>
   <div class="card">
     <h2>🔔 Yaklaşan Dersler (Bugün kalan + Yarın)</h2>
@@ -1405,7 +1405,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
     <div style="margin-top:10px;font-size:12px;color:var(--muted);">💡 İpucu: Sağ alttaki <b>+</b> butonunu her sayfadan kullanabilirsin. <b>Esc</b> tuşu modal/menü kapatır.</div>
   </div>
   <div class="card">
-    <h2>Paketi Bitmek Üzere Olanlar</h2>
+    <h2>⏳ 1 Dersi Kalan / Biten <small id="lowfin-count" style="font-weight:400;font-size:12px;color:var(--muted);"></small></h2>
     <div id="low-members"></div>
   </div>
 </section>
@@ -4029,8 +4029,32 @@ function renderDashboard() {
   const occ = monthOccupancy(m);
   document.getElementById('s-occupancy').textContent = occ.capacity > 0 ? `%${Math.round(occ.ratio*100)}` : '—';
   // low remaining
-  const low = state.members.filter(m=>{ const r=memberRemaining(m.id); return r>0 && r<=2; });
-  document.getElementById('s-low').textContent = low.length;
+  // v145: 1 dersi kalan / hakki biten BIRIMLER (bireysel uye + grup) — panel ayina gore, kota kanonu v43
+  const __lf = (function(){
+    const rows = [];
+    state.groups.forEach(function(g){
+      if (isGroupInactiveInMonth(g, m)) return;
+      const ros = (typeof activeGroupRosterForMonth === 'function') ? activeGroupRosterForMonth(g, m) : (g.memberIds||[]);
+      if (!ros.length) return; // yetim/bos kadrolu grup listeyi kirletmesin (v143 vakasi)
+      const kalan = sessionsRemainingFor('group', g.id, m);
+      if (kalan > 1) return;
+      const fin = sessionsFinishState('group', g.id, m);
+      if (kalan <= 0 && (fin.done + fin.planned) <= 0) return; // hic ders yazilmamis birime 'bitti' denmez
+      rows.push({ tip:'group', id:g.id, ad: groupDisplayName(g, m), kalan: kalan, fin: fin });
+    });
+    state.members.forEach(function(mm){
+      if (!isMemberEnrolledInMonth(mm.id, m)) return;
+      if (memberActiveGroupForMonth(mm.id, m)) return; // grup birimi grup satirinda temsil edilir
+      const kalan = sessionsRemainingFor('member', mm.id, m);
+      if (kalan > 1) return;
+      const fin = sessionsFinishState('member', mm.id, m);
+      if (kalan <= 0 && (fin.done + fin.planned) <= 0) return;
+      rows.push({ tip:'member', id:mm.id, ad: mm.name, kalan: kalan, fin: fin });
+    });
+    rows.sort(function(a,b){ return (b.kalan - a.kalan) || String(a.ad).localeCompare(String(b.ad), 'tr'); }); // 1-kalanlar ustte
+    return rows;
+  })();
+  document.getElementById('s-low').textContent = __lf.length;
 
   // Upcoming = today (future slots only) + tomorrow (full day). Past slots are hidden.
   const now = new Date();
@@ -4097,13 +4121,19 @@ function renderDashboard() {
 
   // low members
   const lowEl = document.getElementById('low-members');
-  if (!low.length) lowEl.innerHTML = '<div class="empty">Herkesin paketinde yeterli ders var. 👍</div>';
-  else lowEl.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Üye</th><th>Telefon</th><th>Kalan</th><th></th></tr></thead><tbody>' +
-    low.map(m=>`<tr>
-      <td>${m.name}</td><td>${m.phone||'—'}</td>
-      <td><span class="badge warn">${memberRemaining(m.id)} ders</span></td>
-      <td><button class="btn small" onclick="openPaymentModal('${m.id}')">+ Yeni Paket</button></td>
-    </tr>`).join('') + '</tbody></table></div>';
+  const __lfCnt = document.getElementById('lowfin-count');
+  if (__lfCnt) __lfCnt.textContent = '(' + __lf.filter(function(r){return r.tip==='group';}).length + ' grup, ' + __lf.filter(function(r){return r.tip==='member';}).length + ' üye · ' + m + ')';
+  if (!__lf.length) lowEl.innerHTML = '<div class="empty">👍 Bu ay 1 dersi kalan ya da hakkı biten yok.</div>';
+  else lowEl.innerHTML = __lf.map(function(r){
+    const roz = r.kalan === 1
+      ? '<span class="badge warn">⏳ 1 ders kaldı</span>'
+      : ((r.fin && r.fin.trulyFinished)
+        ? '<span class="badge ok">✅ Bitti</span>'
+        : '<span class="badge" style="background:#FFF3E0;color:#8a4b00;">🗓️ 0 kaldı — son dersler planlı</span>');
+    const ac = r.tip === 'group' ? ("openGroupDetail('" + r.id + "','" + m + "')") : ("openMemberDetail('" + r.id + "')");
+    return '<div class="row between" style="padding:7px 8px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="' + ac + '" title="Detayı aç — yeni paket/ödeme oradan">'
+      + '<span>' + (r.tip === 'group' ? '👯' : '👤') + ' ' + escapeHtml(r.ad) + '</span>' + roz + '</div>';
+  }).join('');
 }
 
 // Occupancy = (used reformer-hours in month) / (capacity reformer-hours in month)
@@ -13034,7 +13064,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.16.67';
+const APP_VERSION = '2026.08.17.68';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
