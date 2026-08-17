@@ -74,11 +74,14 @@ setTimeout(()=>{ try {
   w.eval(`setCalView('month')`);
   t('gm grid', !!d.querySelector('.gm-grid'));
   t('hucre sayisi 7nin kati', d.querySelectorAll('.gm-cell').length % 7 === 0);
-  t('bugun dairesi', !!d.querySelector('.gm-cell.today .gm-num span'));
   const chip = [...d.querySelectorAll('.gm-chip')].find(c=>(c.getAttribute('onclick')||'').includes('LG1'));
   t('ders cipi saatli', chip && chip.textContent.includes('10:00'));
   t('cip tiklaninca ders acilir (stopPropagation)', chip && chip.getAttribute('onclick').includes('event.stopPropagation'));
   t('komsu ay gunleri soluk (out)', d.querySelectorAll('.gm-cell.out').length>0);
+  // 2026-08-14 tarih-dayaniklilik: 'bugun dairesi' yalniz ICINDE BULUNULAN ayin gorunumunde olabilir —
+  // sabit Temmuz cipasindaki assertlerden SONRA bugunun ayina gecilip dogrulanir.
+  w.eval("calAnchor = parseISO(todayISO()); renderCalendar();");
+  t('bugun dairesi (bugunun ayinda)', !!d.querySelector('.gm-cell.today .gm-num span'));
 
   console.log('[7] gcalLayout birim testi');
   const lay = w.eval(`gcalLayout([
