@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.02.65">
+<meta name="app-version" content="2026.08.16.67">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -232,6 +232,7 @@
   .table-wrap { overflow-x: auto; border-radius: 8px; }
   /* v18: Modal acikken arka plan sayfasi kaymasin (mobil) */
   body.pl-modal-open { overflow: hidden; }
+  html:has(body.pl-modal-open) { overflow: hidden; } /* v144: Android'de arka sayfa modal altinda kaymasin */
   /* v11 fix: sticky thead'in çalışması için parent table-wrap'ın overflow visible olması lazım.
      :has() selector modern tarayıcılarda destekleniyor (Chrome 105+, Safari 15.4+, Firefox 121+). */
   .table-wrap:has(table.sticky-head),
@@ -3619,6 +3620,7 @@ document.getElementById('tabs').addEventListener('click', e => {
 // ========== MODALS ==========
 // v15: Modal stack + z-index hiyerarşisi + tarayıcı geri-ileri navigation
 const __modalStack = []; // sırasıyla açık modal id'leri (en sondaki en üstte)
+let __pageScrollY = 0; // v144: ilk modal acilmadan onceki sayfa kaydirma konumu — son modal kapaninca geri getirilir
 let __modalSuppressPopstate = false; // closeModal'dan history.back() çağrıldığında popstate handler ikinci kez kapatmasın
 function __modalUpdateBackButtons() {
   // Stack > 1 olan modallara "← Geri" butonu ekle/güncelle, sadece en alttakinde gizle
@@ -3656,6 +3658,7 @@ function openModal(id) {
   const wasInStack = existingIdx >= 0;
   // v18: Acik modal yeniden render edilirse (refresh) stack SIRASI korunur —
   // alttaki modal yenilenince ustteki acik modalin uzerine cikmaz.
+  if (!wasInStack && __modalStack.length === 0) { try { __pageScrollY = window.scrollY || document.documentElement.scrollTop || 0; } catch(e) { __pageScrollY = 0; } } // v144
   if (!wasInStack) __modalStack.push(id);
   // Önceki hata işaretlerini temizle
   m.querySelectorAll('.field.invalid').forEach(f => f.classList.remove('invalid'));
@@ -3692,7 +3695,7 @@ function closeModal(id) {
   el.style.zIndex = '';
   const idx = __modalStack.indexOf(id);
   if (idx >= 0) __modalStack.splice(idx, 1);
-  if (__modalStack.length === 0) document.body.classList.remove('pl-modal-open');
+  if (__modalStack.length === 0) { document.body.classList.remove('pl-modal-open'); try { window.scrollTo(0, __pageScrollY); } catch(e) {} } // v144: kullanici biraktigi yere doner
   __modalUpdateBackButtons();
   // v16 BUG#2 fix: history.back() öncesi suppress flag set et ki popstate handler
   // ikinci kez modalı pop etmesin (alt modalı kapatırdı).
@@ -3724,7 +3727,7 @@ window.addEventListener('popstate', (e) => {
     el.classList.remove('open');
     el.style.zIndex = '';
   }
-  if (__modalStack.length === 0) document.body.classList.remove('pl-modal-open');
+  if (__modalStack.length === 0) { document.body.classList.remove('pl-modal-open'); try { window.scrollTo(0, __pageScrollY); } catch(e) {} } // v144: kullanici biraktigi yere doner
   __modalUpdateBackButtons();
 });
 document.querySelectorAll('.modal-bg').forEach(bg=>{
@@ -4077,7 +4080,7 @@ function renderDashboard() {
         </div>` : '';
     olist.innerHTML = bulkBtn + '<div class="table-wrap"><table><thead><tr><th>Üye / Grup</th><th>İlk Ders</th><th>Beklenen</th><th>Alınan</th><th>Eksik</th><th>İşlem</th></tr></thead><tbody>' +
       overdue.map(o => `<tr>
-        <td><b>${o.label}</b>${o.groupId?`<br><small style="color:var(--p2)">👯 grup</small>`:''}</td>
+        <td><b style="cursor:pointer;text-decoration:underline dotted;" onclick="${o.groupId ? `openGroupDetail('${o.groupId}','${(o.months&&o.months[0])||''}')` : `openMemberDetail('${o.memberId}')`}" title="Detayı aç — bu borcun kaynağını gör">${o.label}</b>${o.groupId?`<br><small style="color:var(--p2)">👯 grup — ada dokun: detay</small>`:''}</td>
         <td>${fmtDate(o.firstLessonDate)} <small style="color:var(--muted)">(${o.daysOverdue} gün geçti)</small>${(o.months&&o.months.length)?`<br><small style="color:var(--p2)">📅 ${o.months.join(', ')}</small>`:''}</td>
         <td>${money(o.expected)} ₺</td>
         <td>${money(o.paid)} ₺</td>
@@ -13031,7 +13034,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.02.65';
+const APP_VERSION = '2026.08.16.67';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
