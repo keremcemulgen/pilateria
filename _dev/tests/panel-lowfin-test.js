@@ -1,4 +1,4 @@
-// v147 — PANEL "1 DERSI KALAN / BITEN" AY-BAGIMSIZ (Kerem: "bu aylik bir sey degil —
+// v147+v148 — PANEL "1 DERSI KALAN / BITEN" AY-BAGIMSIZ (Kerem: "bu aylik bir sey degil —
 // temmuzdan veya daha onceki aylardan sarkan derslerde gozukmeli, takvimdeki gibi").
 // KURAL: Her birimin (grup / bireysel uye) SU AN UZERINDE OLDUGU paket = iptal-olmayan dersi
 // bulunan EN SON paket ayi. O paketin YAPILDI+YANDI toplami hak-1 -> "1 ders kaldi",
@@ -100,13 +100,27 @@ setTimeout(()=>{ try {
   console.log('[4] SATIR -> DETAY: sarkan satir KENDI ayinin detayina gider + SAYAC + SIRA');
   t('sarkan grup satiri o ayin detayina', lh.indexOf("openGroupDetail('gpm','"+PM+"')") !== -1);
   t('bu ay grubu bu ayin detayina', lh.indexOf("openGroupDetail('gcm','"+CM+"')") !== -1);
-  t('uye satiri openMemberDetail', lh.indexOf("openMemberDetail('u1')") !== -1);
+  t('uye satiri da AY iletir (v148 — Kerem: bos Agustos acilmasin)', lh.indexOf("openMemberDetail('u1','"+CM+"')") !== -1, lh.match(/openMemberDetail\([^)]*\)/g));
+  t('sarkan uye satiri KENDI ayini iletir (u8 -> '+P2+')', lh.indexOf("openMemberDetail('u8','"+P2+"')") !== -1);
   t('ust kutu sayaci 7', d.getElementById('s-low').textContent === '7', d.getElementById('s-low').textContent);
   t('baslik sayaci (3 grup, 4 üye) — ay YOK', /\(3 grup, 4 üye\)/.test(d.getElementById('lowfin-count').textContent), d.getElementById('lowfin-count').textContent);
   t('siralama: 1-kalanlar ustte, bitenler altta', lh.indexOf('1 ders kaldı') < lh.indexOf('— Bitti'));
   t('siralama: 1-kalanlarda eski ay once (SEVIM P2 < G SARKAN PM)', lh.indexOf('SEVIM SARKAN') < lh.indexOf('G SARKAN'));
 
-  console.log('[5] BOS DURUM + STATIK');
+  console.log('[5] UYE DETAYI VERILEN AYDA ACILIR (v148 kok neden: ctxAy parametresizdi)');
+  w.openMemberDetail('u8', P2); // sarkan satirdan acilis
+  const mdn = () => d.getElementById('md-name').innerHTML;
+  const mdBody = () => d.getElementById('modal-member-detail').innerHTML;
+  t('baslikta paketin ayi (— '+P2+')', mdn().indexOf('— '+P2) !== -1, mdn());
+  t('istatistikler o ayin: Yapılan Ders ('+P2+')', mdBody().indexOf('Yapılan Ders ('+P2+')') !== -1);
+  t('o ayin dersleri gorunur (7 yapildi — bos degil)', mdBody().indexOf(P2+' Dersleri (7)') !== -1);
+  w.eval('refreshMemberDetailIfOpen()'); // cross-modal yenileme (odeme kaydi vb.)
+  t('yenileme ay baglamini KORUR (— '+P2+' kalir)', mdn().indexOf('— '+P2) !== -1, mdn());
+  w.openMemberDetail('u1'); // navigasyon/normal acilis: ay verilmedi -> varsayilana doner
+  t('baska uyeye ay TASINMAZ (u1 varsayilan '+CM+')', mdn().indexOf('— '+CM) !== -1, mdn());
+  w.closeModal('modal-member-detail');
+
+  console.log('[6] BOS DURUM + STATIK');
   w.eval("state.lessons=[]; ");
   w.renderDashboard();
   t('bos mesaj ay-bagimsiz (Şu an ...)', /Şu an 1 dersi kalan ya da hakkı biten yok/.test(d.getElementById('low-members').innerHTML), d.getElementById('low-members').innerHTML.slice(0,120));
