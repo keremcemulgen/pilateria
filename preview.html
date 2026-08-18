@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.17.71-onizleme">
+<meta name="app-version" content="2026.08.18.72-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -6123,7 +6123,7 @@ function createSecondPackage(sourceType, sourceId, monthISO) {
   renderMembers(); renderGroups(); renderDashboard();
   refreshMemberDetailIfOpen();
   openMemberDetail(clone.id);
-  if (typeof plToast === 'function') { try { plToast('2. paket için bağımsız üye kaydı açıldı — ödeme/dersi buradan yönet; istersen gruba ekle'); } catch(e){} }
+  if (typeof plToast === 'function') { try { plToast(n + '. paket için bağımsız üye kaydı açıldı — ödeme/dersi buradan yönet; istersen gruba ekle'); } catch(e){} }
 }
 // ========== EMPTY SLOT FILL ==========
 // Grubun boş slotunu doldurma akışı: mevcut bir üye seçilebilir ya da yeni üye oluşturulabilir.
@@ -6559,7 +6559,7 @@ function openMemberDetail(id, monthISO) {
       <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">Düzenle</button>
       <button class="btn secondary" onclick="openScheduleReport('member','${id}','${thisMonth}')" title="Üyenin ders programını kopyalanabilir metin olarak aç (WhatsApp'a gönder)">📋 Ders Programı</button>
       ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">Toplu Ders Gir</button>` : ''}
-      ${(!m.archived && !m.secondOfMember) ? `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Bu kişi için AYNI kişi ama bağımsız 2. paket üye kaydı oluştur (gruba eklenebilir veya bireysel; aktif üye sayısını değiştirmez)">+ 2. Paket</button>` : ''}
+      ${(!m.archived) ? (() => { const __pkRoot = m.secondOfMember || id; const __pkN = state.members.filter(x => x.secondOfMember === __pkRoot && !x.archived).length + 2; return `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Bu kişi için AYNI kişi ama bağımsız ${__pkN}. paket üye kaydı oluştur (gruba eklenebilir veya bireysel; aktif üye sayısını değiştirmez)">+ ${__pkN}. Paket</button>`; })() : ''}
       ${m.archived
         ? `<button class="btn ok" onclick="reactivateMemberForMonth('${id}', (document.getElementById('member-month')||{}).value || currentMonth())" title="Görünen ayın kadrosuna da yazar (v58 kanonu)">↩️ Aktive Et</button>`
         : `<button class="btn secondary" onclick="markMemberPackageExtended('${id}','${thisMonth}', true);" title="Bu ay ödeme alınmadan paket devam ediyor (0 ₺)">Bu Ay Paket Uzadı</button>`
@@ -13106,7 +13106,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.17.71-onizleme';
+const APP_VERSION = '2026.08.18.72-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
