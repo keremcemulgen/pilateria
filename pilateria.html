@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.18.72">
+<meta name="app-version" content="2026.08.18.73">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -6092,12 +6092,22 @@ function createSecondPackage(sourceType, sourceId, monthISO) {
   const ay = monthISO || currentMonth();
   let srcMember = null;
   if (sourceType === 'group') { const g = state.groups.find(x=>x.id===sourceId); srcMember = g ? state.members.find(x=>x.id===(g.memberIds||[]).filter(Boolean)[0]) : null; }
+  // (pkgSlotForMonth asagida tanimli — buton ve motor ayni hesabi kullanir)
   else srcMember = state.members.find(x => x.id === sourceId);
   if (!srcMember) return;
   const rootId = srcMember.secondOfMember || srcMember.id;
   const root = state.members.find(x => x.id === rootId) || srcMember;
   const rootName = (root.name || 'Üye').replace(/\s*\(\d+\.\s*Paket\)\s*$/, '').trim();
-  const n = state.members.filter(x => x.secondOfMember === rootId && !x.archived).length + 2; // 1.paket=asil; ilk klon=2.
+  const __slot = pkgSlotForMonth(rootId, ay); // v150: sirali + ay-baglamli (buton ile ayni hesap)
+  if (__slot.reuse) {
+    const r = __slot.reuse;
+    if (!confirm(`"${r.name}" kaydı zaten var (geçmiş bir aydan). Bu kayıt ${ay} ayı için YENİDEN ETKİNLEŞTİRİLECEK — yeni kayıt açılmaz; ödeme/ders geçmişi aynı kayıtta birikir.\n\nDevam?`)) return;
+    reactivateMemberForMonth(r.id, ay);
+    openMemberDetail(r.id, ay);
+    if (typeof plToast === 'function') { try { plToast(r.name + ' bu aya eklendi — paket/ödemeyi buradan gir'); } catch(e){} }
+    return;
+  }
+  const n = __slot.n;
   const name = rootName + ' (' + n + '. Paket)';
   if (!confirm(`"${name}" adında BAĞIMSIZ bir üye kaydı oluşturulacak.\n\n• ${rootName} ile AYNI kişi, ayrı paket: kendi ödemesi, dersleri ve ders hakkı ayrı tutulur.\n• Aktif üye SAYISINI DEĞİŞTİRMEZ.\n• İstersen bir gruba ekleyebilir veya bireysel paket olarak kullanabilirsin.\n\nDevam?`)) return;
   const clone = {
@@ -6116,6 +6126,23 @@ function createSecondPackage(sourceType, sourceId, monthISO) {
   refreshMemberDetailIfOpen();
   openMemberDetail(clone.id);
   if (typeof plToast === 'function') { try { plToast(n + '. paket için bağımsız üye kaydı açıldı — ödeme/dersi buradan yönet; istersen gruba ekle'); } catch(e){} }
+}
+// v150 (Kerem): PAKET NUMARASI SIRALI VE AY-BAGLAMLI.
+// Bir numara ancak o AY KAYITLI (enrolled) + arsivli olmayan bir klon tarafindan doludur;
+// teklif = 2'den baslayan EN KUCUK bos numara. O numarali UYKUDA kayit (arsivli degil ama
+// o ay kayitli degil) varsa YENIDEN KULLANILIR — mukerrer "(N. Paket)" kaydi acilmaz.
+function pkgSlotForMonth(rootId, monthISO) {
+  const ay = monthISO || currentMonth();
+  const num = function(x){ const mt = /\((\d+)\.\s*Paket\)\s*$/.exec(x.name || ''); return mt ? +mt[1] : 0; };
+  const taken = {}; const dormant = {};
+  (state.members || []).forEach(function(x){
+    if (x.secondOfMember !== rootId || x.archived) return;
+    const n = num(x); if (!n) return;
+    if (isMemberEnrolledInMonth(x.id, ay)) taken[n] = true;
+    else if (!dormant[n]) dormant[n] = x;
+  });
+  let n = 2; while (taken[n]) n++;
+  return { n: n, reuse: dormant[n] || null };
 }
 // ========== EMPTY SLOT FILL ==========
 // Grubun boş slotunu doldurma akışı: mevcut bir üye seçilebilir ya da yeni üye oluşturulabilir.
@@ -6551,7 +6578,7 @@ function openMemberDetail(id, monthISO) {
       <button class="btn secondary" onclick="openMemberModal('${id}');" title="Düzenleme üstte açılır — üye detayı arkada açık kalır">Düzenle</button>
       <button class="btn secondary" onclick="openScheduleReport('member','${id}','${thisMonth}')" title="Üyenin ders programını kopyalanabilir metin olarak aç (WhatsApp'a gönder)">📋 Ders Programı</button>
       ${(!inAnyGroup && !m.archived) ? `<button class="btn secondary" onclick="openBatchDatesMember('${id}','${thisMonth}');" title="Bireysel üyenin derslerinin tarih/saatini tek seferde gir — üye detayı arkada açık kalır">Toplu Ders Gir</button>` : ''}
-      ${(!m.archived) ? (() => { const __pkRoot = m.secondOfMember || id; const __pkN = state.members.filter(x => x.secondOfMember === __pkRoot && !x.archived).length + 2; return `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="Bu kişi için AYNI kişi ama bağımsız ${__pkN}. paket üye kaydı oluştur (gruba eklenebilir veya bireysel; aktif üye sayısını değiştirmez)">+ ${__pkN}. Paket</button>`; })() : ''}
+      ${(!m.archived) ? (() => { const __pkRoot = m.secondOfMember || id; const __slot = pkgSlotForMonth(__pkRoot, thisMonth); const __pkTitle = __slot.reuse ? `"${__slot.reuse.name}" kaydı bu ay için yeniden etkinleştirilir (yeni kayıt açılmaz; geçmişi aynı kayıtta birikir)` : `Bu kişi için AYNI kişi ama bağımsız ${__slot.n}. paket üye kaydı oluştur (gruba eklenebilir veya bireysel; aktif üye sayısını değiştirmez)`; return `<button class="btn secondary pl-owner-only" onclick="createSecondPackage('member','${id}','${thisMonth}');" title="${__pkTitle}">+ ${__slot.n}. Paket</button>`; })() : ''}
       ${m.archived
         ? `<button class="btn ok" onclick="reactivateMemberForMonth('${id}', (document.getElementById('member-month')||{}).value || currentMonth())" title="Görünen ayın kadrosuna da yazar (v58 kanonu)">↩️ Aktive Et</button>`
         : `<button class="btn secondary" onclick="markMemberPackageExtended('${id}','${thisMonth}', true);" title="Bu ay ödeme alınmadan paket devam ediyor (0 ₺)">Bu Ay Paket Uzadı</button>`
@@ -13094,7 +13121,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.18.72';
+const APP_VERSION = '2026.08.18.73';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
