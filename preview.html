@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.18.73-onizleme">
+<meta name="app-version" content="2026.08.18.74-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -5632,6 +5632,50 @@ function buildMemberRows(monthISO) {
   return rows;
 }
 // v10: Pasif (arşiv) üye sayfası render
+// v151 (Kerem): DETAY GEZINMESI = SAYFA LISTESI — tek kaynak.
+// Uye listesi sirasi = buildMemberRows kanonu (bireyseller alfabetik, sonra gruplar kucukten
+// buyuge ve uyeleri). Ay-pasif/arsivli kayitlar aktif gezinmeye SIZMAZ.
+function memberNavListForMonth(ay) {
+  const seen = {}; const out = [];
+  buildMemberRows(ay || currentMonth()).forEach(function(r){
+    if (!r.memberId || seen[r.memberId]) return;
+    seen[r.memberId] = true;
+    const mm = state.members.find(function(x){ return x.id === r.memberId; });
+    if (mm) out.push(mm);
+  });
+  return out;
+}
+// Pasif Uyeler sayfasinin listesi — renderArchive ve pasif kayit gezinmesi AYNI diziyi kullanir.
+function passiveNavListForMonth(ay) {
+  const a = ay || currentMonth();
+  return state.members.filter(function(m){
+    if (m.joinDate && String(m.joinDate).slice(0,7) > a) return false; // henuz katilmamis = pasif degil
+    return !isMemberEnrolledInMonth(m.id, a); // o ay aktif degilse = pasif
+  }).sort(function(x,y){ return (x.name||'').localeCompare(y.name||'','tr'); });
+}
+// Gruplar sayfasinin listesi (ayni ay filtresi + ada gore sira) — renderGroups ve grup gezinmesi bunu kullanir.
+function groupNavListForMonth(monthISO) {
+  let l = state.groups.slice().filter(function(g){ return !isGroupInactiveInMonth(g, monthISO || currentMonth()); });
+  if (monthISO) {
+    l = l.filter(function(g){
+      // 1) Aktif üye filtresi (üye listesiyle aynı mantık)
+      const activeMids = (g.memberIds||[]).filter(function(mid){
+        if (!mid) return false;
+        const mm = state.members.find(function(x){ return x.id === mid; });
+        if (!mm || mm.archived) return false;
+        return isMemberEnrolledInMonth(mid, monthISO);
+      });
+      if (activeMids.length > 0) return true;
+      // 2) O ay için ödeme varsa
+      if (state.payments.some(function(p){ return p.groupId === g.id && (p.packageMonth || (p.date||'').slice(0,7)) === monthISO; })) return true;
+      // 3) Paket o ay'a denk gelirse (sarkma/sonradan paket için)
+      if ((g.packages||[]).some(function(p){ return p.month === monthISO; })) return true;
+      // 4) packageStartDate o ay'da başlıyorsa
+      return g.packageStartDate && g.packageStartDate.startsWith(monthISO);
+    });
+  }
+  return l.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','tr'); });
+}
 function renderArchive() {
   // v43: AY BAZLI PASIF — secili ayda pasif (enrolled:false VEYA archived/donem) uyeler
   const q = (document.getElementById('archive-search')?.value || '').toLowerCase();
@@ -5639,12 +5683,8 @@ function renderArchive() {
   const ay = (__am && __am.value) || currentMonth();
   if (__am && !__am.value) __am.value = ay;
   const monthLabel = (function(){ try { return parseISO(ay+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return ay; } })();
-  let passives = state.members.filter(m => {
-    if (m.joinDate && String(m.joinDate).slice(0,7) > ay) return false; // henuz katilmamis = pasif degil
-    return !isMemberEnrolledInMonth(m.id, ay); // o ay aktif degilse = pasif
-  });
+  let passives = passiveNavListForMonth(ay); // v151: TEK KAYNAK — pasif kayit gezinmesiyle ayni liste
   if (q) passives = passives.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').toLowerCase().includes(q));
-  passives.sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
   renderArchiveCardsMobile(passives, ay); // v.39: telefonda tablo yerine UYE KARTLARI ile ayni sik kartlar
   const stEl = document.getElementById('archive-stats');
   if (stEl) stEl.innerHTML = `
@@ -6525,11 +6565,12 @@ function openMemberDetail(id, monthISO) {
   else if (!__sameOpen) currentMemberDetailMonth = null;
   currentMemberDetailId = id;
   const ctxAy = currentMemberDetailMonth || ((document.getElementById('member-month')||{}).value || '') || currentMonth();
-  // v10: Navigation — aktif üye listesindeki sıralamayla önceki/sonraki
-  const memList = state.members.slice().filter(x => !x.archived).sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
-  // archived üyeler için de gezilebilsin
-  const fullList = state.members.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
-  const list = m.archived ? fullList : memList;
+  // v151 (Kerem): GEZINME = UYE LISTESI — buildMemberRows sirasiyla BIREBIR (bireyseller once,
+  // sonra gruplar); ay-pasif/arsivli kayitlar SIZMAZ. Pasif kayit goruntuleniyorsa Pasif
+  // Uyeler sirasinda gezilir; hicbirinde yoksa gezinme kapali.
+  let list = memberNavListForMonth(ctxAy);
+  if (!list.some(x => x.id === id)) list = passiveNavListForMonth(ctxAy);
+  if (!list.some(x => x.id === id)) list = [m];
   const idx = list.findIndex(x => x.id === id);
   const prevM = idx > 0 ? list[idx-1] : null;
   const nextM = idx >= 0 && idx < list.length - 1 ? list[idx+1] : null;
@@ -6554,9 +6595,9 @@ function openMemberDetail(id, monthISO) {
   // v10: Navigation bar
   const navBar = `<div class="detail-nav">
     <button class="btn secondary" onclick="closeModal('modal-member-detail')" title="Üye listesine dön" style="margin-right:auto;">↩️ Listeye Dön</button>
-    <button onclick="openMemberDetail('${prevM?prevM.id:''}')" ${!prevM?'disabled':''}>← ${prevM?escapeHtml(prevM.name||''):'Önceki yok'}</button>
+    <button onclick="openMemberDetail('${prevM?prevM.id:''}','${ctxAy}')" ${!prevM?'disabled':''}>← ${prevM?escapeHtml(prevM.name||''):'Önceki yok'}</button>
     <div class="pos">${idx+1}/${list.length}</div>
-    <button onclick="openMemberDetail('${nextM?nextM.id:''}')" ${!nextM?'disabled':''}>${nextM?escapeHtml(nextM.name||''):'Sonraki yok'} →</button>
+    <button onclick="openMemberDetail('${nextM?nextM.id:''}','${ctxAy}')" ${!nextM?'disabled':''}>${nextM?escapeHtml(nextM.name||''):'Sonraki yok'} →</button>
   </div>`;
   const html = `
     ${navBar}
@@ -7903,36 +7944,12 @@ function renderGroups() {
   ensureGroupMonthSelect();
   const q = (document.getElementById('group-search')?.value||'').toLowerCase();
   const monthISO = document.getElementById('group-month')?.value || '';
-  let list = state.groups.slice()
-    .filter(g => !isGroupInactiveInMonth(g, monthISO || currentMonth()))
-    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
+  let list = groupNavListForMonth(monthISO); // v151: TEK KAYNAK — grup detay gezinmesiyle ayni liste+sira
   if (q) list = list.filter(g =>
     ((g.name||'') + ' ' + groupDisplayName(g, monthISO || currentMonth())).toLowerCase().includes(q) ||
     (g.memberIds||[]).some(mid => (memberName(mid)||'').toLowerCase().includes(q))
   );
-  // v11: Ay filtresi — Üye listesindeki ile TUTARLI:
-  // - Grubun o ay'da aktif (archived olmayan, enrolled) üyesi varsa göster
-  // - Veya o ay'a denk gelen ödeme/paket/packageStart varsa göster
-  if (monthISO) {
-    list = list.filter(g => {
-      // 1) Aktif üye filtresi (üye listesiyle aynı mantık)
-      const activeMids = (g.memberIds||[]).filter(mid => {
-        if (!mid) return false;
-        const mm = state.members.find(x => x.id === mid);
-        if (!mm || mm.archived) return false;
-        return isMemberEnrolledInMonth(mid, monthISO);
-      });
-      if (activeMids.length > 0) return true;
-      // 2) O ay için ödeme varsa
-      const hasPay = state.payments.some(p => p.groupId === g.id && (p.packageMonth || (p.date||'').slice(0,7)) === monthISO);
-      if (hasPay) return true;
-      // 3) Paket o ay'a denk gelirse (sarkma/sonradan paket için)
-      const hasPkg = (g.packages||[]).some(p => p.month === monthISO);
-      if (hasPkg) return true;
-      // 4) packageStartDate o ay'da başlıyorsa
-      return g.packageStartDate && g.packageStartDate.startsWith(monthISO);
-    });
-  }
+  // v151: ay filtresi groupNavListForMonth icine tasindi (v11 kurallari aynen orada).
   const el = document.getElementById('groups-list');
   if (!list.length) {
     el.innerHTML = `<div class="empty"><div class="big">👯</div>${monthISO ? 'Bu ay için aktif grup yok.' : 'Henüz grup yok.'}<br><small>Üyeler grup halinde geliyor — önce grubu aç, üyeleri ekle, sonra ders ve ödeme atamaları çok daha kolay olsun.</small></div>`;
@@ -8624,8 +8641,9 @@ function openGroupDetail(id, monthISO) {
   // Ay verilmezse: Uyeler sayfasindaki secili ay, o da yoksa icinde bulunulan ay.
   if (!monthISO) monthISO = ((document.getElementById('member-month')||{}).value || '') || currentMonth();
   currentGroupDetailMonth = monthISO;
-  // v10: Navigation — listedeki sıralamayla aynı sırayla önceki/sonraki grup
-  const groupsList = state.groups.slice().filter(x => !x.archived).sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
+  // v151 (Kerem): GEZINME = GRUPLAR SAYFASI LISTESI (ayni ay filtresi + ayni sira); listede yoksa gezinme kapali
+  let groupsList = groupNavListForMonth(monthISO);
+  if (!groupsList.some(x => x.id === id)) groupsList = [g];
   const idx = groupsList.findIndex(x => x.id === id);
   const prevG = idx > 0 ? groupsList[idx-1] : null;
   const nextG = idx >= 0 && idx < groupsList.length - 1 ? groupsList[idx+1] : null;
@@ -13133,7 +13151,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.18.73-onizleme';
+const APP_VERSION = '2026.08.18.74-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
