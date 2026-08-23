@@ -1,5 +1,8 @@
-// v149 — 3. PAKET (VE SONRASI) AYNI KURALLARLA (Kerem: "3.pakete de aynı kurallar ile izin versin,
-// şuan sadece 2.pakete izin veriyor").
+// v149 — 3. PAKET (VE SONRASI) AYNI KURALLARLA + v150 — NUMARA SIRALI VE AY-BAGLAMLI
+// (Kerem v150: "2.paketi olmayan uyeye +3.paket geliyor, bu sirayla olmali").
+// v150 KURALI: bir numara ancak BAGLAM AYINDA KAYITLI (enrolled), arsivli olmayan bir klon
+// tarafindan doludur; teklif = 2'den baslayan EN KUCUK bos numara. O numarali UYKUDA kayit
+// (arsivli degil ama o ay kayitli degil) varsa YENIDEN ETKINLESTIRILIR — mukerrer kayit acilmaz.
 // KOK KISIT UI'DAYDI: buton yalniz ASIL uyede gorunuyordu (!secondOfMember) ve etiketi sabit
 // "+ 2. Paket" idi; motor (createSecondPackage) zaten N. paketi dogru numaralandiriyor.
 // KURAL (v149): buton pasif olmayan HER kayitta (asil + klon) gorunur; etiket dinamik
@@ -22,6 +25,7 @@ const dom = new JSDOM(html, {
 const w=dom.window, d=w.document;
 let pass=0,fail=0;
 function t(n,c,x){ if(c){pass++;console.log('  OK ',n);} else {fail++;console.log('  FAIL',n,x!==undefined?'-> '+x:'');} }
+function shiftM(ym, dd){ const p=ym.split('-').map(Number); const dt=new Date(p[0], p[1]-1+dd, 1); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0'); }
 setTimeout(()=>{ try {
   const CM = w.eval('currentMonth()');
   w.eval(`
@@ -73,6 +77,40 @@ setTimeout(()=>{ try {
 
   console.log('[7] KAYNAK: toast metni sabit "2. paket" degil, dinamik');
   t("plToast('2. paket için...) sabiti kalknis", html.indexOf("plToast('2. paket için") === -1);
+
+  console.log('[8] v150 — UYKUDA KLON: gecmis ayda kalan 2. Paket bu ay sayaca GIRMEZ (Kerem vakasi)');
+  const PM = shiftM(CM,-1);
+  w.eval(`
+    state.members.push({id:'mD',name:'DILEK KAYA',joinDate:'2026-01-01',totalPrice:8000,defaultPackageId:'p8',packages:[],monthly:{'${PM}':{enrolled:true},'${CM}':{enrolled:true}}});
+    state.members.push({id:'cD2',name:'DILEK KAYA (2. Paket)',secondOfMember:'mD',joinDate:'2026-01-01',totalPrice:8000,defaultPackageId:'p8',packages:[],archived:false,monthly:{'${PM}':{enrolled:true}}}); // yalniz GECMIS ayda kayitli — bu ay uykuda
+  `);
+  w.openMemberDetail('mD');
+  t('bu ay 2. paketi olmayan uyede buton "+ 2. Paket"', md().indexOf('+ 2. Paket') !== -1, (md().match(/\+ \d+\. Paket/g)||[]).join(','));
+  t('"+ 3. Paket" TEKLIF EDILMEZ', md().indexOf('+ 3. Paket') === -1);
+  const oncekiSayi = w.eval('state.members.length');
+  w.eval('window.__confirms.length = 0;');
+  w.createSecondPackage('member','mD',CM);
+  t('YENI KAYIT ACILMAZ — uykudaki kayit yeniden kullanilir', w.eval('state.members.length') === oncekiSayi, w.eval('state.members.length') + ' vs ' + oncekiSayi);
+  t('uykudaki (2. Paket) bu aya KAYITLANDI', w.eval("isMemberEnrolledInMonth('cD2','"+CM+"')") === true);
+  t('onay metni yeniden etkinlestirmeyi soyler', w.__confirms.some(m=>/YENİDEN ETKİNLEŞTİR/i.test(m)), w.__confirms.join(' || ').slice(0,150));
+  w.openMemberDetail('mD');
+  t('yeniden etkinlestirme sonrasi buton "+ 3. Paket"e ilerler', md().indexOf('+ 3. Paket') !== -1);
+
+  console.log('[9] v150 — BOSLUK: 2 arsivli + 3 bu ay kayitliyken teklif "+ 2. Paket" (mukerrer 3 acilmaz)');
+  w.eval(`
+    state.members.push({id:'mE',name:'EMEL SOY',joinDate:'2026-01-01',totalPrice:8000,defaultPackageId:'p8',packages:[],monthly:{'${CM}':{enrolled:true}}});
+    state.members.push({id:'cE2',name:'EMEL SOY (2. Paket)',secondOfMember:'mE',joinDate:'2026-01-01',totalPrice:8000,defaultPackageId:'p8',packages:[],archived:true,monthly:{'${CM}':{enrolled:true}}});
+    state.members.push({id:'cE3',name:'EMEL SOY (3. Paket)',secondOfMember:'mE',joinDate:'2026-01-01',totalPrice:8000,defaultPackageId:'p8',packages:[],archived:false,monthly:{'${CM}':{enrolled:true}}});
+  `);
+  w.openMemberDetail('mE');
+  t('bos numara 2 teklif edilir (3 doluyken)', md().indexOf('+ 2. Paket') !== -1, (md().match(/\+ \d+\. Paket/g)||[]).join(','));
+  w.createSecondPackage('member','mE',CM);
+  const e2ler = w.eval("state.members.filter(m=>m.secondOfMember==='mE' && /\\(2\\. Paket\\)/.test(m.name) && !m.archived).length");
+  const e3ler = w.eval("state.members.filter(m=>m.secondOfMember==='mE' && /\\(3\\. Paket\\)/.test(m.name)).length");
+  t('yeni kayit "(2. Paket)" olarak acildi (arsivli sayilmaz kanonu)', e2ler === 1, 'aktif2:'+e2ler);
+  t('mukerrer "(3. Paket)" ACILMADI', e3ler === 1, '3lu:'+e3ler);
+  w.closeModal('modal-member-detail');
+
 
   console.log('');
   console.log('SONUC: '+pass+' gecti, '+fail+' kaldi');
