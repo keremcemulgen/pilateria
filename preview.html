@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.18.74-onizleme">
+<meta name="app-version" content="2026.08.24.75-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -2996,12 +2996,18 @@ function groupDisplayName(g, monthISO) {
   const ay = monthISO || currentMonth();
   const mn = g.monthlyNames || {};
   const keys = Object.keys(mn).filter(k => k && k <= ay).sort();
-  if (keys.length) return mn[keys[keys.length - 1]] || (g.name || '—');
-  if (__looksLikeAutoName(g.name)) {
+  const stored = keys.length ? (mn[keys[keys.length - 1]] || '') : '';
+  // v152 (Kerem): ELLE verilen ad KAZANIR; otomatik kaliptaki ad (uye adlarindan olusan) her
+  // goruntulemede o AYIN AKTIF kadrosundan CANLI turetilir — kadro degisince ad kendiliginden
+  // degisir, bayat anlik goruntu kalmaz. Aylik kadro kanonu (>= ROSTER_START_MONTH) sayesinde
+  // gecmis aylar KENDI kadrosunun adini verir; kanon oncesi aylar kayitli adi korur (tarih sabit).
+  if (stored && !__looksLikeAutoName(stored)) return stored; // elle ad — dokunulmaz
+  const canDerive = stored ? (ay >= ROSTER_START_MONTH) : __looksLikeAutoName(g.name);
+  if (canDerive) {
     const auto = autoGroupName(__activeRosterForMonth(g, ay)); // v42: aydan cikarilan uye grup adinda GORUNMEZ
     if (auto) return auto;
   }
-  return g.name || '—';
+  return stored || g.name || '—';
 }
 function groupNameForMonth(groupId, monthISO) {
   const g = state.groups.find(x => x.id === groupId);
@@ -7800,7 +7806,7 @@ function markLessonStatus(newStatus) {
         const limit = state.settings.groupCancelLimit ?? 1;
         const used = g.cancelUsed || 0;
         if (used >= limit) {
-          if (!confirm(`⚠️ ${g.name} grubu iptal hakkını (${limit}) zaten kullandı. Yine de iptal olarak işaretleyeyim mi? (Sayaç artar, bu bir istisna olur.)`)) return;
+          if (!confirm(`⚠️ ${groupDisplayName(g)} grubu iptal hakkını (${limit}) zaten kullandı. Yine de iptal olarak işaretleyeyim mi? (Sayaç artar, bu bir istisna olur.)`)) return;
         }
         g.cancelUsed = used + 1;
       }
@@ -7841,7 +7847,7 @@ async function rescheduleLessonInline() {
       const limit = state.settings.groupRescheduleLimit ?? 1;
       const used = g.rescheduleUsed || 0;
       if (used >= limit) {
-        if (!(await plConfirm(`⚠️ ${g.name} grubu saat değişikliği hakkını (${limit}) zaten kullandı. Yine de değiştireyim mi? (Sayaç artar.)`))) return;
+        if (!(await plConfirm(`⚠️ ${groupDisplayName(g)} grubu saat değişikliği hakkını (${limit}) zaten kullandı. Yine de değiştireyim mi? (Sayaç artar.)`))) return;
       }
       // Check within package window
       if (g.packageStartDate) {
@@ -7900,7 +7906,7 @@ function quickSetStatus(id, status) {
       const limit = state.settings.groupCancelLimit ?? 1;
       const used = g.cancelUsed || 0;
       if (used >= limit) {
-        if (!confirm(`⚠️ ${g.name} grubu iptal hakkını (${limit}) zaten kullandı. Yine de iptal olarak işaretleyeyim mi?`)) return;
+        if (!confirm(`⚠️ ${groupDisplayName(g)} grubu iptal hakkını (${limit}) zaten kullandı. Yine de iptal olarak işaretleyeyim mi?`)) return;
       }
       g.cancelUsed = used + 1;
     }
@@ -7916,7 +7922,7 @@ function quickSetStatus(id, status) {
 }
 
 // ========== GROUPS ==========
-function groupName(id) { return (state.groups.find(g=>g.id===id)||{}).name || '—'; }
+function groupName(id, monthISO) { const g = state.groups.find(g2=>g2.id===id); return g ? groupDisplayName(g, monthISO) : '—'; } // v152: ham .name yerine ay-farkindali guncel ad
 function groupMembersSummary(g) {
   const names = (g.memberIds||[]).map(memberName).filter(n=>n!=='—');
   return names.length ? names.join(', ') : '(üye yok)';
@@ -8596,7 +8602,7 @@ function deleteGroup() {
   if (!g) return;
   // v25: VARSAYILAN = AY BAZLI PASIFE ALMA (gecmis aylar korunur). KALICI silme yalniz zaten pasifken.
   if (!g.archived) { archiveGroupMonthly(id); return; }
-  if (!confirm(`"${g.name}" grubu KALICI olarak silinsin mi? (Grup zaten pasif; bu işlem grup kaydını tamamen kaldırır — geçmiş ay görünümlerinden de düşer.)`)) return;
+  if (!confirm(`"${groupDisplayName(g)}" grubu KALICI olarak silinsin mi? (Grup zaten pasif; bu işlem grup kaydını tamamen kaldırır — geçmiş ay görünümlerinden de düşer.)`)) return;
   // v10: Grup silinince üyeleri pasif arşive at (ödemeler ve dersler korunur)
   const memberIds = (g.memberIds||[]).filter(mid => mid && state.members.find(m => m.id === mid));
   const orphanIds = [];
@@ -8607,7 +8613,7 @@ function deleteGroup() {
     if (!inOther && !hasFutureLesson) orphanIds.push(mid);
   });
   const orphanNames = orphanIds.map(mid => (state.members.find(m=>m.id===mid)||{}).name).filter(Boolean);
-  let msg = `"${g.name}" grubu silinecek.\n\nÖdemeler ve dersler korunur.\n\n`;
+  let msg = `"${groupDisplayName(g)}" grubu silinecek.\n\nÖdemeler ve dersler korunur.\n\n`;
   if (orphanNames.length) {
     msg += `Bu üyeler başka bir aktif grupta/derste olmadığı için PASİF ÜYE LİSTESİNE taşınacak (silinmez, sonra geri çağırabilirsin):\n  • ${orphanNames.join('\n  • ')}\n\n`;
   }
@@ -8969,7 +8975,7 @@ async function editGroupPkgStart(groupId, monthISO) {
 }
 function resetGroupPackage(id) {
   const g = state.groups.find(x=>x.id===id); if (!g) return;
-  if (!confirm(`"${g.name}" grubu için paket bugünden itibaren yenilenecek. Değişiklik ve iptal hakları sıfırlanacak. Devam?`)) return;
+  if (!confirm(`"${groupDisplayName(g)}" grubu için paket bugünden itibaren yenilenecek. Değişiklik ve iptal hakları sıfırlanacak. Devam?`)) return;
   g.packageStartDate = todayISO();
   g.rescheduleUsed = 0;
   g.cancelUsed = 0;
@@ -8979,7 +8985,7 @@ function resetGroupPackage(id) {
 function scheduleGroupMonth(groupId) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
   if (!g.defaultTime || !(g.defaultDays||[]).length) { alert('Önce grubun varsayılan gün(ler)i ve saatini belirle.'); return; }
-  if (!confirm(`"${g.name}" grubu için ${g.defaultDays.map(d=>DAYS_LONG[d]).join(', ')} günlerinde saat ${g.defaultTime}'te 4 hafta (${g.defaultDays.length*4} ders) oluşturulacak. Devam?`)) return;
+  if (!confirm(`"${groupDisplayName(g)}" grubu için ${g.defaultDays.map(d=>DAYS_LONG[d]).join(', ')} günlerinde saat ${g.defaultTime}'te 4 hafta (${g.defaultDays.length*4} ders) oluşturulacak. Devam?`)) return;
   const startISO = todayISO();
   const start = parseISO(startISO);
   let created = 0, skipped = 0;
@@ -13151,7 +13157,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.18.74-onizleme';
+const APP_VERSION = '2026.08.24.75-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
