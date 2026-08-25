@@ -47,13 +47,15 @@ setTimeout(()=>{ try {
     state.members=[M('u1','AYLIN TEK',['${CM}']),M('u2','BERNA BITEN',['${CM}']),
       M('u3','CEREN GRUPTA',['${PM}','${CM}']),M('u4','DERIN GRUPTA',['${PM}','${CM}']),
       M('u6','FUNDA PLANLI',['${CM}']),M('u7','HALE ERKEN',['${CM}']),
-      M('u8','SEVIM SARKAN',['${P2}']),M('u9','ZUHAL ESKIBITEN',['${P3}'])];
+      M('u8','SEVIM SARKAN',['${P2}']),M('u9','ZUHAL ESKIBITEN',['${P3}']),
+      Object.assign(M('u10','PASIF GIDEN',['${PM}']),{archived:true, archivedAt:'${CM}-05T00:00:00'})]; // v153: bitirdi + PASIFE ALINDI -> listede olmamali
     state.groups=[
       G('gpm','G SARKAN',['${PM}']),
       G('gbitpm','G BITTIPM',['${PM}']),
       G('groll','G ROLL',['${PM}','${CM}']),
       G('gcm','G CMSON',['${CM}']),
-      {id:'gyetim',name:'G YETIM',size:2,memberIds:[],packages:[{month:'${PM}',startDate:'${PM}-01',sessions:8,price:4500,status:'active'}],monthlyMembers:{},monthlyNotes:{}}
+      {id:'gyetim',name:'G YETIM',size:2,memberIds:[],packages:[{month:'${PM}',startDate:'${PM}-01',sessions:8,price:4500,status:'active'}],monthlyMembers:{},monthlyNotes:{}},
+      {id:'gpasif',name:'G PASIF',size:2,memberIds:['u3','u4'],packages:[],monthlyMembers:{'${PM}':['u3','u4']},monthlyNotes:{},archived:true,archivedAt:'${CM}-05T00:00:00'} // v153: bitirdi + grup PASIFE ALINDI -> listede olmamali
     ];
     state.lessons=[];
     __mk('a','group','gpm','gpm',['u3','u4'],'${PM}',['completed','completed','completed','completed','completed','completed','completed']); // PM 7/8 -> SARKAN, listede
@@ -66,7 +68,9 @@ setTimeout(()=>{ try {
     __mk('f','member','u6','',['u6'],'${CM}',['completed','completed','completed','completed','completed','planned','planned','planned']); // 5/8 -> YOK
     __mk('g','member','u7','',['u7'],'${CM}',['completed','completed','completed'], 2); // erken kapanis 3/8 -> Bitti
     __mk('s','member','u8','',['u8'],'${P2}',['completed','completed','completed','completed','completed','completed','completed']); // P2 7/8 -> SARKAN, yas SINIRSIZ listede
-    __mk('z','member','u9','',['u9'],'${P3}',['completed','completed','completed','completed','completed','completed','completed','completed']); // P3 8/8 -> COK ESKI Bitti, listede DEGIL
+    __mk('z','member','u9','',['u9'],'${P3}',['completed','completed','completed','completed','completed','completed','completed','completed']); // P3 8/8 -> v153: sonrasinda DERS GIRILMEMIS + pasif degil -> LISTEDE KALIR
+    __mk('p','member','u10','',['u10'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8 ama PASIFE ALINDI -> listede DEGIL
+    __mk('q','group','gpasif','gpasif',['u3','u4'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8 ama grup PASIF -> listede DEGIL
   `);
   w.renderDashboard();
   const lh = d.getElementById('low-members').innerHTML;
@@ -77,7 +81,10 @@ setTimeout(()=>{ try {
   t('onceki ay 8/8 grubu LISTEDE (G BITTIPM)', /G BITTIPM/.test(lh));
   t('2 ay onceki 7/8 bireysel LISTEDE — sarkan ders yas sinirsiz (SEVIM)', /SEVIM SARKAN/.test(lh));
   t('yeni ay paketi BASLAMISSA eski ay artik konu degil (G ROLL yok)', !/G ROLL/.test(lh));
-  t('cok eski (3 ay) bitmis uye listede DEGIL (ZUHAL)', !/ZUHAL/.test(lh));
+  console.log('[1b] v153: Bitti satiri DERS GIRILENE ya da PASIFE ALINANA kadar kalir');
+  t('eski bitmis ama ders girilmemis + AKTIF uye LISTEDE KALIR (ZUHAL, yas siniri yok)', /ZUHAL/.test(lh), (lh.match(/ZUHAL[^<]*/)||[''])[0]);
+  t('bitirdikten sonra PASIFE ALINAN uye listede DEGIL (PASIF GIDEN)', !/PASIF GIDEN/.test(lh));
+  t('bitirdikten sonra PASIFE ALINAN grup listede DEGIL (G PASIF)', !/G PASIF\b/.test(lh));
 
   console.log('[2] OLCUT AYNEN v146: yapildi+yandi; planli sayilmaz');
   t('bu ay 7/8 (+1 planli) grup listede (G CMSON)', /G CMSON/.test(lh));
@@ -93,19 +100,20 @@ setTimeout(()=>{ try {
   t('8/8 — Bitti rozeti', lh.indexOf('✅ 8/8 — Bitti') !== -1);
   t('erken kapanista 3/8 — Bitti', lh.indexOf('✅ 3/8 — Bitti') !== -1);
   t('sarkan satirda 📦 + ay adi (' + pmLbl + ')', lh.indexOf('📦 ' + pmLbl) !== -1);
-  t('📦 yalniz sarkanlarda (3 adet: gpm, gbitpm, u8)', lh.split('📦').length - 1 === 3, lh.split('📦').length - 1);
+  t('📦 yalniz sarkanlarda (4 adet: gpm, gbitpm, u8, u9)', lh.split('📦').length - 1 === 4, lh.split('📦').length - 1);
   const satirlar = lh.split('class="row between"').length - 1;
-  t('7 satir (gpm,gbitpm,gcm + u1,u2,u7,u8)', satirlar === 7, satirlar);
+  t('8 satir (gpm,gbitpm,gcm + u1,u2,u7,u8,u9)', satirlar === 8, satirlar);
 
   console.log('[4] SATIR -> DETAY: sarkan satir KENDI ayinin detayina gider + SAYAC + SIRA');
   t('sarkan grup satiri o ayin detayina', lh.indexOf("openGroupDetail('gpm','"+PM+"')") !== -1);
   t('bu ay grubu bu ayin detayina', lh.indexOf("openGroupDetail('gcm','"+CM+"')") !== -1);
   t('uye satiri da AY iletir (v148 — Kerem: bos Agustos acilmasin)', lh.indexOf("openMemberDetail('u1','"+CM+"')") !== -1, lh.match(/openMemberDetail\([^)]*\)/g));
   t('sarkan uye satiri KENDI ayini iletir (u8 -> '+P2+')', lh.indexOf("openMemberDetail('u8','"+P2+"')") !== -1);
-  t('ust kutu sayaci 7', d.getElementById('s-low').textContent === '7', d.getElementById('s-low').textContent);
-  t('baslik sayaci (3 grup, 4 üye) — ay YOK', /\(3 grup, 4 üye\)/.test(d.getElementById('lowfin-count').textContent), d.getElementById('lowfin-count').textContent);
+  t('ust kutu sayaci 8', d.getElementById('s-low').textContent === '8', d.getElementById('s-low').textContent);
+  t('baslik sayaci (3 grup, 5 üye) — ay YOK', /\(3 grup, 5 üye\)/.test(d.getElementById('lowfin-count').textContent), d.getElementById('lowfin-count').textContent);
   t('siralama: 1-kalanlar ustte, bitenler altta', lh.indexOf('1 ders kaldı') < lh.indexOf('— Bitti'));
   t('siralama: 1-kalanlarda eski ay once (SEVIM P2 < G SARKAN PM)', lh.indexOf('SEVIM SARKAN') < lh.indexOf('G SARKAN'));
+  t('siralama: bitenlerde de eski ay once (ZUHAL P3 < G BITTIPM PM)', lh.indexOf('ZUHAL') < lh.indexOf('G BITTIPM'));
 
   console.log('[5] UYE DETAYI VERILEN AYDA ACILIR (v148 kok neden: ctxAy parametresizdi)');
   w.openMemberDetail('u8', P2); // sarkan satirdan acilis
