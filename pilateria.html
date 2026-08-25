@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.24.75">
+<meta name="app-version" content="2026.08.24.77">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -3219,6 +3219,25 @@ function sessionsRemainingFor(ownerType, ownerId, monthISO){
   if (__pkgClosedEarlyLesson(ownerType, ownerId, monthISO)) return 0; // v108: erken kapandi — kalan hak ISLETMEYE
   return Math.max(0, sessionQuotaFor(ownerType, ownerId, monthISO) - sessionsUsedFor(ownerType, ownerId, monthISO));
 }
+// v154 (Kerem): DERS HAKKI TAVANI — birimin paket ayindaki IPTAL-DISI ders sayisi hakki asamaz.
+// excludeLessonId: duzenlenen dersin kendisi sayilmaz. Donus: engel mesaji ya da null (serbest).
+function quotaCeilingMsg(ownerType, ownerId, pm, excludeLessonId) {
+  const quota = sessionQuotaFor(ownerType, ownerId, pm);
+  if (!(quota > 0)) return null;
+  const dolu = (state.lessons || []).filter(function(l){
+    if (!l || l.id === excludeLessonId || l.status === 'cancelled') return false;
+    const lpm = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (lpm !== pm) return false;
+    if (ownerType === 'group') return l.groupId === ownerId;
+    return !l.groupId && (l.memberIds || []).includes(ownerId);
+  }).length;
+  if (dolu >= quota) {
+    const ad = ownerType === 'group' ? groupNameForMonth(ownerId, pm) : memberName(ownerId);
+    return '⛔ ' + ad + ' — ' + pm + ' paketinde ders hakkı dolu (' + dolu + '/' + quota + '). ' +
+      (quota + 1) + '. ders girilemez. Hakkı artırmak için Ayarlar → Ders Paketleri ya da detaydaki "hak: düzenle".';
+  }
+  return null;
+}
 // Bir uyenin O AYKI kalan dersi: grup uyesiyse GRUBUN kalani (tek birim), degilse bireysel.
 function memberRemainingForMonth(memberId, monthISO){
   const ay = monthISO || currentMonth();
@@ -4041,8 +4060,8 @@ function renderDashboard() {
   const __lf = (function(){
     const rows = [];
     const __nowAy = currentMonth();
-    const __minFin = (function(){ const p = __nowAy.split('-'); let y = +p[0], a = +p[1] - 1;
-      if (!a) { y--; a = 12; } return y + '-' + String(a).padStart(2, '0'); })(); // "Bitti" yas siniri: bu ay + 1 onceki
+    // v153 (Kerem): yas siniri YOK — biten birim, sonrasinda YENI DERS girilene ya da PASIFE
+    // alinana kadar listede kalir. Dusme kosullari: yeni ders (izlenen paket ilerler) veya pasif.
     const __curAy = function(tip, id){ // birimin iptal-olmayan dersi bulunan EN SON paket ayi
       let mx = '';
       (state.lessons || []).forEach(function(l){
@@ -4063,20 +4082,20 @@ function renderDashboard() {
     state.groups.forEach(function(g){
       const ay = __curAy('group', g.id); if (!ay) return;
       if (isGroupInactiveInMonth(g, ay)) return;
+      if (isGroupInactiveInMonth(g, __nowAy)) return; // v153: pasife alinan grup listeden duser
       const ros = (typeof activeGroupRosterForMonth === 'function') ? activeGroupRosterForMonth(g, ay) : (g.memberIds||[]);
       if (!ros.length) return; // yetim/bos kadrolu grup listeyi kirletmesin (v143 vakasi)
       const fin = sessionsFinishState('group', g.id, ay);
       const st = __st(fin); if (!st) return;
-      if (st === 2 && ay < __minFin) return; // cok eski bitmis — artik konu degil
       rows.push({ tip:'group', id:g.id, ad: groupDisplayName(g, ay), ay: ay, st: st, fin: fin });
     });
     state.members.forEach(function(mm){
       const ay = __curAy('member', mm.id); if (!ay) return;
       if (!isMemberEnrolledInMonth(mm.id, ay)) return;
+      if (isMemberInactiveInMonth(mm, __nowAy)) return; // v153: pasife alinan uye listeden duser
       if (memberActiveGroupForMonth(mm.id, ay)) return; // grup birimi grup satirinda temsil edilir
       const fin = sessionsFinishState('member', mm.id, ay);
       const st = __st(fin); if (!st) return;
-      if (st === 2 && ay < __minFin) return;
       rows.push({ tip:'member', id:mm.id, ad: mm.name, ay: ay, st: st, fin: fin });
     });
     rows.sort(function(a,b){ return (a.st - b.st) || String(a.ay).localeCompare(String(b.ay)) || String(a.ad).localeCompare(String(b.ad), 'tr'); }); // 1-kalanlar ustte; eski ay once (daha acil)
@@ -7723,6 +7742,18 @@ function saveLesson() {
   else if (groupId) packageMonth = (window.__lessonCtxMonth || String(date).slice(0,7)); // v107: dersin ayi (otomatik sarkan YOK)
   else if (checked.length === 1) packageMonth = String(date).slice(0,7); // v107: dersin ayi
   else packageMonth = String(date).slice(0,7);
+  // v154 (Kerem): HAK TAVANI — dolu birime yeni ders girilemez; iptal kaydini duzenlemek hak yemez.
+  {
+    const __ex154 = id ? state.lessons.find(function(x){ return x.id === id; }) : null;
+    const __willCount = __ex154 ? (__ex154.status !== 'cancelled') : true;
+    if (__willCount) {
+      const __units = groupId ? [['group', groupId]] : checked.map(function(mid){ return ['member', mid]; });
+      for (let __i = 0; __i < __units.length; __i++) {
+        const __qmsg = quotaCeilingMsg(__units[__i][0], __units[__i][1], packageMonth, id || null);
+        if (__qmsg) { w.textContent = __qmsg; return; }
+      }
+    }
+  }
   let packageOwnerType = '';
   let packageOwnerId = '';
   if (groupId) {
@@ -7790,6 +7821,15 @@ function markLessonStatus(newStatus) {
   if (!id) { alert('Önce dersi kaydet.'); return; }
   const l = state.lessons.find(x=>x.id===id); if (!l) return;
   const prev = l.status || 'planned';
+  // v154 (Kerem): iptal edilmis dersi geri acmak hak tavanini asacaksa ENGELLENIR.
+  if (prev === 'cancelled' && newStatus !== 'cancelled') {
+    const __pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    const __units = l.groupId ? [['group', l.groupId]] : (l.memberIds || []).map(function(mid){ return ['member', mid]; });
+    for (let __i = 0; __i < __units.length; __i++) {
+      const __qmsg = quotaCeilingMsg(__units[__i][0], __units[__i][1], __pm, l.id);
+      if (__qmsg) { alert(__qmsg + '\n\nİptali geri açmak için önce başka bir dersi iptal et ya da hakkı artır.'); return; }
+    }
+  }
   // Only consume rights on transition TO cancelled (from non-cancelled)
   if (newStatus === 'cancelled' && prev !== 'cancelled') {
     if (l.groupId) {
@@ -7892,6 +7932,15 @@ function deleteLesson() {
 function quickSetStatus(id, status) {
   const l = state.lessons.find(x=>x.id===id); if (!l) return;
   const prev = l.status || 'planned';
+  // v154 (Kerem): iptal edilmis dersi geri acmak hak tavanini asacaksa ENGELLENIR.
+  if (prev === 'cancelled' && status !== 'cancelled') {
+    const __pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    const __units = l.groupId ? [['group', l.groupId]] : (l.memberIds || []).map(function(mid){ return ['member', mid]; });
+    for (let __i = 0; __i < __units.length; __i++) {
+      const __qmsg = quotaCeilingMsg(__units[__i][0], __units[__i][1], __pm, l.id);
+      if (__qmsg) { alert(__qmsg + '\n\nİptali geri açmak için önce başka bir dersi iptal et ya da hakkı artır.'); return; }
+    }
+  }
   if (status === 'cancelled' && prev !== 'cancelled' && l.groupId) {
     const g = state.groups.find(x=>x.id===l.groupId);
     if (g) {
@@ -8998,6 +9047,7 @@ function scheduleGroupMonth(groupId) {
       const needed = groupActiveMemberCount(g) || 1;
       const instConflict = g.defaultInstructorId && other.some(l => l.instructorId === g.defaultInstructorId);
       if (usedRf + needed > getReformers() || instConflict) { skipped++; continue; }
+      if (quotaCeilingMsg('group', groupId, dISO.slice(0, 7), null)) { skipped++; continue; } // v154: hak tavani
       state.lessons.push({
         id: uid(), date: dISO, time: g.defaultTime,
         instructorId: g.defaultInstructorId||'', size: g.size,
@@ -9244,6 +9294,16 @@ function __editConflictLesson(id) {
 function saveBatchDates() {
   if (!__batchDatesTarget) return;
   const packageMonth = __batchDatesTarget.packageMonth || currentMonth();
+  // v154 (Kerem): HAK TAVANI — listedeki iptal-disi satir sayisi paketin hakkini asamaz (v18: hicbir kayit yazilmaz).
+  {
+    const __resCnt = (__batchDatesRows || []).filter(function(r){ return r && (r.status || 'planned') !== 'cancelled'; }).length;
+    const __q154 = sessionQuotaFor(__batchDatesTarget.type, __batchDatesTarget.id, packageMonth);
+    if (__q154 > 0 && __resCnt > __q154) {
+      const __ad154 = __batchDatesTarget.type === 'group' ? groupNameForMonth(__batchDatesTarget.id, packageMonth) : memberName(__batchDatesTarget.id);
+      alert('⛔ ' + __ad154 + ' — ' + packageMonth + ' paketinde hak ' + __q154 + ' ders; listede ' + __resCnt + ' iptal-dışı ders var. Hakkı aşan giriş yapılamaz (Ayarlar → Ders Paketleri ya da detaydaki "hak: düzenle" ile artırabilirsin). Hiçbir kayıt yazılmadı.');
+      return;
+    }
+  }
   let g = null, m = null;
   if (__batchDatesTarget.type === 'group') {
     g = state.groups.find(x => x.id === __batchDatesTarget.id);
@@ -13145,7 +13205,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.24.75';
+const APP_VERSION = '2026.08.24.77';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
