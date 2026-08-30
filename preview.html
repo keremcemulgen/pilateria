@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.30.80-onizleme">
+<meta name="app-version" content="2026.08.30.81-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -4107,6 +4107,10 @@ function renderDashboard() {
       const fin = sessionsFinishState('group', g.id, ay);
       const st = __st(fin); if (!st) return;
       if (st === 2 && __supersededGroupFin(g.id, ay)) return; // v157: yeni paket yazilmis — Biten satiri duser
+      // v158 (Kerem): SADECE GUNCEL GRUPLAR — Biten satiri yalniz icinde bulunulan ayda aktif
+      // kadrosu olan grup icin gosterilir; gecmis ayda kalmis grup listeyi kirletmez.
+      // "1 ders kaldi" sarkan alacaktir, yas sinirsiz kalir (v147).
+      if (st === 2 && !((typeof activeGroupRosterForMonth === 'function' ? activeGroupRosterForMonth(g, __nowAy) : []) || []).length) return;
       rows.push({ tip:'group', id:g.id, ad: groupDisplayName(g, ay), ay: ay, st: st, fin: fin });
     });
     state.members.forEach(function(mm){
@@ -13387,7 +13391,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.30.80-onizleme';
+const APP_VERSION = '2026.08.30.81-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
