@@ -21,14 +21,14 @@ setTimeout(()=>{ try {
   w.eval(`state.settings.groupPackageDays=30; state.packageTypes=[{id:'p1',name:'8 Ders',sessions:8,price:8000}];
     state.instructors=[{id:'h1',name:'HOCA',shareRate:30}];
     state.members=[
-      {id:'a',name:'AYSE',joinDate:'2026-01-01',packages:[{month:'`+yil+`-07',startDate:'`+yil+`-07-01',sessions:8,price:5000,status:'active'}],monthly:{}},
-      {id:'b',name:'BANU',joinDate:'2026-01-01',packages:[],monthly:{}}
+      {id:'a',name:'AYSE',joinDate:'2026-01-01',packages:[{month:'`+yil+`-07',startDate:'`+yil+`-07-01',sessions:8,price:5000,status:'active'}],monthly:{'`+yil+`-08':{enrolled:true}}},
+      {id:'b',name:'BANU',joinDate:'2026-01-01',packages:[],monthly:{'`+yil+`-08':{enrolled:true}}}
     ];
     state.groups=[{id:'g1',name:'AYSE - BANU',size:2,memberIds:['a','b'],defaultInstructorId:'h1',defaultPackageId:'p1',defaultTime:'10:00',defaultDays:[1],
-      packages:[{month:'`+yil+`-07',startDate:'`+yil+`-07-01',sessions:8,price:8000,status:'active'}],monthlyMembers:{},monthlyNotes:{}}];
+      packages:[{month:'`+yil+`-07',startDate:'`+yil+`-07-01',sessions:8,price:8000,status:'active'}],monthlyMembers:{'`+yil+`-08':['a','b']},monthlyNotes:{}}];
     // Temmuzda 6 grup dersi -> 2 kalan
     state.lessons=[]; for(let i=0;i<6;i++) state.lessons.push({id:'g'+i,date:'`+yil+`-07-0'+(i+1),time:'10:00',durationMin:45,instructorId:'h1',size:2,memberIds:['a','b'],groupId:'g1',packageMonth:'`+yil+`-07',packageOwnerType:'group',packageOwnerId:'g1',status:'completed'});
-    state.payments=[];`);
+    state.payments=[{id:'payA',memberId:'a',groupId:'',amount:5000,date:'`+yil+`-07-02',packageMonth:'`+yil+`-07',sessions:8,method:'Nakit'}]; // v155: odenmis paket — olu-kalinti sayilmaz`);
 
   console.log('[1] ownerPkgMonthLabel: grup/uye HANGI AY (kalan)');
   t('grup etiketi "Tem: 2 kalan" icerir', /Tem: 2 kalan/.test(w.ownerPkgMonthLabel('group','g1')), w.ownerPkgMonthLabel('group','g1'));
