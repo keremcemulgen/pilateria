@@ -3,7 +3,11 @@
 //    - bireysel: kisinin (klon kayitlari dahil) YENI AYA yazilmis kaydi/paketi varsa YA DA ayni ay
 //      icin 2. paket kaydi acilmissa eski Bitti satiri DUSER; kimsesi devam etmeyen KALIR.
 //    - grup: grubun kendisi yeni aya yazilmissa YA DA ikiz "(N. Paket)" grubu (ayni kisiler,
-//      numarasi buyuk ya da ayi yeni) olusturulmussa DUSER; devami olmayan KALIR.
+//      numarasi buyuk ya da ayi yeni) olusturulmussa DUSER.
+//    - v158 (Kerem: "sadece guncel gruplar listelensin"): grup BITEN satiri yalniz GUNCEL grup
+//      icin gosterilir (icinde bulunulan ayda aktif kadrosu olan). Gecmis ayda kalmis grup —
+//      devami olsun olmasin — Biten listesine girmez (FUNDA-GAMZE vakasi). Bu ayda bitirmis grup
+//      gorunur; "1 ders kaldi" sarkan alacaktir, yas sinirsiz kalir; bireysel kurallar degismez.
 //    - kural YALNIZ Bitti satirlari icin; "1 ders kaldi" satiri gercek alacaktir, KALIR.
 //    - Kerem karari: satirlar KAYIT bazinda kalir (klon katlama YOK) — dusme kosulu kisiye bakar.
 // B) "Gelecek Hafta Ders Girilmemis": hafta HANGI AYLARA dokunuyorsa o aylarin aktifleri esas
@@ -60,6 +64,10 @@ setTimeout(()=>{ try {
     window.__doldur=function(pref,gid,mids,adet){ for(let i=0;i<adet;i++) state.lessons.push({id:pref+i,date:'${PM}-'+String((i%25)+2).padStart(2,'0'),time:(9+(i%12))+':00',durationMin:45,instructorId:'h1',size:(mids||[]).length||1,memberIds:(mids||[]).slice(),groupId:gid||'',packageMonth:'${PM}',status:'completed'}); };
     __doldur('a','',['uA'],8); __doldur('b','',['uB'],8); __doldur('c','',['uC'],8); __doldur('h','',['uH'],7);
     __doldur('ga','gA',['d1','e1'],8); __doldur('gb','gB',['f1','f2'],8); __doldur('gc','gC',['c1','c2'],8);
+    // v158: BU AY bitirmis GUNCEL grup — listede gorunmeli
+    state.members.push(M('g5','JALE J',['${CM}']),M('g6','KUMRU K',['${CM}']));
+    state.groups.push({id:'gD',name:'JALE J - KUMRU K',size:2,memberIds:['g5','g6'],defaultPackageId:'p8',packages:[{month:'${CM}',startDate:'${CM}-01',sessions:8,price:9000,status:'active'}],monthlyMembers:{'${CM}':['g5','g6']},monthlyNotes:{}});
+    for(let i=0;i<8;i++) state.lessons.push({id:'gd'+i,date:'${CM}-'+String((i%25)+2).padStart(2,'0'),time:(9+(i%12))+':30',durationMin:45,instructorId:'h1',size:2,memberIds:['g5','g6'],groupId:'gD',packageMonth:'${CM}',status:'completed'});
   `);
 
   console.log('[1] BITEN: yeni aya yazilan/2. paketi acilan DUSER, devami olmayan KALIR');
@@ -70,7 +78,8 @@ setTimeout(()=>{ try {
   t('CEREN CIFT (ayni ay 2. paket acilmis) listede DEGIL', !/CEREN CIFT\s*</.test(lf.replace(/CEREN CIFT \(2\. Paket\)/g,'')), (lf.match(/CEREN CIFT[^<]*/)||[''])[0]);
   t('HANDE BIRKALDI (7/8 — 1 kaldi) CM kaydina RAGMEN listede', lf.indexOf('HANDE BIRKALDI')!==-1);
   t('DILA-EMEL grubu (ayni ay ikiz 2. paket grubu var) listede DEGIL', lf.indexOf('DILA D - EMEL E')===-1, (lf.match(/DILA D[^<]{0,40}/)||[''])[0]);
-  t('FUNDA-GAMZE grubu (devami yok) listede', lf.indexOf('FUNDA F - GAMZE G')!==-1);
+  t('FUNDA-GAMZE grubu LISTEDE DEGIL — v158: gecmis ayda kalmis grup, bu ayda kadrosu yok', lf.indexOf('FUNDA F - GAMZE G')===-1, (lf.match(/FUNDA F[^<]{0,30}/)||[''])[0]);
+  t('BU AY bitiren GUNCEL grup listede (JALE-KUMRU 8/8)', lf.indexOf('JALE J - KUMRU K')!==-1);
   t('HALE-IPEK grubu (kendisi yeni aya yazilmis) listede DEGIL', lf.indexOf('HALE H - IPEK I')===-1);
 
   console.log('[2] GELECEK HAFTA: ay kapsami + kisi katlama');
