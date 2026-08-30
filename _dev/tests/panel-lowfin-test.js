@@ -42,26 +42,30 @@ setTimeout(()=>{ try {
     state.instructors=[{id:'h1',name:'HOCA',shareRate:30}];
     const M=function(id,ad,aylar){ const mo={}; (aylar||[]).forEach(function(a){ mo[a]={enrolled:true}; });
       return {id:id,name:ad,joinDate:'2026-01-01',totalPrice:4000,packages:[],monthly:mo}; };
-    const G=function(id,ad,aylar){ const mm={}; (aylar||[]).forEach(function(a){ mm[a]=['u3','u4']; });
-      return {id:id,name:ad,size:2,memberIds:['u3','u4'],packages:[],monthlyMembers:mm,monthlyNotes:{}}; };
+    // v157 fixture gercekciligi: HER GRUBUN KENDI uye cifti var — ayni iki kisiyi 4 gruba koymak
+    // v157 "uyesi devam eden Biten duser" kuralinda sahte devamlilik uretiyordu (gercekte olmaz).
+    const G=function(id,ad,aylar,mids){ mids=mids||['u3','u4']; const mm={}; (aylar||[]).forEach(function(a){ mm[a]=mids.slice(); });
+      return {id:id,name:ad,size:2,memberIds:mids.slice(),packages:[],monthlyMembers:mm,monthlyNotes:{}}; };
     state.members=[M('u1','AYLIN TEK',['${CM}']),M('u2','BERNA BITEN',['${CM}']),
       M('u3','CEREN GRUPTA',['${PM}','${CM}']),M('u4','DERIN GRUPTA',['${PM}','${CM}']),
       M('u6','FUNDA PLANLI',['${CM}']),M('u7','HALE ERKEN',['${CM}']),
       M('u8','SEVIM SARKAN',['${P2}']),M('u9','ZUHAL ESKIBITEN',['${P3}']),
-      Object.assign(M('u10','PASIF GIDEN',['${PM}']),{archived:true, archivedAt:'${CM}-05T00:00:00'})]; // v153: bitirdi + PASIFE ALINDI -> listede olmamali
+      Object.assign(M('u10','PASIF GIDEN',['${PM}']),{archived:true, archivedAt:'${CM}-05T00:00:00'}), // v153: bitirdi + PASIFE ALINDI -> listede olmamali
+      M('u11','NALAN BITTIPM',['${PM}']),M('u12','OYA BITTIPM',['${PM}']),
+      M('u13','PERI ROLL',['${PM}','${CM}']),M('u14','RANA ROLL',['${PM}','${CM}'])];
     state.groups=[
       G('gpm','G SARKAN',['${PM}']),
-      G('gbitpm','G BITTIPM',['${PM}']),
-      G('groll','G ROLL',['${PM}','${CM}']),
+      G('gbitpm','G BITTIPM',['${PM}'],['u11','u12']),
+      G('groll','G ROLL',['${PM}','${CM}'],['u13','u14']),
       G('gcm','G CMSON',['${CM}']),
       {id:'gyetim',name:'G YETIM',size:2,memberIds:[],packages:[{month:'${PM}',startDate:'${PM}-01',sessions:8,price:4500,status:'active'}],monthlyMembers:{},monthlyNotes:{}},
       {id:'gpasif',name:'G PASIF',size:2,memberIds:['u3','u4'],packages:[],monthlyMembers:{'${PM}':['u3','u4']},monthlyNotes:{},archived:true,archivedAt:'${CM}-05T00:00:00'} // v153: bitirdi + grup PASIFE ALINDI -> listede olmamali
     ];
     state.lessons=[];
     __mk('a','group','gpm','gpm',['u3','u4'],'${PM}',['completed','completed','completed','completed','completed','completed','completed']); // PM 7/8 -> SARKAN, listede
-    __mk('b','group','gbitpm','gbitpm',['u3','u4'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8 -> Bitti (1 ay yas siniri icinde)
-    __mk('r1','group','groll','groll',['u3','u4'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8...
-    __mk('r2','group','groll','groll',['u3','u4'],'${CM}',['completed','completed','completed']); // ...ama CM paketi BASLAMIS -> PM artik konu degil, CM 3/8 -> listede YOK
+    __mk('b','group','gbitpm','gbitpm',['u11','u12'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8 -> Bitti (1 ay yas siniri icinde)
+    __mk('r1','group','groll','groll',['u13','u14'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8...
+    __mk('r2','group','groll','groll',['u13','u14'],'${CM}',['completed','completed','completed']); // ...ama CM paketi BASLAMIS -> PM artik konu degil, CM 3/8 -> listede YOK
     __mk('c','group','gcm','gcm',['u3','u4'],'${CM}',['completed','completed','completed','completed','completed','completed','completed','planned']); // CM 7/8 (+1 planli) -> listede
     __mk('d','member','u1','',['u1'],'${CM}',['completed','completed','completed','completed','completed','completed','missed']); // 6+1 yandi = 7/8
     __mk('e','member','u2','',['u2'],'${CM}',['completed','completed','completed','completed','completed','completed','missed','missed']); // 8/8 Bitti
