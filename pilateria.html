@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.24.77">
+<meta name="app-version" content="2026.08.30.79">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -7376,12 +7376,31 @@ function lessonModalOwner() {
   if (checked.length === 1) return { type:'member', id:checked[0] };
   return { type:'', id:'' };
 }
+// v155 (Kerem): OLU GECMIS PAKET — gecmis ayin paket kaydina NE iptal-disi ders NE odeme bagli
+// (grup yeniden kurulurken kalan kalinti). Rozet/sarkan listelerinde gosterilmez; VERI SILINMEZ.
+// Odeme bagli (para alinmis, ders yazilmamis) paket GERCEK haktir — kurala girmez.
+function __deadPastPkg(ownerType, ownerId, mo) {
+  if (!mo || mo >= currentMonth()) return false; // icinde bulunulan/gelecek ay normaldir
+  const hasLesson = (state.lessons || []).some(function(l){
+    if (!l || l.status === 'cancelled') return false;
+    if ((l.packageMonth || String(l.date || '').slice(0, 7)) !== mo) return false;
+    return ownerType === 'group' ? l.groupId === ownerId : (!l.groupId && (l.memberIds || []).includes(ownerId));
+  });
+  if (hasLesson) return false;
+  const hasPay = (state.payments || []).some(function(p){
+    if (!p) return false;
+    if ((p.packageMonth || String(p.date || '').slice(0, 7)) !== mo) return false;
+    return ownerType === 'group' ? p.groupId === ownerId : (p.memberId === ownerId && !p.groupId);
+  });
+  return !hasPay;
+}
 // v46: sahibin ders hakki KALAN (bitmemis) paket aylari — en yeni once
 function ownerUnfinishedMonths(ownerType, ownerId) {
   if (!ownerId) return [];
   const o = ownerType==='group' ? state.groups.find(x=>x.id===ownerId) : state.members.find(x=>x.id===ownerId);
   return ((o && o.packages) || [])
     .filter(pk => pk && pk.month && sessionsRemainingFor(ownerType, ownerId, pk.month) > 0)
+    .filter(pk => !__deadPastPkg(ownerType, ownerId, pk.month)) // v155: olu kalinti listeye girmez
     .map(pk => pk.month).sort().reverse();
 }
 // v48: kisa ay adi (deterministik, ICU'suz)
@@ -7416,13 +7435,13 @@ function populateLessonPkgMonth(preferMonth) {
   const base = parseISO(dm + '-01');
   const months = [];
   for (let i=-3;i<=1;i++){ const d=new Date(base.getFullYear(), base.getMonth()+i, 1); const mo=isoDate(d).slice(0,7); if(!months.includes(mo)) months.push(mo); }
-  ((ownerObj && ownerObj.packages) || []).forEach(pk => { if (pk && pk.month && !months.includes(pk.month)) months.push(pk.month); });
+  ((ownerObj && ownerObj.packages) || []).forEach(pk => { if (pk && pk.month && !months.includes(pk.month) && !(owner.id && __deadPastPkg(owner.type, owner.id, pk.month))) months.push(pk.month); }); // v155
   months.sort();
   const cur = preferMonth || sel.value || (owner.id ? smartPkgMonthFor(owner.type, owner.id, dateISO) : dm) || dm;
   sel.innerHTML = months.map(mo => {
     const lbl = parseISO(mo+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
     let mark = '';
-    if (ownerObj && (ownerObj.packages||[]).some(pk => pk && pk.month === mo)) {
+    if (ownerObj && (ownerObj.packages||[]).some(pk => pk && pk.month === mo) && !__deadPastPkg(owner.type, owner.id, mo)) {
       const rem = sessionsRemainingFor(owner.type, owner.id, mo);
       mark = rem>0 ? (' · 📦 ' + rem + ' ders kalan') : ' · paket dolu';
     }
@@ -7506,7 +7525,8 @@ function openLessonModal(id, date, time, groupId, ctxMonth) {
       if (prev.length) out += ' · ' + __shortMonth(prev[0]) + ' ' + sessionsRemainingFor(ty, oid, prev[0]) + ' sarkan';
       return out;
     } catch(e) { return ''; } };
-    const __gOpts = state.groups.filter(g => g && !(typeof isGroupInactiveInMonth==='function' && isGroupInactiveInMonth(g, __selAy))).map(g => {
+    const __gOpts = state.groups.filter(g => g && !(typeof isGroupInactiveInMonth==='function' && isGroupInactiveInMonth(g, __selAy))
+      && ((typeof activeGroupRosterForMonth==='function' ? activeGroupRosterForMonth(g, __selAy) : (g.memberIds||[])).length > 0) /* v155: bos kadrolu hayalet grup secenek degil (v145 kurali) */).map(g => {
       const lbl = __remLbl('group', g.id);
       return `<option value="${g.id}" ${g.id===l.groupId?'selected':''}>${groupDisplayName(g, __selAy)} (${g.size} kişi)${lbl?' · '+lbl:''}</option>`;
     }).join('');
@@ -9026,8 +9046,11 @@ function resetGroupPackage(id) {
 function scheduleGroupMonth(groupId) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
   if (!g.defaultTime || !(g.defaultDays||[]).length) { alert('Önce grubun varsayılan gün(ler)i ve saatini belirle.'); return; }
-  if (!confirm(`"${groupDisplayName(g)}" grubu için ${g.defaultDays.map(d=>DAYS_LONG[d]).join(', ')} günlerinde saat ${g.defaultTime}'te 4 hafta (${g.defaultDays.length*4} ders) oluşturulacak. Devam?`)) return;
-  const startISO = todayISO();
+  // v156 (Kerem): ayni sistemik kural — uretim GRUP DETAYININ ACIK OLDUGU AYIN 1'inden baslar
+  // (bugunden degil) ve olusan derslere packageMonth yazilir ki hak/rozet hesaplari dogru aya baksin.
+  const __ay156 = ((typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) || currentMonth());
+  if (!confirm(`"${groupDisplayName(g, __ay156)}" grubu için ${pkgMonthLabel(__ay156)} ayında ${g.defaultDays.map(d=>DAYS_LONG[d]).join(', ')} günlerinde saat ${g.defaultTime}'te 4 hafta (${g.defaultDays.length*4} ders) oluşturulacak. Devam?`)) return;
+  const startISO = __ay156 + '-01';
   const start = parseISO(startISO);
   let created = 0, skipped = 0;
   for (let week=0; week<4; week++) {
@@ -9047,10 +9070,10 @@ function scheduleGroupMonth(groupId) {
       const needed = groupActiveMemberCount(g) || 1;
       const instConflict = g.defaultInstructorId && other.some(l => l.instructorId === g.defaultInstructorId);
       if (usedRf + needed > getReformers() || instConflict) { skipped++; continue; }
-      if (quotaCeilingMsg('group', groupId, dISO.slice(0, 7), null)) { skipped++; continue; } // v154: hak tavani
+      if (quotaCeilingMsg('group', groupId, __ay156, null)) { skipped++; continue; } // v154 hak tavani · v156: hedef paket ayina gore
       state.lessons.push({
         id: uid(), date: dISO, time: g.defaultTime,
-        instructorId: g.defaultInstructorId||'', size: g.size,
+        instructorId: g.defaultInstructorId||'', size: g.size, packageMonth: __ay156, /* v156 */
         memberIds: (g.memberIds||[]).filter(x => x && state.members.find(m=>m.id===x)), groupId: groupId, note: ''
       });
       created++;
@@ -9213,12 +9236,10 @@ async function batchDatesAutoFill() {
     const g = state.groups.find(x => x.id === __batchDatesTarget.id); if (!g) return;
     defaultDays = g.defaultDays || [];
     defaultTime = g.defaultTime || '';
-    startStr = g.packageStartDate || todayISO();
   } else {
     const m = state.members.find(x => x.id === __batchDatesTarget.id); if (!m) return;
     defaultDays = m.defaultDays || [];
     defaultTime = m.defaultTime || '';
-    startStr = todayISO();
   }
   if (!defaultTime || !defaultDays.length) {
     const dayStr = await plPrompt('Hangi günler? (virgülle, 0=Paz, 1=Pzt, 2=Sal, 3=Çar, 4=Per, 5=Cum, 6=Cmt)\nÖrnek: 2,4 → Salı-Perşembe', '2,4');
@@ -9229,6 +9250,10 @@ async function batchDatesAutoFill() {
     if (!time || !/^\d{2}:\d{2}$/.test(time)) { alert('Geçersiz saat.'); return; }
     defaultTime = time;
   }
+  // v156 (Kerem): SISTEMIK KURAL — tarih uretimi HER ZAMAN hedef paket ayinin takviminden baslar
+  // (modal hangi ayin paketine kilitliyse o ayin 1'i). Eski packageStartDate/bugun capalari, Eylul
+  // listesinde acilan modala Agustos tarihleri yazdiriyordu (kok neden).
+  startStr = (__batchDatesTarget.packageMonth || currentMonth()) + '-01';
   const start = parseISO(startStr);
   const dates = [];
   let week = 0;
@@ -13205,7 +13230,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.24.77';
+const APP_VERSION = '2026.08.30.79';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
