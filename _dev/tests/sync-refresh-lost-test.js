@@ -31,6 +31,7 @@ function finish(){
   process.exit(fail?1:0);
 }
 
+function __setMM(ay){ const sel=w.document.getElementById('member-month'); if (sel && sel.tagName==='SELECT' && ![...sel.options].some(o=>o.value===ay)) sel.insertAdjacentHTML('beforeend','<option value="'+ay+'">'+ay+'</option>'); sel.value=ay; } // tarih-saglam (ay donumu)
 setTimeout(function(){try{
 
   // ---------------------------------------------------------------- [1] YAPISAL
@@ -56,7 +57,7 @@ setTimeout(function(){try{
       sessions:8,method:'IBAN',packageMonth:'2026-06',packageId:'gb'}];
   `);
   ev("switchPage('members')");
-  w.document.getElementById('member-month').value='2026-06';
+  __setMM('2026-06');
   ev("renderMembers()");
   const before = cardTxt('HILAL METE');
   t("baslangic karti 8.000 gosteriyor", /Ücret 8\.000/.test(before) && /Ödenen 8\.000/.test(before), before);
@@ -102,11 +103,11 @@ setTimeout(function(){try{
   // ------------------------- [6] BOS AY: mobil kartlar da temizlenir (bayat kalmaz)
   console.log('\n[6] Kayitsiz ay -> #members-cards da temizlenir (bayat kart kalmaz)');
   ev("switchPage('members')");
-  w.document.getElementById('member-month').value='2026-06';
+  __setMM('2026-06');
   ev("renderMembers()");
   t("once kart dolu", cardTxt('HILAL METE').indexOf('HILAL')===0, cardTxt('HILAL METE'));
   ev("state.members=[]; state.groups=[]; state.payments=[];");
-  w.document.getElementById('member-month').value='2026-05'; // < ROSTER_START_MONTH -> eski dal
+  __setMM('2026-05'); // < ROSTER_START_MONTH -> eski dal
   ev("renderMembers()");
   const cards = (w.document.getElementById('members-cards')||{}).innerHTML||'';
   t("bos ayda bayat kart KALMADI", cards.indexOf('HILAL')<0, cards.replace(/\s+/g,' ').slice(0,120));
@@ -114,7 +115,7 @@ setTimeout(function(){try{
   // --------------------- [4] ODAKTAKI INPUT: kendi kendine iyilesen tekrar denemesi
   console.log('\n[4] Modal degil ODAK sebebiyle mesgulse -> zamanlayici kendi kendine iyilestirir');
   ev("state.members=[{id:'M9',name:'ZEYNEP',joinDate:'2026-06-01',defaultPackageId:'gb',totalPrice:'',monthly:{'2026-06':{totalPrice:5000,packageId:'gb'}},packages:[{month:'2026-06',startDate:'2026-06-01',sessions:8,price:5000,status:'active'}]}]; state.payments=[];");
-  w.document.getElementById('member-month').value='2026-06';
+  __setMM('2026-06');
   ev("renderMembers()");
   const q = w.document.getElementById('member-search');
   q.focus();

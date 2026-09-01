@@ -27,7 +27,8 @@ setTimeout(async ()=>{ try {
     state.groups.push({id:'cG',name:'CTX GRUP',size:2,memberIds:['cA','cB'],packages:[],defaultDays:[],defaultTime:'10:00',defaultInstructorId:'',defaultPackageId:'',rescheduleUsed:0,cancelUsed:0,note:''});
     renderMembers();
   `);
-  const setMonth = (ay) => { d.getElementById('member-month').value = ay; };
+  // tarih-saglam: secici yalniz son 2 ayi listeler; sabit test ayi secenekte yoksa eklenir (ay donumu kirilganligi)
+  const setMonth = (ay) => { const sel=d.getElementById('member-month'); if (sel && sel.tagName==='SELECT' && ![...sel.options].some(o=>o.value===ay)) sel.insertAdjacentHTML('beforeend','<option value="'+ay+'">'+ay+'</option>'); sel.value = ay; };
 
   console.log('[1] HAZIRAN PASIFE AL → v45 CARRY-FORWARD: Haziran+sonrasi pasif, Mayis korunur');
   setMonth('2026-06');

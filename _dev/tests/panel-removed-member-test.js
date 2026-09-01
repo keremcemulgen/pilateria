@@ -26,7 +26,7 @@ function t(n,c,x){ if(c){pass++;console.log('  OK ',n);} else {fail++;console.lo
 function shiftM(ym, dd){ const p=ym.split('-').map(Number); const dt=new Date(p[0], p[1]-1+dd, 1); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0'); }
 setTimeout(()=>{ try {
   const CM = w.eval('currentMonth()');
-  const NM = shiftM(CM,+1), N2 = shiftM(CM,+2);
+  const NM = shiftM(CM,+1), N2 = shiftM(CM,+2), PM = shiftM(CM,-1);
   w.eval(`
     state.settings.reformers=10; state.settings.open=8; state.settings.close=22;
     state.packageTypes=[{id:'p8',name:'8 Ders',sessions:8,price:8000}];
@@ -48,7 +48,7 @@ setTimeout(()=>{ try {
       {id:'gG',name:'LEMAN G - MUKADDES G',size:2,memberIds:['g3','g4'],defaultPackageId:'p8',packages:[{month:'${CM}',startDate:'${CM}-01',sessions:8,price:9000,status:'active'}],monthlyMembers:{'${CM}':['g3','g4']},monthlyNotes:{}}
     ];
     state.lessons=[]; state.payments=[]; state.expenses=[]; state.instructorPayouts=[];
-    window.__doldur=function(pref,gid,mids,adet){ for(let i=0;i<adet;i++) state.lessons.push({id:pref+i,date:'${CM}-'+String((i%25)+2).padStart(2,'0'),time:(9+(i%12))+':00',durationMin:45,instructorId:'h1',size:(mids||[]).length||1,memberIds:(mids||[]).slice(),groupId:gid||'',packageMonth:'${CM}',status:'completed'}); };
+    window.__doldur=function(pref,gid,mids,adet){ for(let i=0;i<adet;i++) state.lessons.push({id:pref+i,date:'${PM}-'+String((i%25)+2).padStart(2,'0') /* tarih-saglam: gecen ayin gunleri, paket ayi CM */,time:(9+(i%12))+':00',durationMin:45,instructorId:'h1',size:(mids||[]).length||1,memberIds:(mids||[]).slice(),groupId:gid||'',packageMonth:'${CM}',status:'completed'}); };
     __doldur('r','',['uR'],8);  // 8/8 Bitti ama NM'den silinmis
     __doldur('s','',['uS'],7);  // 7/8 1-kaldi ama NM'den silinmis — o da duser
     __doldur('t','',['uT'],8);  // 8/8 Bitti, silinmemis -> kalir
