@@ -26,7 +26,8 @@ const dom = new JSDOM(html, {
     if(!w.structuredClone)w.structuredClone=o=>JSON.parse(JSON.stringify(o));
     Object.defineProperty(w.navigator,'serviceWorker',{value:{register:()=>Promise.resolve({}),getRegistrations:()=>Promise.resolve([])},configurable:true});
     w.__msgs=[]; w.__PL_DLG_AUTO__=(o)=>{ w.__msgs.push(String((o&&o.msg)||'')); return o&&o.input?null:true; };
-    w.alert=(m)=>{ w.__msgs.push(String(m||'')); }; w.confirm=(m)=>{ w.__msgs.push(String(m||'')); return true; };
+    // v166: ayni kadroyla grup varsa "o grubu aya tasiyayim mi?" sorulur — bu test YENI KAYIT yolunu sinar → Hayir
+    w.alert=(m)=>{ w.__msgs.push(String(m||'')); }; w.confirm=(m)=>{ m=String(m||''); w.__msgs.push(m); return m.indexOf('ayına taşıyayım mı')===-1; };
     w.prompt=()=>null; w.scrollTo=()=>{};
   }});
 const w=dom.window, d=w.document;

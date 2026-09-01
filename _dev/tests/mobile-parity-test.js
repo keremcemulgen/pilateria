@@ -54,7 +54,7 @@ setTimeout(function(){ try {
 
   console.log('[4] Ders secici (grupsuz): aramada pasif cikar + rozet');
   t("ders secici arama filtresi archived'i DISLAMAZ", !/!m\.archived && q\.length >= 2/.test(html));
-  t("ders secici satirinda pasif rozeti", /m\.archived\?'<span class="archived-badge">Pasif<\/span>'/.test(html));
+  t("ders secici satirinda pasif rozeti (v164: ay-bazli memberPassiveInMonth)", /(m\.archived|memberPassiveInMonth\(m, __badgeMonth\))\?'<span class="archived-badge">Pasif<\/span>'/.test(html));
 
   console.log('[5] JSONBin karti DOM\'dan kaldirildi + guard');
   t("sync-key input DOM'da YOK", !d.getElementById('sync-key'));
