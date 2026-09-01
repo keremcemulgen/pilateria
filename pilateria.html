@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.08.31.84">
+<meta name="app-version" content="2026.09.01.85">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -2729,7 +2729,69 @@ function applyV10MigrationToState(s) {
   }
   // 6) v116: v116 ÖNCESİ yeniden adlandırmalardan kalan bayat grup adlarını kadroyla onar (idempotent)
   try { __repairStaleGroupNames(s); } catch(e) {}
+  // 7) v162: ay-capasiz dogan gruplar + kanon-oncesi celiskili "cikarildi" kayitlari (idempotent)
+  try { __migV162Repair(s); } catch(e) {}
   return s;
+}
+// v162 (Kerem, 2026-09-01): ONARIM — idempotent, load() ve bulut cekisinde calisir.
+//  A) ROSTER kanonu (2026-08+) sonrasi dogmus ve dogum siniri olmayan grup: monthlyMembers[dogum-1]=[]
+//     (temel kadro gecmis aylara sizmasin). Hic anahtari olmayan + dogdugu ayda hic uyesi kayitli
+//     olmayan YETIM grup: uyeleri dogdugu aya kaydedilir (pasif donem o ayda kapanir).
+//  B) Kanon-ONCESI ayda odemesi VE iptal-disi dersi olan uyenin o ay icin enrolled:false kaydi
+//     celiskilidir (mukerrer gruptan silme kazasi): geri alinir, o aydan baslayan pasif donem
+//     ertesi aydan baslatilir. Odemesi/dersi olmayan gercek ayrilanlara DOKUNULMAZ.
+function __migV162Repair(s) {
+  let rsm; try { rsm = ROSTER_START_MONTH; } catch(e) { rsm = '2026-08'; }
+  const nextM = function(ym){ const p = String(ym).split('-').map(Number); const d = new Date(p[0], p[1], 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const prevM = function(ym){ const p = String(ym).split('-').map(Number); const d = new Date(p[0], p[1] - 2, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const findM = function(mid){ return (s.members || []).find(function(x){ return x && x.id === mid; }); };
+  (s.groups || []).forEach(function(g){
+    if (!g) return;
+    const mm = g.monthlyMembers || {};
+    const keys = Object.keys(mm).sort();
+    const evid = [];
+    (g.packages || []).forEach(function(p){ if (p && p.month) evid.push(String(p.month)); });
+    keys.forEach(function(k){ if ((mm[k] || []).filter(Boolean).length) evid.push(k); });
+    (s.lessons || []).forEach(function(l){ if (l && l.groupId === g.id) evid.push(l.packageMonth || String(l.date || '').slice(0, 7)); });
+    const birth = evid.filter(Boolean).sort()[0];
+    if (!birth || birth < rsm) return;
+    if (keys.some(function(k){ return k < birth; })) return;
+    const pmB = prevM(birth);
+    if (!pmB) return;
+    g.monthlyMembers = g.monthlyMembers || {};
+    g.monthlyMembers[pmB] = [];
+    const mids = (g.memberIds || []).filter(Boolean);
+    if (!keys.length && mids.length) {
+      const anyOn = mids.some(function(mid){ const m = findM(mid); return !!(m && m.monthly && m.monthly[birth] && m.monthly[birth].enrolled === true); });
+      if (!anyOn) mids.forEach(function(mid){
+        const m = findM(mid); if (!m) return;
+        m.monthly = m.monthly || {};
+        m.monthly[birth] = Object.assign({}, m.monthly[birth] || {}, { enrolled: true });
+        try { __closeArchivePeriodAt(m, birth); } catch(e) {}
+      });
+    }
+  });
+  (s.members || []).forEach(function(m){
+    if (!m || !m.monthly) return;
+    Object.keys(m.monthly).forEach(function(mo){
+      const e = m.monthly[mo]; if (!e || e.enrolled !== false || mo >= rsm) return;
+      const hasPay = (s.payments || []).some(function(p){ return p && p.memberId === m.id && (p.packageMonth || String(p.date || '').slice(0, 7)) === mo; });
+      if (!hasPay) return;
+      const hasLes = (s.lessons || []).some(function(l){ return l && l.status !== 'cancelled' && (l.memberIds || []).includes(m.id) && (l.packageMonth || String(l.date || '').slice(0, 7)) === mo; });
+      if (!hasLes) return;
+      e.enrolled = true;
+      const nm = nextM(mo);
+      if (Array.isArray(m.archivePeriods)) {
+        m.archivePeriods = m.archivePeriods.map(function(per){
+          const f = String((per && per.from) || '').slice(0, 7);
+          if (f !== mo) return per;
+          const t = (per && per.to) ? String(per.to).slice(0, 7) : null;
+          if (t && t <= nm) return null;
+          return Object.assign({}, per, { from: nm });
+        }).filter(Boolean);
+      }
+    });
+  });
 }
 
 // ========== HELPERS ==========
@@ -5760,8 +5822,8 @@ function groupNavListForMonth(monthISO) {
   let l = state.groups.slice().filter(function(g){ return !isGroupInactiveInMonth(g, monthISO || currentMonth()); });
   if (monthISO) {
     l = l.filter(function(g){
-      // 1) Aktif üye filtresi (üye listesiyle aynı mantık)
-      const activeMids = (g.memberIds||[]).filter(function(mid){
+      // 1) Aktif üye filtresi (üye listesiyle aynı mantık) — v162: AY-COZUMLU kadro (dogum siniri/ay anahtarlari)
+      const activeMids = (resolveGroupMembersForMonth(g, monthISO)||[]).filter(function(mid){
         if (!mid) return false;
         const mm = state.members.find(function(x){ return x.id === mid; });
         if (!mm || mm.archived) return false;
@@ -6513,8 +6575,17 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
   state.groups.forEach(g => {
     if (g.id === keepGroupId) return;
     if (__keep && (g.secondOf === keepGroupId || __keep.secondOf === g.id || (__keep.secondOf && __keep.secondOf === g.secondOf))) return;
+    if (isGroupInactiveInMonth(g, __ay)) return; // v162: ay'da pasif (arsiv/donem) grup uye tutamaz — dokunulmaz
     const __has = (g.memberIds||[]).includes(memberId) || Object.keys(g.monthlyMembers||{}).some(k => k >= __ay && (g.monthlyMembers[k]||[]).includes(memberId));
     if (__has) {
+      const __lbl162 = (function(){ // v162: not = o ayki GORUNEN ad + son paket ayi (bayat g.name degil)
+        let last = '';
+        ((g.packages) || []).forEach(function(p){ if (p && p.month && String(p.month) > last) last = String(p.month); });
+        (state.lessons || []).forEach(function(l){ if (l && l.groupId === g.id && l.status !== 'cancelled') { const pm = l.packageMonth || String(l.date || '').slice(0, 7); if (pm > last) last = pm; } });
+        let nm = ''; try { nm = groupDisplayName(g, __ay); } catch(e) { nm = ''; }
+        nm = nm || g.name || 'Grup';
+        return '«' + nm + '»' + (last ? ' (son paket: ' + pkgMonthLabel(last) + ')' : '');
+      })();
       const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
       applyRosterChange(g, __ay, mids => {
         const out = mids.map(x => x === memberId ? '' : x);
@@ -6523,7 +6594,7 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
       });
       __autoNameAfterRosterChange(g, __ay); // v41: ad AY BAZLI guncellenir (elle ay-adi korunur)
       syncGroupLessonsToRoster(g.id, __ay);
-      removed.groups.push(g.name);
+      removed.groups.push(__lbl162);
     }
   });
   // İleri tarihli planned bireysel derslerden de çıkar
@@ -8612,9 +8683,20 @@ function saveGroup() {
         __autoNameAfterRosterChange(__pg0, __gAy);
       }
     } }
+  // v162 (Kerem): YENI GRUP SAYFANIN AYINA CAPALANIR — uyeler baglam ayina kaydedilir (pasif/arsiv
+  // donemi o ayda kapanir) ki grup kendi ayinda kadrolu dogsun. Tasima bundan SONRA calisir: eski
+  // kayit o aydan itibaren uyeyi birakir, ayni kisilerle iki grup ayni ayda gorunmez.
+  if (isNew) {
+    memberIds.forEach(aid => {
+      const __am = state.members.find(x=>x.id===aid);
+      if (__am && __am.archived && typeof unarchiveMember === 'function') unarchiveMember(aid, __gAy);
+      setMemberMonthly(aid, __gAy, { enrolled: true });
+      if (__am) __closeArchivePeriodAt(__am, __gAy);
+    });
+  }
   const transferNotes = [];
   newlyAdded.forEach(mid => {
-    const removed = removeMemberFromOtherContexts(mid, data.id);
+    const removed = removeMemberFromOtherContexts(mid, data.id, __gAy); // v162: baglam ayi acik
     if (removed.groups.length || removed.individualLessons) {
       const m = state.members.find(x=>x.id===mid);
       const parts = [];
@@ -8642,16 +8724,19 @@ function saveGroup() {
     }
   }
   else {
-    // Yeni grup: paket başlangıcını bugün yap + ilk paket kaydını oluştur
-    data.packageStartDate = todayISO();
+    // v162 (Kerem): paket + baslangic + DOGUM SINIRI sayfanin ayina (bugune degil) — grup, acildigi
+    // aydan once hicbir ayda gorunmez (Temmuz'a sizan mukerrer grup vakasi).
+    data.packageStartDate = (__gAy === currentMonth()) ? todayISO() : (__gAy + '-01');
     data.rescheduleUsed = 0;
     data.cancelUsed = 0;
     data.packages = [];
     data.archived = false;
+    data.monthlyMembers = {};
+    { const __pmB = prevMonthISO(__gAy); if (__pmB) data.monthlyMembers[__pmB] = []; }
     state.groups.push(data);
-    // v10: İlk paketi oluştur (bu ay için)
+    // v10: İlk paketi oluştur (baglam ayi icin)
     if (memberIds.length > 0 || defaultPackageId) {
-      createGroupPackage(data, todayISO().slice(0,7), todayISO(), {
+      createGroupPackage(data, __gAy, data.packageStartDate, {
         instructorShareRate: groupRate,
         instructorId: defaultInstructorId,
       });
@@ -13616,7 +13701,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.08.31.84';
+const APP_VERSION = '2026.09.01.85';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
