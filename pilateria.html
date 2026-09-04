@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.01.92">
+<meta name="app-version" content="2026.09.01.93">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -4521,18 +4521,14 @@ function calendarHourSlots() {
 }
 // v18: Dersin gorunecegi tam saat kutusu anahtari ('19:15' -> '19:00')
 function lessonHourKey(t) { return String(t||'').slice(0,2) + ':00'; }
-// v18: Paketin BEKLENEN ders sayisi (paket kaydindan; yoksa varsayilan paketten; yoksa 8)
+// v18: Paketin BEKLENEN ders sayisi. v170 KOK FIX (Kerem: "1 dersi kalanin yildizi cikmiyor"):
+// burasi kendi hak zincirini kuruyordu (paket kaydi > paket TIPI > 8) ve AYLIK HAK'i
+// (uye sessionsOverride / grup monthlySessions) GORMUYORDU -> 4 haklik uyede 4 ders girilse bile
+// "8 bekleniyor" denip yildiz hic dogmuyordu. Artik v43 kanonuyla TEK KAYNAK: sessionQuotaFor
+// (aylik hak > o ayin paketi > paket tipi > 8) — tavan denetimi, kalan ders ve yildiz AYNI hakki gorur.
 function packageExpectedSessions(ownerType, ownerId, pm) {
-  let owner = null, pk = null;
-  if (ownerType === 'group') owner = state.groups.find(x => x.id === ownerId);
-  else owner = state.members.find(x => x.id === ownerId);
-  if (owner) pk = (owner.packages||[]).find(x => x.month === pm);
-  if (pk && +pk.sessions) return +pk.sessions;
-  if (owner && owner.defaultPackageId) {
-    const pt = state.packageTypes.find(x => x.id === owner.defaultPackageId);
-    if (pt && +pt.sessions) return +pt.sessions;
-  }
-  return 8;
+  const q = +sessionQuotaFor(ownerType, ownerId, pm || currentMonth());
+  return (q > 0) ? q : 8;
 }
 // v18.1: Bu ders, paketinin SON dersi mi?
 // Kural (Kerem): (a) Toplu Tarih Gir'de elle ⭐ isaretlenen ders HER ZAMAN son derstir;
@@ -4841,9 +4837,9 @@ function renderGcalRange(startDate, nDays) {
         <span class="cal-avail ${availClass}">${avail}/${R}</span>
       </div>`;
     });
-    if (!closed) {
+    { // v170: kapali gunde de MEVCUT dersler gorunur (bos saat kutulari yine kapali — yanlislikla ders eklenmesin)
       const dayLessons = state.lessons.filter(l => l.date === dISO && l.time);
-      inner += gcalLayout(dayLessons).map(ev => __gcalEventHtml(ev, dISO)).join('');
+      if (dayLessons.length) inner += gcalLayout(dayLessons).map(ev => __gcalEventHtml(ev, dISO)).join('');
     }
     if (isToday && !closed) {
       const top = __gcalNowTop(openMin, endMin);
@@ -4879,8 +4875,9 @@ function __pcalLessonCard(l) {
   const hoca = l.instructorId ? instructorName(l.instructorId) : '';
   const bit = (function(){ try { const m0 = timeToMinutes(l.time) + (+l.durationMin || +state.settings.lessonDuration || 60); return String(Math.floor(m0/60)).padStart(2,'0') + ':' + String(m0%60).padStart(2,'0'); } catch(e) { return ''; } })();
   const dolu = (l.memberIds||[]).filter(Boolean).length;
+  const __star170 = isLastLessonOfPackage(l) ? ' <span class="gev-star" title="Paketin son dersi">⭐</span>' : ''; // v170: v132'de dusen yildiz geri geldi
   return `<div class="pcal-card pcst-${st}" onclick="openLessonModal('${l.id}')">
-    <div class="pcal-c1">${l.time} · ${escapeHtml(kisiler)}${cancelled ? ' — iptal' : ''}</div>
+    <div class="pcal-c1">${l.time} · ${escapeHtml(kisiler)}${__star170}${cancelled ? ' — iptal' : ''}</div>
     <div class="pcal-c2">${l.time}${bit ? '–' + bit : ''} · ${dolu}/${l.size || state.settings.reformers}${hoca ? ' · ' + escapeHtml(hoca) : ''} · ${(LESSON_STATUS[st]||{}).label || ''}</div>
   </div>`;
 }
@@ -5168,7 +5165,8 @@ function renderCalendarMonth() {
     const chips = dayLessons.slice(0,3).map(l => {
       const label = l.groupId ? groupNameForMonth(l.groupId, l.packageMonth || String(l.date||'').slice(0,7)) : ((l.memberIds||[]).map(memberName)[0]||'');
       const st = l.status || 'planned';
-      return `<div class="gm-chip gst-${st}" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${l.time} ${escapeHtml(label)}"><span class="gmc-time">${l.time}</span> ${escapeHtml(label)}</div>`;
+      const __star170 = isLastLessonOfPackage(l) ? ' <span class="gev-star" title="Paketin son dersi">⭐</span>' : ''; // v170
+      return `<div class="gm-chip gst-${st}" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${l.time} ${escapeHtml(label)}"><span class="gmc-time">${l.time}</span> ${escapeHtml(label)}${__star170}</div>`;
     }).join('');
     const more = dayLessons.length > 3 ? `<div class="gm-more">+${dayLessons.length-3} daha</div>` : '';
     const __hol = (typeof isHoliday === 'function') && isHoliday(dISO); // v126
@@ -14265,7 +14263,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.01.92';
+const APP_VERSION = '2026.09.01.93';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
