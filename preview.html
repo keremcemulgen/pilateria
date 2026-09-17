@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.15.94-onizleme">
+<meta name="app-version" content="2026.09.16.95-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -3362,6 +3362,26 @@ function paymentPkgLabel(p) {
 }
 function paymentMonthOf(p){ return (p && (p.packageMonth || String(p.date||'').slice(0,7))) || ''; }
 // v110 (Kerem) TAKSIT KANONU: ayni ay paketine COK odeme olur; TOPLAM tanimli fiyati ASAMAZ.
+// v172 TEK KAYNAK (Kerem: "3 hak verdigim uyeye odemede 8 gozukuyor"): uyenin O AYKI KENDI ders hakki.
+// Sira: v171 payi (o gruptan ayrilmis uyenin pay dersi) > elle hak (sessionsOverride) > grup uyesiyse
+// GRUBUN hakki (aylik hak > o ayin paketi > tip) > uyenin kendi kotasi. groupId '' = bireysel baglam;
+// undefined = o ay aktif grubunu kendi bulur. Odeme penceresi / tik / toplu odeme / uye penceresi bunu okur.
+function memberEffectiveQuota(memberId, ay, groupId) {
+  const a = ay || currentMonth();
+  let gid = groupId;
+  if (gid === undefined || gid === null) { const g = memberActiveGroupForMonth(memberId, a); gid = g ? g.id : ''; }
+  if (gid) { const ps = partialShareFor(gid, memberId, a); if (ps) return Math.max(0, Math.round(+ps.sessions || 0)); }
+  const ov = memberSessionsOverride(memberId, a); if (ov !== null) return ov;
+  if (gid) return +sessionQuotaFor('group', gid, a) || 8;
+  return +sessionQuotaFor('member', memberId, a) || 8;
+}
+// Uyeye ozel hak (elle hak / pay) alana yazildiysa grup PAKETI olusturulurken GRUBUN hakki kullanilir
+function __groupPkgSessions172(memberId, groupId, ay, fieldSessions) {
+  try {
+    if (memberSessionsOverride(memberId, ay) !== null || partialShareFor(groupId, memberId, ay)) return +sessionQuotaFor('group', groupId, ay) || fieldSessions || 8;
+  } catch(e) {}
+  return fieldSessions;
+}
 function memberPaidTowardsMonth(memberId, groupId, monthISO, excludePayId) {
   return (state.payments || []).reduce((a, p) => {
     if (!p || p.memberId !== memberId) return a;
@@ -7526,7 +7546,7 @@ function openMemberModal(id) {
   if (sessEl) {
     const __ov = m.id ? memberSessionsOverride(m.id, __ctxMonth) : null;
     sessEl.value = (__ov !== null) ? __ov : '';
-    const __auto = m.id ? sessionQuotaFor('member', m.id, __ctxMonth) : 8;
+    const __auto = m.id ? (function(){ try { const g = memberActiveGroupForMonth(m.id, __ctxMonth || currentMonth()); return g ? (+sessionQuotaFor('group', g.id, __ctxMonth || currentMonth()) || 8) : sessionQuotaFor('member', m.id, __ctxMonth); } catch(e) { return sessionQuotaFor('member', m.id, __ctxMonth); } })() : 8; // v172: grup uyesinde GRUBUN hakki (bos birakilirsa gecerli olan)
     sessEl.placeholder = 'Otomatik: ' + __auto;
   }
   // fill instructor select
@@ -7859,7 +7879,7 @@ async function togglePaidTick(memberId, groupId, ev, monthAy) {
     const __kal = Math.round((__defPrice - __paidSum) * 100) / 100;
     if (!confirm(`"${m.name}" ${ay}: ${money(__paidSum)} ₺ ödendi, kalan ${money(__kal)} ₺.\n\nKalanı da ÖDENDİ olarak kaydedeyim mi?\n(Vazgeç = değişiklik yok; taksitler Ödemeler sayfasından da girilebilir)`)) return;
     const __pk0 = (function(){ const pid = memberPkgIdForMonth(memberId, ay); return (pid && state.packageTypes.find(p=>p.id===pid)) || (isGroup && g && g.defaultPackageId ? state.packageTypes.find(p=>p.id===g.defaultPackageId) : null) || state.packageTypes[0] || { price: __kal, sessions: 8 }; })(); // v111: uye-oncelikli
-    const __rec2 = buildPaymentRecord('', memberId, groupId||'', todayISO(), __pk0, (__psT171 ? (+__psT171.sessions || 0) : (+__pk0.sessions||8)), __kal, __kal, 'Nakit', '', '', 'Tik ile kalan tahsil' + (__psT171 ? ' (ayrılan üye payı)' : ''), false);
+    const __rec2 = buildPaymentRecord('', memberId, groupId||'', todayISO(), __pk0, (memberEffectiveQuota(memberId, ay, groupId || '') || (+__pk0.sessions||8)), __kal, __kal, 'Nakit', '', '', 'Tik ile kalan tahsil' + (__psT171 ? ' (ayrılan üye payı)' : ''), false); // v172: uyenin hakki
     __rec2.autoTick = true; __rec2.packageMonth = ay;
     state.payments.push(__rec2);
     save(); __refreshUIInPlace(); // v125
@@ -7911,7 +7931,7 @@ async function togglePaidTick(memberId, groupId, ev, monthAy) {
     // Fiyat tanımlı → ödeme yap
     if (!confirm(`"${m.name}" için ${ay} ayına ${money(amount)} ₺ ödeme kaydı oluşturulacak. Devam?`)) return;
     const today = todayISO();
-    const sessions = __psT171 ? (+__psT171.sessions || 0) : (+pkgObj.sessions || 8); // v171 (F14): pay odemesinin ders sayisi payin dersi
+    const sessions = memberEffectiveQuota(memberId, ay, groupId || '') || (+pkgObj.sessions || 8); // v171 (F14) pay dersi · v172: elle hak > grubun hakki (TEK KAYNAK)
     const rec = buildPaymentRecord('', memberId, groupId||'', today, pkgObj, sessions, amount, amount, 'Nakit', '', '', 'Tik ile kaydedildi' + (__psT171 ? ' (ayrılan üye payı)' : ''), false);
     rec.autoTick = true; // sonradan kaldırılabilsin diye işaretle
     rec.packageMonth = ay; // v26: tik odemesi GORUNTULENEN AYA yazilir
@@ -11042,7 +11062,7 @@ function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
     }
   } else {
     document.getElementById('mp-date').value = todayISO();
-    document.getElementById('mp-sessions').value = sessionQuotaFor(groupId ? 'group' : 'member', groupId || memberId, pkgMonthCtx || currentMonth()) || 8; // v45: otomatik ders hakki (opsiyonel — odeme buna baglanmaz)
+    document.getElementById('mp-sessions').value = memberEffectiveQuota(memberId || mSel.value, pkgMonthCtx || currentMonth(), groupId || '') || 8; // v45 otomatik ders hakki (opsiyonel) · v172: UYENIN kendi hakki (elle hak > grubun hakki)
     document.getElementById('mp-delete-btn').style.display = 'none';
     cSel.value = 'none';
     // v18: bireysel üyenin tanımlı paketi varsa otomatik seç (gruptaki defaultPackageId mantığı)
@@ -11176,8 +11196,8 @@ function applyLockedShare() {
   const amountEl = document.getElementById('mp-amount');
   const listEl = document.getElementById('mp-list');
   if (share) { listEl.value = share; amountEl.value = share; }
-  const __ps171 = partialShareFor(gid, mid, month); // v171 (F13): ayrilan uyenin payi — ders sayisi alani da payin dersi
-  if (__ps171) { const __se171 = document.getElementById('mp-sessions'); if (__se171) __se171.value = +__ps171.sessions || 0; }
+  const __ps171 = partialShareFor(gid, mid, month); // v171 (F13): ayrilan uyenin payi
+  { const __se171 = document.getElementById('mp-sessions'); if (__se171) __se171.value = memberEffectiveQuota(mid, month, gid) || 0; } // v172: ders sayisi = uyenin hakki (pay > elle hak > grubun hakki)
   // v123: taksit — onceki odeme varsa KALANA kilitle (ikinci taksit tek dokunus)
   const __capL = paymentCapCheck(mid, gid, month, 0, (document.getElementById('mp-id')||{}).value || '');
   if (__capL.defined > 0 && __capL.paid > 0 && __capL.kalan > 0.005) amountEl.value = __capL.kalan;
@@ -11242,6 +11262,8 @@ function onPayMemberChange() {
   const mid = document.getElementById('mp-member').value;
   const g = __payOpenedGroupId ? state.groups.find(x=>x.id===__payOpenedGroupId) : paymentMemberGroup(mid);
   document.getElementById('mp-group').value = g ? g.id : '';
+  { const __ay172 = ((document.getElementById('mp-pkg-month')||{}).value) || String(document.getElementById('mp-date').value || todayISO()).slice(0,7);
+    const __se172 = document.getElementById('mp-sessions'); if (__se172) __se172.value = memberEffectiveQuota(mid, __ay172, g ? g.id : '') || 8; } // v172: ders sayisi secilen uyenin hakki
   setupPayPriceLock(mid, '', g ? g.id : '');
   if (!g) {
     // v18: üyenin tanımlı paketi varsa seç (ders hakkı + fiyat önerisi)
@@ -11333,7 +11355,7 @@ function savePayment() {
     if (groupId) {
       const g = state.groups.find(x => x.id === groupId);
       if (g && !(g.packages||[]).find(p => p.month === data.packageMonth)) {
-        createGroupPackage(g, data.packageMonth, __pkgStart, { sessions });
+        createGroupPackage(g, data.packageMonth, __pkgStart, { sessions: __groupPkgSessions172(memberId, groupId, data.packageMonth, sessions) }); // v172: uyeye ozel hak grubun paketine karismaz
       }
     } else if (memberId) {
       const mm = state.members.find(x => x.id === memberId);
@@ -11404,10 +11426,12 @@ function saveGroupPaymentAll() {
   if (__dupNames.length) __cmsg += `\n\n⚠️ ATLANACAKLAR:\n  • ${__dupNames.join('\n  • ')}`;
   __cmsg += '\n\nDevam?';
   if (!confirm(__cmsg)) return;
+  const __fieldMemberSpecific172 = (function(){ try { const mm = (document.getElementById('mp-member')||{}).value || ''; return memberSessionsOverride(mm, packageMonth) !== null || !!partialShareFor(groupId, mm, packageMonth); } catch(e) { return false; } })(); // v172
   for (const mid of __targetMids) {
     const __amt = __amtByMid[mid] || 0;
     const __mPkg = (function(){ const pid = memberPkgIdForMonth(mid, packageMonth); return (pid && state.packageTypes.find(p=>p.id===pid)) || pkgObj; })(); // v111: uyenin kendi paketi
-    const rec = buildPaymentRecord('', mid, groupId, date, __mPkg, sessions, listPrice, __amt, method, campaignId, campaignName, note, false);
+    const __sess172 = (function(){ try { const ov = memberSessionsOverride(mid, packageMonth); if (ov !== null) return ov; return __fieldMemberSpecific172 ? (memberEffectiveQuota(mid, packageMonth, groupId) || sessions) : sessions; } catch(e) { return sessions; } })(); // v172: elle hakki olan uyeye KENDI hakki; alan baska uyeye ozelse digerlerine grubun hakki; yoksa alandaki sayi
+    const rec = buildPaymentRecord('', mid, groupId, date, __mPkg, __sess172, listPrice, __amt, method, campaignId, campaignName, note, false);
     rec.packageMonth = packageMonth;
     if (!campaignId) { const __cDsc = paymentCapCheck(mid, groupId, packageMonth, 0, ''); if (__cDsc.defined > 0) rec.discount = 0; } // v131: taksit indirim degildir
     state.payments.push(rec);
@@ -11418,7 +11442,7 @@ function saveGroupPaymentAll() {
   const __pkgStartAll = resolvePkgStartDate('group', groupId, packageMonth);
   ensureGroupPackageStart(groupId, __pkgStartAll);
   if (!(g.packages||[]).find(p => p.month === packageMonth)) {
-    createGroupPackage(g, packageMonth, __pkgStartAll, { sessions });
+    createGroupPackage(g, packageMonth, __pkgStartAll, { sessions: __groupPkgSessions172(document.getElementById('mp-member').value, groupId, packageMonth, sessions) }); // v172: uyeye ozel hak grubun paketine karismaz
   }
   save();
   closeModal('modal-payment');
@@ -14614,7 +14638,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.15.94-onizleme';
+const APP_VERSION = '2026.09.16.95-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
