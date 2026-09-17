@@ -128,7 +128,7 @@ window.__plAudit = function(ay, opts) {
       (state.instructors || []).forEach(inst => {
         const e1 = instructorEarningsForMonth(inst.id, M).total;
         const row = [...document.querySelectorAll('#salaries-content tr')].find(tr => tr.textContent.indexOf(inst.name) !== -1);
-        if (row && e1 > 0) { R.checks++; if (!/₺/.test(row.textContent) || ![...row.querySelectorAll('td')].some(td => eq(parseTL(td.textContent), e1))) bad('UI_SALARY_EARN', inst.id); }
+        if (row && e1 > 0) { R.checks++; if (!/₺/.test(row.textContent) || ![...row.querySelectorAll('td')].some(td => eq(parseTL(td.textContent.split('₺')[0]), e1))) bad('UI_SALARY_EARN', inst.id); } // hücre: "hak ediş ₺ 🏦 banka · 💵 nakit" — ilk ₺ öncesi
       });
       if (prevS !== null) sm.value = prevS;
     }
@@ -215,7 +215,12 @@ window.__plAudit = function(ay, opts) {
   activeGroups.forEach(g => {
     const q = sessionQuotaFor('group', g.id, M), used = sessionsUsedFor('group', g.id, M), rem = sessionsRemainingFor('group', g.id, M);
     R.checks++; if (!(__pkgClosedEarlyLesson('group', g.id, M) ? rem === 0 : rem === Math.max(0, q - used))) bad('GROUP_REMAIN_FORMULA', g.id);
-    activeGroupRosterForMonth(g, M).forEach(mid => { R.checks++; if (memberRemainingForMonth(mid, M) !== rem) bad('MEMBER_REMAIN≠GROUP_REMAIN', mid); });
+    activeGroupRosterForMonth(g, M).forEach(mid => {
+      // eski aylarda (kadro kanonu v163 öncesi) aynı üye birden çok grubun kadrosunda olabilir; memberRemainingForMonth İLK grubu seçer → bilgi notu, uyumsuzluk değil
+      const gcount = state.groups.filter(gr => gr && !isGroupInactiveInMonth(gr, M) && activeGroupRosterForMonth(gr, M).includes(mid)).length;
+      if (gcount > 1) { R.notes.push('üye o ay ' + gcount + ' grubun kadrosunda (eski ay) ' + mask(mid)); return; }
+      R.checks++; if (memberRemainingForMonth(mid, M) !== rem) bad('MEMBER_REMAIN≠GROUP_REMAIN', mid);
+    });
   });
   activeMembers.filter(m => !memberActiveGroupForMonth(m.id, M)).forEach(m => {
     const q = sessionQuotaFor('member', m.id, M), used = sessionsUsedFor('member', m.id, M), rem = sessionsRemainingFor('member', m.id, M);
