@@ -28,6 +28,9 @@ setTimeout(async ()=>{ try {
   w.eval("['renderCalendar','renderGroups','renderDashboard','renderArchive','refreshMemberDetailIfOpen','closeFillSlotModal'].forEach(fn=>window[fn]=function(){});");
   w.eval("window.__realRenderMembers = renderMembers; renderMembers = function(){};");
   const CM = w.eval('currentMonth()'); const NM = shiftM(CM,+1); const TODAY = w.eval('todayISO()');
+  // v171 testi TARIHE BAGIMLI OLMASIN: planli dersler her zaman BUGUNDEN SONRA (assignMemberToSlot
+  // memberJoinDates'i bugune yazar; gecmis tarihli planli derse yeni uye eklenmez — dogru davranis).
+  const PLANNED = (function(){ const out=[]; const d0=new Date(TODAY+'T12:00:00'); for (let i=1;i<=6;i++){ const d=new Date(d0); d.setDate(d.getDate()+i*2); out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); } return out; })();
   function fixture(){
     w.eval(`
       state.settings.reformers=12;
@@ -45,7 +48,7 @@ setTimeout(async ()=>{ try {
       ];
       state.lessons=[];
       ['${CM}-01','${CM}-03'].forEach((dt,i)=>state.lessons.push({id:'Y'+i,groupId:'G1',memberIds:['A','B'],date:dt,time:'10:00',status:'completed',packageMonth:'${CM}',instructorId:'h1',size:2}));
-      ['${CM}-17','${CM}-22','${CM}-24','${CM}-29','2026-10-01','2026-10-06'].forEach((dt,i)=>state.lessons.push({id:'P'+i,groupId:'G1',memberIds:['A','B'],date:dt,time:'10:00',status:'planned',packageMonth:'${CM}',instructorId:'h1',size:2}));
+      ${JSON.stringify(PLANNED)}.forEach((dt,i)=>state.lessons.push({id:'P'+i,groupId:'G1',memberIds:['A','B'],date:dt,time:'10:00',status:'planned',packageMonth:'${CM}',instructorId:'h1',size:2}));
       state.payments=[];
       document.getElementById('member-month').innerHTML='<option value="${CM}">${CM}</option><option value="${NM}">${NM}</option>';
       document.getElementById('member-month').value='${CM}';
