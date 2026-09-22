@@ -52,7 +52,7 @@ setTimeout(()=>{ try {
   __scrollCalls = [];
   w.openMemberDetail('m1');
   w.__setScrollY(2500);
-  w.eval("__modalSuppressPopstate = false;");
+  w.eval("if (typeof __modalSuppressPopstate !== 'undefined') __modalSuppressPopstate = false; if (typeof __modalPendingBacks !== 'undefined') __modalPendingBacks = 0;"); // v174: sentetik geri tusu — bekleyen yanki sayaci sifir
   w.dispatchEvent(new w.PopStateEvent('popstate', { state: {} }));
   t('geri tusuyla kapanista scrollTo(0,600)', __scrollCalls.some(c=>c[1]===600), JSON.stringify(__scrollCalls));
 
