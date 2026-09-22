@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.20.96-onizleme">
+<meta name="app-version" content="2026.09.21.97-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -3769,7 +3769,8 @@ document.getElementById('tabs').addEventListener('click', e => {
 // v15: Modal stack + z-index hiyerarşisi + tarayıcı geri-ileri navigation
 const __modalStack = []; // sırasıyla açık modal id'leri (en sondaki en üstte)
 let __pageScrollY = 0; // v144: ilk modal acilmadan onceki sayfa kaydirma konumu — son modal kapaninca geri getirilir
-let __modalSuppressPopstate = false; // closeModal'dan history.back() çağrıldığında popstate handler ikinci kez kapatmasın
+let __modalPendingBacks = 0; // v174: closeModal'in kuyruga koydugu, popstate YANKISI henuz gelmemis history.back() sayisi (zamanlayici degil, sayac)
+let __modalPendingBacksAt = 0; // v174: son bekleyen geri'nin zamani — yanki hic gelmezse (bfcache/istisnai) sayac 3 sn sonra kendini sifirlar
 function __modalUpdateBackButtons() {
   // Stack > 1 olan modallara "← Geri" butonu ekle/güncelle, sadece en alttakinde gizle
   __modalStack.forEach((mid, idx) => {
@@ -3845,18 +3846,16 @@ function closeModal(id) {
   if (idx >= 0) __modalStack.splice(idx, 1);
   if (__modalStack.length === 0) { document.body.classList.remove('pl-modal-open'); try { window.scrollTo(0, __pageScrollY); } catch(e) {} } // v144: kullanici biraktigi yere doner
   __modalUpdateBackButtons();
-  // v16 BUG#2 fix: history.back() öncesi suppress flag set et ki popstate handler
-  // ikinci kez modalı pop etmesin (alt modalı kapatırdı).
-  if (!__modalSuppressPopstate) {
-    try {
-      if (history.state && history.state.pilateriaModal) {
-        __modalSuppressPopstate = true;
-        history.back();
-        // popstate event microtask'tan sonra çalışır — bir sonraki tick'te resetle
-        setTimeout(() => { __modalSuppressPopstate = false; }, 0);
-      }
-    } catch(e) { __modalSuppressPopstate = false; }
-  }
+  // v174 KOK FIX: history.back() YALNIZ mevcut history kaydi BU pencereye aitse — baska pencerenin
+  // kaydini geri sarmaz. Dogan popstate'i yutmak icin bayrak/zamanlayici YOK: popstate isleyicisi
+  // olayin getirdigi duruma bakip yigini uzlastirir (hedef zaten tepedeyse hicbir sey kapatmaz).
+  // (Eski v16/v17 cozumu setTimeout(0) ile bayrak sifirliyordu; guncel Chrome'da popstate
+  // zamanlayicidan SONRA geldigi icin alttaki detay da kapaniyor, kullanici ana sayfaya dusuyordu.)
+  // CIFT KAPATMA KORUMASI (mobilde ✕'e cift dokunma / cift cagri): pencere zaten yigindan cikmissa
+  // (idx < 0) IKINCI kez geri gitme — iki geri, alttaki detayi da kapatip ana sayfaya dusururdu.
+  try {
+    if (idx >= 0 && history.state && history.state.pilateriaModal === id) { __modalPendingBacks++; __modalPendingBacksAt = Date.now(); history.back(); }
+  } catch(e) {}
   // v122: modal ACIKKEN gelen bulut verisinin ERTELENEN tazelemesi burada uygulanir.
   // (Aksi halde liste bayat kalirdi: detayda yeni fiyat, listede eski fiyat.)
   if (__modalStack.length === 0) { try { __flushPendingUIRefresh(); } catch(e){} }
@@ -3865,19 +3864,48 @@ function closeModal(id) {
 // v17 CRITICAL FIX: closeModal() history.back() çağırırken __modalSuppressPopstate=true
 // set ediliyor — popstate handler bu flag'i kontrol etmeliydi ama unutulmuştu.
 // Bu eksiklik "Düzenle butonuna tıklayınca yeni modal yanlışlıkla kapanıyor" bug'ına yol açıyordu.
+// v174 KOK FIX — DURUM-TABANLI UZLASTIRMA (zamanlamadan bagimsiz): olay, gelinen history kaydinin
+// hangi pencereyi tepede istedigini soyler (e.state.pilateriaModal; yoksa ana sayfa).
+//   hedef zaten tepede        → bizim closeModal→history.back()'imiz: HICBIR SEY KAPATMA
+//   hedef yiginda, daha altta → gercek geri tusu / ← dugmesi: hedefin USTUNDEKILERI kapat
+//   hedef yok (ana sayfa)     → tum pencereleri kapat
+//   hedef yiginda yok (bayat) → dokunma (yanlislikla canli bir pencereyi kapatmasin)
 window.addEventListener('popstate', (e) => {
-  // Eğer closeModal tarafından programatik tetiklendiyse, modal stack'i pop ETME (zaten yapıldı)
-  if (__modalSuppressPopstate) return;
+  const target = (e && e.state && e.state.pilateriaModal) || null;
+  // v174: closeModal'in KENDI history.back() yankisi (sayacla; zamanlayici yok) → hicbir pencere kapatilmaz.
+  // Geri gitme ASENKRON islendigi icin bu arada acilan yeni pencerelerin kaydi (ornek: takvim ders
+  // secici → ders penceresi; "Yeni Grup" → ayni kadro var → grup detayi) bekleyen geri tarafindan
+  // silinmis olur → yigin dogru, history eksik: yigindaki pencerelerin kaydi yeniden yazilir.
+  if (__modalPendingBacks > 0 && (Date.now() - __modalPendingBacksAt) > 3000) __modalPendingBacks = 0; // emniyet supabi: yankisi gelmeyen geri sayaci kilitlemesin
+  if (__modalPendingBacks > 0) {
+    __modalPendingBacks--;
+    const si = target ? __modalStack.indexOf(target) : -1;
+    for (let i = si + 1; i < __modalStack.length; i++) {
+      try { history.pushState({ pilateriaModal: __modalStack[i], stackLen: i + 1 }, '', '#m=' + __modalStack[i]); } catch(_) {}
+    }
+    return;
+  }
   if (__modalStack.length === 0) return;
-  const top = __modalStack.pop();
-  const el = document.getElementById(top);
-  if (el) {
-    el.classList.remove('open');
-    el.style.zIndex = '';
+  if (target) {
+    const ti = __modalStack.indexOf(target);
+    if (ti < 0) return;                          // bayat kayit — canli pencerelere dokunma
+    if (ti === __modalStack.length - 1) return;   // zaten tepede — programatik geri, kapatacak bir sey yok
+  }
+  while (__modalStack.length && __modalStack[__modalStack.length - 1] !== target) {
+    const top = __modalStack.pop();
+    const el = document.getElementById(top);
+    if (el) {
+      el.classList.remove('open');
+      el.style.zIndex = '';
+    }
+    if (top === 'modal-member') { try { _pendingGroupModalAdd = null; _pendingEmptySlot = null; } catch(_) {} } // closeModal ile ayni temizlik
   }
   if (__modalStack.length === 0) { document.body.classList.remove('pl-modal-open'); try { window.scrollTo(0, __pageScrollY); } catch(e) {} } // v144: kullanici biraktigi yere doner
   __modalUpdateBackButtons();
+  if (__modalStack.length === 0) { try { __flushPendingUIRefresh(); } catch(e){} } // v122 ile ayni: bekleyen tazeleme
 });
+// v174: geri-ileri onbelleginden (bfcache) donuste bekleyen yanki sayaci sifirlanir (eski yanki gelmez)
+window.addEventListener('pageshow', (e) => { if (e && e.persisted) __modalPendingBacks = 0; });
 document.querySelectorAll('.modal-bg').forEach(bg=>{
   bg.addEventListener('click', e => {
     if (e.target===bg) closeModal(bg.id);
@@ -7695,16 +7723,13 @@ function saveMember() {
     data.packages = [];
     state.members.push(data);
     // Eğer "boş slot doldurma" akışı aktifse: yeni üyeyi hedef grubun slotuna yerleştir
+    // v174 KOK FIX: ham g.memberIds yazimi, o ayin kadro anlik goruntusu (monthlyMembers[ay]) varken
+    // gorunmuyordu (uye "Bireysel" kaliyordu). Kanonik yol: assignMemberToSlot — ay kadrosu, katilim
+    // tarihi, ders senkronu, v171 teklifi ve digerlerinden cikarma tek yerden.
     if (_pendingEmptySlot) {
-      const g = state.groups.find(x=>x.id===_pendingEmptySlot.groupId);
-      if (g) {
-        const mids = (g.memberIds||[]).slice();
-        // slotIndex'e kadar genişlet, sonra yerleştir; sonra boş stringleri temizle
-        while (mids.length <= _pendingEmptySlot.slotIndex) mids.push('');
-        mids[_pendingEmptySlot.slotIndex] = data.id;
-        g.memberIds = mids.filter(x => x !== '');
-      }
-      _pendingEmptySlot = null;
+      const __slot = _pendingEmptySlot; _pendingEmptySlot = null;
+      const g = state.groups.find(x=>x.id===__slot.groupId);
+      if (g) { try { assignMemberToSlot(data.id, g.id, __slot.slotIndex); } catch(e) { console.error('assignMemberToSlot', e); } }
     }
   }
   save();
@@ -14752,7 +14777,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.20.96-onizleme';
+const APP_VERSION = '2026.09.21.97-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
