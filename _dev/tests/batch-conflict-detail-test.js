@@ -98,7 +98,7 @@ setTimeout(()=>{ try {
   if (ms) ms.value=CM;
   w.openMemberDetail('arc');
   const mdc = d.getElementById('modal-member-detail').innerHTML;
-  t('detay dugmesi reactivateMemberForMonth cagirir (bare degil)', /reactivateMemberForMonth\('arc'/.test(mdc), (mdc.match(/reactivateMember[^"]*/)||['yok'])[0].slice(0,80));
+  t('detay dugmesi reactivateMemberForMonth cagirir (bare degil)', /reactivateMemberForMonth(UI175)?\('arc'/.test(mdc), (mdc.match(/reactivateMember[^"]*/)||['yok'])[0].slice(0,80)); // v175: dugme UI sarmalini (ay-bazli + bireysel sorusu) cagirir
   w.reactivateMemberForMonth('arc', CM);
   t('aktive edilince CM kadrosunda GORUNUR', ev("isMemberEnrolledInMonth('arc','"+CM+"')") === true && ev("buildMemberRows('"+CM+"').some(r=>r.memberId==='arc')"));
 
