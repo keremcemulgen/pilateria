@@ -73,7 +73,7 @@ h = h[:i] + '\n' + band + h[i:]
 print('OK band')
 
 # 5) Sürüm etiketi + SW kaydı önizlemede kapalı (gerçek uygulamanın SW'siyle çakışmasın)
-m = re.search(r'content="(\d{4}\.\d{2}\.\d{2}\.\d{2})"', h)
+m = re.search(r'content="(\d{4}\.\d{2}\.\d{2}\.\d{2,3})"', h)
 ver = m.group(1)
 h = h.replace(f'content="{ver}"', f'content="{ver}-onizleme"')
 h = h.replace(f"APP_VERSION = '{ver}'", f"APP_VERSION = '{ver}-onizleme'")
