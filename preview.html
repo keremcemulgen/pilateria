@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.28.101-onizleme">
+<meta name="app-version" content="2026.09.28.102-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -3726,6 +3726,8 @@ function perLessonPriceForLesson(l, __coll) {
         const pkg = memberPackageForMonth(m, l.packageMonth);
         if (pkg && pkg.status === 'extended') return 0;
         // v54: bireysel ders = uyenin AY FIYATI / KENDI ders sayisi (eski v41 sabit /8 yerine; Kerem karari).
+        const __ss179 = __soloShare179Of(m.id, l.packageMonth); // v179: bireysel birim payi — grup gecisi fiyati degistirse de yapilmis bireysel dersin tabani sabit
+        if (__ss179 && +__ss179.sessions > 0 && +__ss179.price > 0) return (+__ss179.price) / (+__ss179.sessions);
         const __pp = memberPerLessonPrice(m.id, l.packageMonth);
         if (__pp > 0) return __pp;
         return ((pkg ? (+pkg.price || 0) : 0)) / ((pkg && +pkg.sessions) || PKG_LESSON_DIVISOR);
@@ -4668,7 +4670,7 @@ function getOverduePayments() {
     const mLessons = __mLes.get(m.id) || [];
     if (!mLessons.length) return;
     const rows = __ovRows(__ovMonths(mLessons),
-      ay => (memberActiveGroupForMonth(m.id, ay) ? 0 : (+memberMonthlyTotalPrice(m.id, ay) || 0)), // v176 (F16): acik 0 (uzadi) genel fiyata DUSMEZ
+      ay => ((memberActiveGroupForMonth(m.id, ay) || !__hasIndividualUnit179(m.id, ay)) ? 0 : (+memberMonthlyTotalPrice(m.id, ay) || 0)), // v176 (F16): acik 0 (uzadi) genel fiyata DUSMEZ; v179: yalniz ayrilan payi olan uye bireysel borclu degil
       ay => __mPaid.get(m.id + '|' + ay) || 0);
     __ovPush({ label: m.name, groupId: '', memberId: m.id }, rows);
   });
@@ -5624,7 +5626,7 @@ function __removeMemberFromMonthCore(memberId, monthISO) {
   state.lessons.forEach(l => {
     if (l.status !== 'planned') return; // v42: hem GRUP hem BIREYSEL planli dersler temizlenir
     const __pm = l.packageMonth || (l.date||'').slice(0,7);
-    if (__pm >= monthISO && (l.memberIds||[]).includes(memberId)) {
+    if ((__pm >= monthISO || String(l.date || '') >= monthISO + '-01') && (l.memberIds||[]).includes(memberId)) { // v179 (U4): onceki paketin bu aya sarkan planli dersleri de
       l.memberIds = (l.memberIds||[]).filter(x => x !== memberId);
     }
   });
@@ -5957,6 +5959,7 @@ function buildMemberRows(monthISO) {
     const inGroup = state.groups.some(g => !isGroupInactiveInMonth(g, monthISO) && resolveGroupMembersForMonth(g, monthISO).includes(m.id));
     if (inGroup) return;
     if (monthISO && !isMemberEnrolledInMonth(m.id, monthISO)) return;
+    if (monthISO && !__hasIndividualUnit179(m.id, monthISO)) return; // v179: yalniz ayrilan payi olan uye bireysel satir degil (grubun altinda "ayrildi" satiri)
     // v10: Bireysel ödemeler de paket ay'ına bağlı (p.packageMonth)
     const mPayments = state.payments.filter(p => {
       if (p.memberId !== m.id || p.groupId) return false;
@@ -6375,16 +6378,41 @@ function reactivateMemberForMonth(id, month) {
 }
 // v175 (Kerem): "Aktive Et" DUGMESI — pasiften cikan uye ESKI 1 KISILIK grubunun kadrosuna donuyorsa sor:
 // Tamam → grup kaydi o aydan itibaren kapanir, uye bireysel; Vazgec → v58 davranisi (grupta kalir).
-function reactivateMemberForMonthUI175(id, month) {
-  reactivateMemberForMonth(id, month);
+// v179 (Kerem: "sorsun ben seceyim"): "Aktive Et" HER uyede BIRIM sorar — eski grubu / BIREYSEL / Vazgec.
+// Eski grubu: v58 (kadroya doner). Bireysel: 1 kisilik grupsa v175 donusumu (dersler/odemeler uyeye), degilse bireysel
+// paket (grup kaydindan cikar; v177 pay/odeme kurali). Grubu yoksa soru yok (bireysel). Personel: v58 (para tasiyan secim yok).
+async function reactivateMemberForMonthUI175(id, month) {
   const m = state.members.find(function(x){ return x && x.id === id; });
   if (!m || !month) return;
+  if (!__soloAllowed175()) { reactivateMemberForMonth(id, month); return; }
+  const prevG = (state.groups || []).find(function(g){ return g && !isGroupInactiveInMonth(g, month) && (resolveGroupMembersForMonth(g, month) || []).includes(id); });
+  if (!prevG) { reactivateMemberForMonth(id, month); return; }
+  let gn = ''; try { gn = groupDisplayName(prevG, month); } catch(e) { gn = ''; }
+  gn = gn || prevG.name || 'Grup';
+  const wouldBeSolo = (resolveGroupMembersForMonth(prevG, month) || []).filter(function(x){ return x && x !== id && __memberActiveInMonth(state.members.find(function(y){ return y && y.id === x; }) || {}, month); }).length === 0;
+  let ans = await plDialog({
+    msg: (m.name || 'Üye') + ' — ' + pkgMonthLabel(month) + ' ayında hangi birimde aktif olsun?\n\n' +
+      '• Eski grubu «' + gn + '»: kadrosuna geri döner.\n' +
+      '• BİREYSEL: bireysel paket açılır, grup kaydında görünmez' + (wouldBeSolo ? ' (1 kişilik grup kaydı bu aydan itibaren kapanır; dersleri ve ödemeleri üyeye geçer)' : ' (grupta aldığı dersler varsa payı 1 ders × alınan olarak kalır)') + '.\n' +
+      '• Başka gruba: Gruplar sayfasında o grubun boş slotuna ekle.',
+    buttons: [{ label: '↩️ Eski grubu «' + gn + '»', value: 'group', cls: 'ok' }, { label: '👤 Bireysel', value: 'individual' }, { label: 'Vazgeç', value: null, cls: 'secondary' }],
+    escValue: null
+  });
+  if (ans === true) ans = 'group'; // genel otomatik cevap (test kancasi) → v58
+  if (ans !== 'group' && ans !== 'individual') return;
+  if (ans === 'group') { reactivateMemberForMonth(id, month); return; }
+  reactivateMemberForMonth(id, month);
   let solo = null; try { solo = __soloGroupHolding175(id, month); } catch(e) { solo = null; }
-  if (!solo || solo.keepSolo175 || !__soloAllowed175()) return;
-  if (!confirm(__soloConfirm175(solo, m, month, 'reactivate'))) return;
-  const res = convertSoloGroupToIndividual175(solo.id, id, month, {});
-  if (typeof renderArchive === 'function') renderArchive();
-  __afterSoloConvert175(res, id, month, {});
+  if (solo) {
+    const res = convertSoloGroupToIndividual175(solo.id, id, month, {});
+    if (typeof renderArchive === 'function') renderArchive();
+    __afterSoloConvert175(res, id, month, {});
+    return;
+  }
+  const __pid = ((getMemberMonthlyOverride(id, month) || {}).packageId) || m.defaultPackageId || '';
+  __createIndividualUnit173(id, month, { packageId: __pid });
+  try { renderArchive(); renderMembers(); renderGroups(); renderDashboard(); refreshMemberDetailIfOpen(); refreshGroupDetailIfOpen(); } catch(e) {}
+  if (typeof plToast === 'function') { try { plToast('👤 ' + (m.name || 'Üye') + ' — ' + pkgMonthLabel(month) + ': bireysel (grup kaydından çıkarıldı)'); } catch(e) {} }
 }
 // v10: Pasif üyeyi tek tıkla aktive et
 function reactivateMember(id) {
@@ -7439,6 +7467,61 @@ function memberPriceForGroupMonth(memberId, groupId, ay) {
   if (groupId && ay) { const ps = partialShareFor(groupId, memberId, ay); if (ps) return +ps.price || 0; }
   return +memberMonthlyTotalPrice(memberId, ay) || 0;
 }
+// ===== v179: UYE-AY-BIRIM — TEK KAYNAK =====
+// Bir uyenin secili aydaki BIRIMLERI: acik birim (su anki grup ya da bireysel) + kapali birimler (payli ayrilan grup,
+// paysiz kadro disi odeme/ders olan grup, bireysel birim payi). Kadro/pay/odeme/ders kayitlarindan TURETILIR (migrasyon yok).
+function __soloShare179Of(memberId, ay) {
+  try { const m = state.members.find(x => x && x.id === memberId); const mo = m && m.monthly && m.monthly[ay]; return (mo && mo.__soloShare179 && typeof mo.__soloShare179 === 'object') ? mo.__soloShare179 : null; } catch(e) { return null; }
+}
+function __soloShareDebt179(memberId, ay) {
+  const ss = __soloShare179Of(memberId, ay); if (!ss) return 0;
+  if (!memberActiveGroupForMonth(memberId, ay)) return 0; // yeniden bireysel: pay gecersiz (bireysele donuste silinir)
+  return Math.max(0, __roundTL((+ss.price || 0) - memberPaidTowardsMonth(memberId, '', ay)));
+}
+// Uyenin o ay GERCEK bir bireysel birimi var mi? Kayitli + grupsuz + (ayrilan payi disinda bir bireysel izi: paket / ders / odeme)
+function __hasIndividualUnit179(memberId, ay) {
+  if (!ay) return true;
+  if (!isMemberEnrolledInMonth(memberId, ay)) return false;
+  if (memberActiveGroupForMonth(memberId, ay)) return false;
+  const hasPartial = (state.groups || []).some(g => g && !!partialShareFor(g.id, memberId, ay));
+  if (!hasPartial) return true;
+  const m = state.members.find(x => x && x.id === memberId); if (!m) return false;
+  const pmOf = x => x.packageMonth || String(x.date || '').slice(0, 7);
+  if ((m.packages || []).some(p => p && p.month === ay)) return true;
+  if ((state.lessons || []).some(l => l && !l.groupId && (l.memberIds || []).includes(memberId) && pmOf(l) === ay && l.status !== 'cancelled')) return true;
+  if ((state.payments || []).some(p => p && p.memberId === memberId && !p.groupId && pmOf(p) === ay)) return true;
+  return false;
+}
+function memberUnitsForMonth(memberId, ay) {
+  const m = state.members.find(x => x && x.id === memberId); if (!m || !ay) return [];
+  const pmOf = x => x.packageMonth || String(x.date || '').slice(0, 7);
+  const les = (state.lessons || []).filter(l => l && (l.memberIds || []).includes(memberId) && pmOf(l) === ay);
+  const pays = (state.payments || []).filter(p => p && p.memberId === memberId && pmOf(p) === ay);
+  const units = [], seen = {};
+  const gname = g => { try { return groupDisplayName(g, ay) || g.name || 'Grup'; } catch(e) { return (g && g.name) || 'Grup'; } };
+  const mk = (kind, gid, open) => {
+    const g = kind === 'group' ? state.groups.find(x => x && x.id === gid) : null;
+    const u = { kind: kind, gid: gid || '', open: !!open, name: kind === 'group' ? (g ? gname(g) : 'Silinmiş grup') : 'Bireysel', lessons: [], done: 0, planned: 0, cancelled: 0, paid: 0, price: null, quota: null, share: null, noShare: false };
+    units.push(u); seen[kind === 'group' ? 'g:' + (gid || '') : 'i'] = u; return u;
+  };
+  const curG = memberActiveGroupForMonth(memberId, ay);
+  if (curG) { const u = mk('group', curG.id, true); u.price = +memberPriceForGroupMonth(memberId, curG.id, ay) || 0; try { u.quota = +memberEffectiveQuota(memberId, ay, curG.id) || null; } catch(e) { try { u.quota = +sessionQuotaFor('member', memberId, ay) || null; } catch(e2) { u.quota = null; } } }
+  else if (__hasIndividualUnit179(memberId, ay)) { const u = mk('individual', '', true); u.price = +memberMonthlyTotalPrice(memberId, ay) || 0; try { u.quota = +sessionQuotaFor('member', memberId, ay) || null; } catch(e) { u.quota = null; } }
+  (state.groups || []).forEach(g => { if (!g) return; const ps = partialShareFor(g.id, memberId, ay); if (ps && !seen['g:' + g.id]) { const u = mk('group', g.id, false); u.share = ps; u.price = (ps.price === undefined || ps.price === null || ps.price === '') ? null : +ps.price; u.quota = +ps.sessions || null; } });
+  const ss = __soloShare179Of(memberId, ay); if (ss && !seen['i']) { const u = mk('individual', '', false); u.share = ss; u.price = +ss.price || 0; u.quota = +ss.sessions || null; }
+  les.forEach(l => { const k = l.groupId ? 'g:' + l.groupId : 'i'; let u = seen[k]; if (!u) { u = mk(l.groupId ? 'group' : 'individual', l.groupId || '', false); u.noShare = true; } u.lessons.push(l); const st = l.status || 'planned'; if (st === 'completed' || st === 'missed') u.done++; else if (st === 'cancelled') u.cancelled++; else u.planned++; });
+  pays.forEach(p => { const k = p.groupId ? 'g:' + p.groupId : 'i'; let u = seen[k]; if (!u) { u = mk(p.groupId ? 'group' : 'individual', p.groupId || '', false); u.noShare = true; } u.paid += (+p.amount || 0); });
+  units.forEach(u => {
+    u.paid = Math.round(u.paid * 100) / 100;
+    u.lessons.sort((a, b) => ((a.date || '') + (a.time || '')).localeCompare((b.date || '') + (b.time || '')));
+    const pr = (u.price === null) ? null : (+u.price || 0);
+    u.balance = (pr !== null && pr > 0) ? Math.max(0, Math.round((pr - u.paid) * 100) / 100) : 0;
+    u.excess = u.open ? ((pr !== null && pr > 0) ? Math.max(0, Math.round((u.paid - pr) * 100) / 100) : 0) : Math.max(0, Math.round((u.paid - (pr || 0)) * 100) / 100);
+    u.label = u.open ? (u.kind === 'group' ? 'bu birim (grup)' : 'bu birim (bireysel)') : (u.kind === 'group' ? (u.share ? 'önceki grup · payı' : 'önceki grup (paysız)') : (u.share ? 'önceki bireysel · payı' : 'önceki bireysel'));
+  });
+  units.sort((a, b) => (a.open === b.open) ? 0 : (a.open ? -1 : 1));
+  return units;
+}
 // Uyenin o ay ODENMEMIS pay borclari (tum gruplar) — uye bakiyesi/WhatsApp hatirlatmasi icin
 function memberPartialDebtForMonth(memberId, ay) {
   let sum = 0;
@@ -7509,11 +7592,13 @@ async function __runPartialOffers() {
           continue;
         }
         const base = +memberMonthlyTotalPrice(it.mid, it.ay) || 0;
-        const sug = __prorataSuggest(it.mid, g.id, it.ay, taken);
+        let __qm179 = q; try { __qm179 = +sessionQuotaFor('member', it.mid, it.ay) || q; } catch(e) {} // v179 (U6): v54 bolen — uyenin KENDI hakki
+        const __per179 = +memberPerLessonPrice(it.mid, it.ay) || 0;
+        const sug = __per179 > 0 ? Math.round(__per179 * taken * 100) / 100 : __prorataSuggest(it.mid, g.id, it.ay, taken);
         const ans = await plPrompt(
           m.name + ' ' + pkgMonthLabel(it.ay) + ' ayında «' + gName + '» grubunda ' + taken + ' ders aldı.\n\n' +
           'Grupta payı olarak kaydedilsin mi? Ücret (₺) — değiştirebilirsin:\n' +
-          (base > 0 && q > 0 ? '(' + money(base) + ' × ' + taken + '/' + q + ' = ' + money(sug) + ')' : '(üyenin bu ay tanımlı fiyatı yok — tutarı gir)') +
+          (base > 0 && __qm179 > 0 ? '(' + money(base) + ' × ' + taken + '/' + __qm179 + ' = ' + money(sug) + ')' : '(üyenin bu ay tanımlı fiyatı yok — tutarı gir)') +
           '\n\nVazgeç = kayıt açılmaz', String(sug), { type: 'number', placeholder: '₺' });
         const price = __parseTL(ans);
         if (price === null) continue;
@@ -7611,7 +7696,8 @@ function __partialSectionHtml171(g, monthISO) {
 function __retaxPayment177(p) {
   try { const t = calcTax(+p.amount || 0, p.method); p.kdvRate = t.kdvRate; p.gvRate = t.gvRate; p.net = Math.round(t.net*100)/100; p.kdv = Math.round(t.kdv*100)/100; p.gv = Math.round(t.gv*100)/100; p.pocket = Math.round(t.pocket*100)/100; } catch(e) {}
 }
-function __movePaymentsOnTransfer177(memberId, fromGid, toGid, ay, keepAmt, note) {
+function __movePaymentsOnTransfer177(memberId, fromGid, toGid, ay, keepAmt, note, toMonth) {
+  const __toAy = toMonth || ay; // v179: sarkan paketten tasinan odeme yeni birimin BAGLAM ayina devreder
   const pays = (state.payments || []).filter(p => p && p.memberId === memberId && (p.groupId || '') === fromGid && (p.packageMonth || String(p.date || '').slice(0, 7)) === ay && !p.refund && (+p.amount || 0) > 0)
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const total = pays.reduce((a, p) => a + (+p.amount || 0), 0);
@@ -7621,10 +7707,10 @@ function __movePaymentsOnTransfer177(memberId, fromGid, toGid, ay, keepAmt, note
   for (let i = pays.length - 1; i >= 0 && move > 0.005; i--) { // en son odemeden geriye
     const p = pays[i]; const amt = +p.amount || 0;
     if (amt <= move + 0.005) {
-      p.groupId = toGid; p.__movedFrom177 = fromGid; p.note = ((p.note || '') + ' ' + note).trim();
+      p.groupId = toGid; p.__movedFrom177 = fromGid; p.note = ((p.note || '') + ' ' + note).trim(); if (__toAy !== ay) p.packageMonth = __toAy;
       moved += amt; move = Math.round((move - amt) * 100) / 100;
     } else {
-      const np = Object.assign({}, p, { id: uid(), amount: move, listPrice: move, discount: 0, campaignId: '', campaignName: '', groupId: toGid, note: ((p.note || '') + ' ' + note).trim(), __splitOf177: p.id, __movedFrom177: fromGid });
+      const np = Object.assign({}, p, { id: uid(), amount: move, listPrice: move, discount: 0, campaignId: '', campaignName: '', groupId: toGid, packageMonth: __toAy, note: ((p.note || '') + ' ' + note).trim(), __splitOf177: p.id, __movedFrom177: fromGid });
       p.amount = Math.round((amt - move) * 100) / 100; p.listPrice = p.amount; p.discount = 0;
       p.note = ((p.note || '') + ' (bölündü: ' + money(move) + ' ₺ ' + note + ')').trim();
       __retaxPayment177(p); __retaxPayment177(np);
@@ -7634,7 +7720,7 @@ function __movePaymentsOnTransfer177(memberId, fromGid, toGid, ay, keepAmt, note
   }
   return { moved: Math.round(moved * 100) / 100 };
 }
-function __transferShareAndPayments177(g, memberId, keepGroupId, ay) {
+function __transferShareAndPayments177(g, memberId, keepGroupId, ay, toMonth) {
   try {
     if (!g || !memberId || !ay) return null;
     const m = state.members.find(x => x && x.id === memberId); if (!m) return null;
@@ -7651,7 +7737,7 @@ function __transferShareAndPayments177(g, memberId, keepGroupId, ay) {
     let share = 0;
     if (taken > 0) { share = Math.round(per * taken * 100) / 100; setPartialShare(g.id, memberId, ay, taken, share, 'taşındı → ' + toName); }
     let mv = { moved: 0 };
-    if (paysTotal > share + 0.005) mv = __movePaymentsOnTransfer177(memberId, g.id, keepGroupId || '', ay, share, '↔ taşındı: ' + fromName + ' → ' + toName);
+    if (paysTotal > share + 0.005) mv = __movePaymentsOnTransfer177(memberId, g.id, keepGroupId || '', ay, share, '↔ taşındı: ' + fromName + ' → ' + toName + ((toMonth && toMonth !== ay) ? ' (' + pkgMonthLabel(ay) + ' → ' + pkgMonthLabel(toMonth) + ' devri)' : ''), toMonth);
     if (typeof plToast === 'function' && (taken > 0 || mv.moved > 0)) { try { plToast('📎 ' + (m.name || 'Üye') + ' — ' + fromName + ' payı: ' + taken + ' ders · ' + money(share) + ' ₺' + (mv.moved > 0 ? ' · ' + money(mv.moved) + ' ₺ ödeme ' + toName + ' kaydına taşındı' : '')); } catch(e) {} }
     return { taken: taken, share: share, moved: mv.moved };
   } catch(e) { return null; }
@@ -7676,17 +7762,67 @@ async function __moveExcessToCurrentUnit177(groupId, memberId, ay) {
 function __undoSnapshotIfMove177(memberId, keepGroupId, ay) {
   try {
     const m = state.members.find(x => x && x.id === memberId); if (!m || !ay) return;
-    const from = state.groups.filter(g => g && g.id !== keepGroupId && !isGroupInactiveInMonth(g, ay) && activeGroupRosterForMonth(g, ay).includes(memberId) && (memberPaidTowardsMonth(memberId, g.id, ay) > 0 || __lessonsTakenInGroup(memberId, g.id, ay) > 0));
-    if (!from.length) return;
+    const from = state.groups.filter(g => g && g.id !== keepGroupId && !isGroupInactiveInMonth(g, ay) && (activeGroupRosterForMonth(g, ay).includes(memberId) || __spillPackageMonth179(g, memberId, ay)) && (memberPaidTowardsMonth(memberId, g.id, ay) > 0 || __lessonsTakenInGroup(memberId, g.id, ay) > 0 || __spillPackageMonth179(g, memberId, ay)));
+    const pmOf = x => x.packageMonth || String(x.date || '').slice(0, 7);
+    const soloTrace = !!keepGroupId && !from.length && !memberActiveGroupForMonth(memberId, ay) && isMemberEnrolledInMonth(memberId, ay) && ((state.lessons || []).some(l => l && !l.groupId && (l.memberIds || []).includes(memberId) && pmOf(l) === ay && (l.status === 'completed' || l.status === 'missed')) || (state.payments || []).some(p => p && p.memberId === memberId && !p.groupId && pmOf(p) === ay)); // v179 (U5)
+    if (!from.length && !soloTrace) return;
     const keepG = keepGroupId ? state.groups.find(x => x && x.id === keepGroupId) : null;
-    __undoSnapshot('Taşınma: ' + (m.name || 'Üye') + ' — ' + from.map(g => '«' + (groupDisplayName(g, ay) || g.name || 'Grup') + '»').join(', ') + ' → ' + (keepGroupId ? ('«' + ((keepG && (groupDisplayName(keepG, ay) || keepG.name)) || 'yeni grup') + '»') : 'bireysel'));
+    __undoSnapshot('Taşınma: ' + (m.name || 'Üye') + ' — ' + (from.length ? from.map(g => '«' + (groupDisplayName(g, ay) || g.name || 'Grup') + '»').join(', ') : 'bireysel') + ' → ' + (keepGroupId ? ('«' + ((keepG && (groupDisplayName(keepG, ay) || keepG.name)) || 'yeni grup') + '»') : 'bireysel'));
   } catch(e) {}
+}
+// v179 (U4): SARKAN PAKET — baglam ayindan ONCEKI paketin bu aya (ve sonrasina) sarkan PLANLI dersinde uye varsa,
+// ayrilma o paketin ayindan uygulanir (pay = o paketteki alinan ders). Yoksa '' doner.
+function __spillPackageMonth179(g, memberId, ctxAy) {
+  let best = '';
+  (state.lessons || []).forEach(l => {
+    if (!l || !g || l.groupId !== g.id || l.status !== 'planned' || !(l.memberIds || []).includes(memberId)) return;
+    const pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (pm >= ctxAy || String(l.date || '') < ctxAy + '-01') return;
+    if (!best || pm < best) best = pm;
+  });
+  return best;
+}
+// Onceki paketlerin bu ay ve sonrasi tarihli PLANLI derslerinden uyeyi cikar (paket ayi ne olursa olsun)
+function __dropFromFutureLessons179(g, memberId, ctxAy) {
+  let n = 0;
+  (state.lessons || []).forEach(l => {
+    if (!l || !g || l.groupId !== g.id || l.status !== 'planned' || !(l.memberIds || []).includes(memberId)) return;
+    const pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (pm >= ctxAy || String(l.date || '') < ctxAy + '-01') return;
+    l.memberIds = (l.memberIds || []).filter(x => x !== memberId); n++;
+  });
+  return n;
+}
+// v179 (U5): BIREYSEL → GRUP gecisinde bireysel birim payi (1 ders x alinan) + odeme fazlasi gruba
+function __transferSoloShare179(memberId, toGroupId, ay) {
+  try {
+    const m = state.members.find(x => x && x.id === memberId); if (!m || !toGroupId || !ay) return null;
+    const __staff = !!(typeof SUPABASE_MODE !== 'undefined' && SUPABASE_MODE && typeof __sbRole !== 'undefined' && __sbRole === 'staff');
+    if (__staff) return null;
+    if (!isMemberEnrolledInMonth(memberId, ay) || memberActiveGroupForMonth(memberId, ay)) return null;
+    if (__soloShare179Of(memberId, ay)) return null;
+    const pmOf = x => x.packageMonth || String(x.date || '').slice(0, 7);
+    const taken = (state.lessons || []).filter(l => l && !l.groupId && (l.memberIds || []).includes(memberId) && pmOf(l) === ay && (l.status === 'completed' || l.status === 'missed')).length;
+    const paysTotal = memberPaidTowardsMonth(memberId, '', ay);
+    if (!taken && !(paysTotal > 0)) return null;
+    const per = +memberPerLessonPrice(memberId, ay) || 0;
+    if (taken > 0 && !(per > 0)) return null;
+    const share = Math.round(per * taken * 100) / 100;
+    const toG = state.groups.find(x => x && x.id === toGroupId);
+    const toName = '«' + ((toG && (groupDisplayName(toG, ay) || toG.name)) || 'yeni grup') + '»';
+    setMemberMonthly(memberId, ay, { __soloShare179: { sessions: taken, price: share, note: 'taşındı → ' + toName, at: todayISO() } });
+    let mv = { moved: 0 };
+    if (paysTotal > share + 0.005) mv = __movePaymentsOnTransfer177(memberId, '', toGroupId, ay, share, '↔ taşındı: bireysel → ' + toName);
+    if (typeof plToast === 'function' && (taken > 0 || mv.moved > 0)) { try { plToast('📎 ' + (m.name || 'Üye') + ' — bireysel payı: ' + taken + ' ders · ' + money(share) + ' ₺' + (mv.moved > 0 ? ' · ' + money(mv.moved) + ' ₺ ödeme ' + toName + ' kaydına taşındı' : '')); } catch(e) {} }
+    return { taken: taken, share: share, moved: mv.moved };
+  } catch(e) { return null; }
 }
 function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
   const removed = { groups: [], individualLessons: 0 };
   const __ay = ctxAy || __groupOpsCtxMonth(); // v34
   const __keep = state.groups.find(x => x.id === keepGroupId);
   __undoSnapshotIfMove177(memberId, keepGroupId, __ay); // v177: tasinma tek "Geri Al" adimi (kadro + pay + odeme)
+  if (keepGroupId) { try { __transferSoloShare179(memberId, keepGroupId, __ay); } catch(e) {} } // v179 (U5): bireysel → grup
   state.groups.forEach(g => {
     if (g.id === keepGroupId) return;
     if (__keep && (g.secondOf === keepGroupId || __keep.secondOf === g.id || (__keep.secondOf && __keep.secondOf === g.secondOf))) return;
@@ -7702,15 +7838,17 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
         return '«' + nm + '»' + (last ? ' (son paket: ' + pkgMonthLabel(last) + ')' : '');
       })();
       const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
-      applyRosterChange(g, __ay, mids => {
+      const __effAy179 = __spillPackageMonth179(g, memberId, __ay) || __ay; // v179 (U4): sarkan paket → ayrilma paketin ayindan
+      applyRosterChange(g, __effAy179, mids => {
         const out = mids.map(x => x === memberId ? '' : x);
         while (out.length > 0 && out[out.length-1] === '') out.pop();
         return out;
       });
-      __autoNameAfterRosterChange(g, __ay); // v41: ad AY BAZLI guncellenir (elle ay-adi korunur)
-      syncGroupLessonsToRoster(g.id, __ay);
-      __transferShareAndPayments177(g, memberId, keepGroupId, __ay); // v177 (P2): pay = 1-ders x alinan; fazla odeme yeni kayda
-      __queuePartialOffer(g, memberId, __ay); // v171: (pay yazilmadiysa — fiyatsiz uye) payi sorulur
+      __autoNameAfterRosterChange(g, __effAy179); // v41: ad AY BAZLI guncellenir (elle ay-adi korunur)
+      syncGroupLessonsToRoster(g.id, __effAy179);
+      __dropFromFutureLessons179(g, memberId, __ay); // v179: onceki paketlerin bu aya sarkan planli dersleri
+      __transferShareAndPayments177(g, memberId, keepGroupId, __effAy179, __ay); // v177 (P2): pay = 1-ders x alinan; fazla odeme yeni kayda (v179: baglam ayina DEVIR)
+      __queuePartialOffer(g, memberId, __effAy179); // v171: (pay yazilmadiysa — fiyatsiz uye) payi sorulur
       removed.groups.push(__lbl162);
     }
   });
@@ -8052,11 +8190,13 @@ function openMemberDetail(id, monthISO) {
   const allLessons = state.lessons.filter(l=>(l.memberIds||[]).includes(id)).sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time)); // v108 (Kerem): EN ESKI ders ustte (grup detay/toplu listeyle ayni)
   const payments = allPayments.filter(p => payMonthOf(p) === ctxAy);
   const lessonsAllUnits = allLessons.filter(l => lesMonthOf(l) === ctxAy);
-  // v178 (Kerem): BU BIRIMIN dersleri ana listede; onceki/baska gruplardaki (grup uyesiyse grupsuz) dersler ayri bolumde
+  // v178/v179 (Kerem): BIRIM BIRIM — acik birimin dersleri ana listede; kapali birimler (onceki grup / bireysel pay) ayri
+  const __units179 = memberUnitsForMonth(id, ctxAy);
+  const __openU179 = __units179.find(u => u.open) || null;
   const __curG178 = memberActiveGroupForMonth(id, ctxAy);
-  const __isOwn178 = l => __curG178 ? (l.groupId === __curG178.id) : !l.groupId;
-  const lessons = lessonsAllUnits.filter(__isOwn178);
-  const otherLessons178 = lessonsAllUnits.filter(l => !__isOwn178(l));
+  const lessons = __openU179 ? __openU179.lessons.slice() : [];
+  const otherLessons178 = lessonsAllUnits.filter(l => !(__openU179 && __openU179.lessons.indexOf(l) !== -1));
+  const __closedUnits179 = __units179.filter(u => !u.open);
   const bought = payments.reduce((a,b)=>a+(+b.sessions||0),0);
   const used = lessons.filter(l=>l.status!=='cancelled').length;
   const r = Math.max(0, bought - used);
@@ -8120,14 +8260,16 @@ function openMemberDetail(id, monthISO) {
       ${lessons.length ? '<div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Saat</th><th>Hoca</th><th>Tip</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>' +
         lessons.map(l=>`<tr><td>${fmtDate(l.date)}</td><td>${escapeHtml(l.time)}</td><td>${escapeHtml(instructorName(l.instructorId))}</td><td>${(l.size||(l.memberIds||[]).length||1)} kişilik</td><td>${lessonStatusBadge(l.status||'planned')}</td><td><button class="btn small secondary" onclick="openLessonModal('${l.id}')" title="Dersi düzenle (tarih/saat/durum/hoca; içinde Sil de var)">Düzenle</button></td></tr>`).join('') + '</tbody></table></div>' : '<div class="empty">Ders kaydı yok.</div>'}
     </details>
-    ${otherLessons178.length ? (function(){ // v178: onceki/baska birimlerdeki dersler — grup adiyla, bu birimin hakkina sayilmaz
-      const __unitOf = l => { if (!l.groupId) return { key: '', name: 'bireysel', badge: 'bireysel ders' }; const g = state.groups.find(x => x && x.id === l.groupId); const nm = g ? (groupDisplayName(g, ctxAy) || g.name || 'Grup') : 'Silinmiş grup'; const ps = g ? partialShareFor(g.id, id, ctxAy) : null; return { key: l.groupId, name: nm, badge: 'önceki grup', share: ps }; };
-      const __units = {}; otherLessons178.forEach(l => { const u = __unitOf(l); if (!__units[u.key]) __units[u.key] = { u: u, n: 0 }; __units[u.key].n++; });
-      const __hint = Object.keys(__units).map(k => { const x = __units[k]; return escapeHtml(x.u.name) + ' ' + x.n + ' ders' + (x.u.share ? ' · payı ' + (x.u.share.sessions || 0) + ' ders / ' + money(x.u.share.price || 0) + ' ₺' : ''); }).join(' · ');
-      return `<details open><summary>Diğer birimlerdeki dersleri (${otherLessons178.length}) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— ${__hint} · bu birimin ders hakkına sayılmaz</span></summary>
-      <div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Saat</th><th>Grup</th><th>Hoca</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>` +
-        otherLessons178.map(l => { const u = __unitOf(l); return `<tr style="opacity:.85;"><td>${fmtDate(l.date)}</td><td>${escapeHtml(l.time)}</td><td>${escapeHtml(u.name)} <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">${u.badge}</span></td><td>${escapeHtml(instructorName(l.instructorId))}</td><td>${lessonStatusBadge(l.status||'planned')}</td><td><button class="btn small secondary" onclick="openLessonModal('${l.id}')" title="Dersi düzenle">Düzenle</button></td></tr>`; }).join('') +
-        '</tbody></table></div></details>';
+    ${(__closedUnits179.length || otherLessons178.length) ? (function(){ // v179: kapali birimler — her biri kendi basligi + para satiri (dersler bu birimin hakkina sayilmaz)
+      const __nOther = otherLessons178.length;
+      const __hint = __closedUnits179.map(u => escapeHtml(u.name) + ' ' + (u.done + u.planned) + ' ders' + (u.share ? ' · payı ' + (u.share.sessions || 0) + ' ders / ' + money(u.share.price || 0) + ' ₺' : '')).join(' · ');
+      const __badge = u => (u.kind === 'group' ? (u.share ? 'önceki grup' : 'önceki grup (paysız)') : (u.share ? 'önceki bireysel' : 'bireysel ders'));
+      const __money = u => { if (u.noShare) return (u.paid > 0 ? '⚠️ kadro dışı ödeme ' + money(u.paid) + ' ₺ — grup toplamına sayılmaz' : 'pay kaydı yok'); const pr = (u.price === null) ? null : +u.price; return (pr === null ? 'pay ücreti girilmedi (✏️ grup detayı)' : ('pay ' + money(pr) + ' ₺')) + ' · ödenen ' + money(u.paid) + ' ₺' + (u.balance > 0 ? ' · <span style="color:#c62828;">kalan ' + money(u.balance) + ' ₺</span>' : '') + (u.excess > 0 ? ' · <span style="color:#8a5a00;">⚠️ payı aşan ' + money(u.excess) + ' ₺</span>' : ''); };
+      const __rows = u => u.lessons.map(l => `<tr style="opacity:.85;"><td>${fmtDate(l.date)}</td><td>${escapeHtml(l.time)}</td><td>${escapeHtml(u.name)} <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">${__badge(u)}</span></td><td>${escapeHtml(instructorName(l.instructorId))}</td><td>${lessonStatusBadge(l.status||'planned')}</td><td><button class="btn small secondary" onclick="openLessonModal('${l.id}')" title="Dersi düzenle">Düzenle</button></td></tr>`).join('');
+      return `<details open><summary>Diğer birimlerdeki dersleri (${__nOther}) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— ${__hint || 'pay kaydı'} · bu birimin ders hakkına sayılmaz</span></summary>` +
+        __closedUnits179.map(u => `<div style="margin:6px 0 2px;font-size:12px;"><b>${escapeHtml(u.name)}</b> <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">${__badge(u)}</span> <span style="color:var(--muted);">— ${u.done} yapıldı${u.planned ? ' · ' + u.planned + ' planlı' : ''}${u.cancelled ? ' · ' + u.cancelled + ' iptal' : ''} · ${__money(u)}</span></div>` +
+          (u.lessons.length ? `<div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Saat</th><th>Grup</th><th>Hoca</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>${__rows(u)}</tbody></table></div>` : '')).join('') +
+        '</details>';
     })() : ''}
     <details open><summary>${ctxAy} Ödemeleri (${payments.length}) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— üstüne tıkla: düzenle/sil</span></summary>
       ${payments.length ? '<div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Paket Ayı</th><th>Paket</th><th>Ders</th><th>Tutar</th><th>Yöntem</th><th>İşlem</th></tr></thead><tbody>' +
@@ -9779,6 +9921,7 @@ function __createIndividualUnit173(memberId, ay, o) {
   o = o || {};
   __undoSnapshot('Bireysel paket: ' + (m.name || 'Üye') + ' — ' + ay); // v165
   const removed = removeMemberFromOtherContexts(memberId, '', ay); // eski grup/ileri bireysel dersler
+  try { const __mo179 = m.monthly && m.monthly[ay]; if (__mo179 && __mo179.__soloShare179) delete __mo179.__soloShare179; } catch(e) {} // v179: yeniden bireysel — bireysel birim payi duser
   if (m.archived && typeof unarchiveMember === 'function') unarchiveMember(memberId, ay);
   const __mm = { enrolled: true };
   if (o.packageId) __mm.packageId = o.packageId;
@@ -10116,7 +10259,12 @@ function saveGroup() {
           setMemberMonthly(aid, __gAy, { enrolled: true });
           if (__am) __closeArchivePeriodAt(__am, __gAy);
         });
-        __removed.forEach(rid => __queuePartialOffer(__pg0, rid, __gAy)); // v171
+        __removed.forEach(rid => { // v171 + v179 (U4): sarkan paket varsa ayrilma o paketin ayindan
+          const __effR = __spillPackageMonth179(__pg0, rid, __gAy);
+          if (__effR) { applyRosterChange(__pg0, __effR, mids => { const out = mids.map(x => x === rid ? '' : x); while (out.length > 0 && out[out.length-1] === '') out.pop(); return out; }); syncGroupLessonsToRoster(__pg0.id, __effR); }
+          __dropFromFutureLessons179(__pg0, rid, __gAy);
+          __queuePartialOffer(__pg0, rid, __effR || __gAy);
+        });
         __added.forEach(aid => __queueJoinOffer(__pg0, aid, __gAy));        // v171
         __autoNameAfterRosterChange(__pg0, __gAy);
       }
@@ -13064,11 +13212,12 @@ function memberActiveGroupForMonth(memberId, monthISO) {
 // Fiyat tanimli degilse (<=0) BORC UYDURULMAZ -> 0.
 function memberBalanceForMonth(memberId, monthISO) {
   const ay = monthISO || currentMonth();
-  const __pd = memberPartialDebtForMonth(memberId, ay); // v171: ayrildigi gruplardaki odenmemis paylar da borcudur (F4)
+  const __pd = memberPartialDebtForMonth(memberId, ay) + __soloShareDebt179(memberId, ay); // v171: ayrildigi gruplardaki odenmemis paylar da borcudur (F4); v179: bireysel birim payi
   const defined = +memberMonthlyTotalPrice(memberId, ay) || 0;
   if (defined <= 0) return __pd;
   if (ay >= ROSTER_START_MONTH && !isMemberEnrolledInMonth(memberId, ay)) return __pd; // v176 (F7): o ay kayitli degilse (pasif) kendi fiyati borc degildir
   const g = memberActiveGroupForMonth(memberId, ay);
+  if (!g && !__hasIndividualUnit179(memberId, ay)) return __pd; // v179: yalniz kapali birimi (ayrilan payi) olan uye — kendi fiyati borc degil
   const paid = memberPaidTowardsMonth(memberId, g ? g.id : '', ay);
   return Math.max(0, Math.round((defined - paid) * 100) / 100) + __pd;
 }
@@ -15305,7 +15454,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.28.101-onizleme';
+const APP_VERSION = '2026.09.28.102-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
