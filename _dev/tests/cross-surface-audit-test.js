@@ -75,9 +75,10 @@ setTimeout(async ()=>{ try {
   if (r1.mismatchCount) console.log('   ornek:', JSON.stringify(r1.sample));
   t('uyumsuzluk 0', r1.mismatchCount===0, JSON.stringify(r1.sample));
   t('en az 80 sağlama yapıldı', r1.checks>=80, r1.checks);
-  // elle hesap: G1 = A 8.500 + B 8.500 + G payı 2.125 = 19.125; G2 8.500; D 4.500; E 8.500; G (gruptan ayrıldı, bireysel aktif) 8.500 → 49.125
-  // ödenmiş = 4.000 + 8.500 + 2.125 + 4.500 − 500 (iade) = 18.625 (geçen ay ödemeleri hariç); kalan = 4.500 + 8.500 + 500 + 8.500 + 8.500 = 30.500
-  t('beklenen 49.125 / ödenmiş 18.625 / kalan 30.500 (elle hesap)', r1.counts.expected===49125 && r1.counts.paid===18625 && r1.counts.pending===30500, JSON.stringify(r1.counts));
+  // elle hesap: G1 = A 8.500 + B 8.500 + G payı 2.125 = 19.125; G2 8.500; D 4.500; E 8.500 → 40.625
+  // v179: G gruptan ayrıldı, payı var, bireysel izi (paket/ders/ödeme) yok → BİREYSEL BİRİMİ YOK — kendi fiyatı (8.500) borç değil, bireysel satırı yok
+  // ödenmiş = 4.000 + 8.500 + 2.125 + 4.500 − 500 (iade) = 18.625 (geçen ay ödemeleri hariç); kalan = 4.500 + 8.500 + 500 + 8.500 = 22.000
+  t('beklenen 40.625 / ödenmiş 18.625 / kalan 22.000 (elle hesap; v179 birim kanonu)', r1.counts.expected===40625 && r1.counts.paid===18625 && r1.counts.pending===22000, JSON.stringify(r1.counts));
   t('ödeme toplamı = 18.625 (iade dahil, geçen ay hariç), 5 kayıt', r1.counts.paySum===18625 && r1.counts.payments===5, JSON.stringify(r1.counts));
   t('yetim ödeme 0', r1.counts.orphans===0, JSON.stringify(r1.counts.orphanCats));
   console.log('[2] gecen ay (' + PM + '): pasif uyenin gecen ay odemesi o ayda sayilir, 0 uyumsuzluk');

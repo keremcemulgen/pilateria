@@ -153,7 +153,7 @@ setTimeout(function(){ try {
   // SONSUZA KADAR "borcu yok" gorunur — sonraki aylar hic denetlenmez.
   console.log('[9] Geciken odemeler ILK AYA kilitli kalmaz (gecmis aylar da denetlenir)');
   w.eval(PKG + `
-    state.members=[{id:'o1',name:'OYKU YILMAZ',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
+    state.members=[{id:'o1',name:'OYKU YILMAZ',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${PREV2}':{enrolled:true},'${PREV}':{enrolled:true},'${AY}':{enrolled:true}}}]; // v58/v179 kanonu: ders aldigi aylarda kayitli
     state.groups=[];
     state.lessons=[
       {id:'O1',date:'${PREV2}-05',time:'10:00',memberIds:['o1'],status:'completed',packageMonth:'${PREV2}'},

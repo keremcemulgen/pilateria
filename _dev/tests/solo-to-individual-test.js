@@ -21,7 +21,7 @@ const dom = new JSDOM(html, {
     w.fetch=()=>Promise.resolve({ok:false,json:()=>Promise.resolve({})});
     if(!w.structuredClone)w.structuredClone=o=>JSON.parse(JSON.stringify(o));
     Object.defineProperty(w.navigator,'serviceWorker',{value:{register:()=>Promise.resolve({}),getRegistrations:()=>Promise.resolve([])},configurable:true});
-    w.__msgs=[]; w.__PL_DLG_AUTO__=(o)=>{ w.__msgs.push(String((o&&o.msg)||'')); return (o&&o.input)?String(o.input.value):true; };
+    w.__msgs=[]; w.__PL_DLG_AUTO__=(o)=>{ w.__msgs.push(String((o&&o.msg)||'')); if (w.__DLG179) { const r = w.__DLG179(o); if (r !== undefined) return r; } return (o&&o.input)?String(o.input.value):true; }; // v179: birim sorusu (plDialog) cevabi
     w.alert=(m)=>{ w.__msgs.push(String(m||'')); };
     w.confirm=(m)=>{ w.__msgs.push(String(m||'')); return CONFIRM(String(m||'')); };
     w.prompt=()=>null; w.scrollTo=()=>{};
@@ -80,11 +80,13 @@ setTimeout(async ()=>{ try {
   const inGroup = (mid, ay) => { const g = J(`memberActiveGroupForMonth('${mid}','${ay}')`); return g ? g.id : null; };
   const dzLessons = (ay) => J(`state.lessons.filter(l=>(l.memberIds||[]).includes('DZ') && (l.packageMonth||l.date.slice(0,7))==='${ay}')`);
 
-  console.log('[1] KEREM AKISI A: pasiften cikar → "1 kisilik grupta gorunuyor, bireysel olsun mu?" → TAMAM → gercekten bireysel');
+  console.log('[1] KEREM AKISI A: pasiften cikar → birim sorusu (v179: eski grubu / BIREYSEL / Vazgec) → BIREYSEL → gercekten bireysel');
   fixture();
   t('on kosul: DZ bu ay pasif, listede yok', rowType('DZ', CM)===null);
   CONFIRM = (m) => m.indexOf('BİREYSEL') >= 0 ? true : true;
+  w.__DLG179 = (o) => /hangi birimde/.test((o&&o.msg)||'') ? 'individual' : undefined; // v179: birim sorusuna "Bireysel"
   w.eval(`(typeof reactivateMemberForMonthUI175==='function' ? reactivateMemberForMonthUI175 : reactivateMemberForMonth)('DZ','${CM}')`); await tick(120);
+  w.__DLG179 = null;
   t('bireysel sorusu soruldu', seen('BİREYSEL'), w.__msgs.slice(0,3).join(' | ').slice(0,200));
   t('DZ bu ay hicbir grupta DEGIL', inGroup('DZ', CM)===null, inGroup('DZ', CM));
   t('Uyeler satiri tipi = individual', rowType('DZ', CM)==='individual', rowType('DZ', CM));
@@ -95,13 +97,20 @@ setTimeout(async ()=>{ try {
   { const ls = dzLessons(CM); t('bu ay bireysel dersler otomatik acildi (grup gun/saatinden, 8 ders, grupsuz)', ls.length===8 && ls.every(l=>!l.groupId && l.time==='10:00'), ls.length + ' ders'); }
   t('Geri Al yiginda "Bireysele çevir" var', J('__undoStack.map(s=>s.label||"")').some(l=>l.indexOf('Bireysele')>=0), JSON.stringify(J('__undoStack.map(s=>s.label||"")')));
 
-  console.log('[2] pasiften cikar → VAZGEC → eski davranis (v58): grup kadrosunda kalir');
+  console.log('[2] pasiften cikar → "Eski grubu" secimi → v58: grup kadrosunda kalir; Vazgec → pasif kalir');
   fixture();
   CONFIRM = (m) => m.indexOf('BİREYSEL') >= 0 ? false : true;
+  w.__DLG179 = (o) => /hangi birimde/.test((o&&o.msg)||'') ? 'group' : undefined;
   w.eval(`(typeof reactivateMemberForMonthUI175==='function' ? reactivateMemberForMonthUI175 : reactivateMemberForMonth)('DZ','${CM}')`); await tick(120);
+  w.__DLG179 = null;
   t('soru soruldu', seen('BİREYSEL'));
   t('DZ grupta kaldi (G1)', inGroup('DZ', CM)==='G1', inGroup('DZ', CM));
   t('grup aktif kaldi', w.eval(`isGroupInactiveInMonth(state.groups.find(g=>g.id==='G1'),'${CM}')`)===false);
+  fixture();
+  w.__DLG179 = (o) => /hangi birimde/.test((o&&o.msg)||'') ? null : undefined;
+  w.eval(`(typeof reactivateMemberForMonthUI175==='function' ? reactivateMemberForMonthUI175 : reactivateMemberForMonth)('DZ','${CM}')`); await tick(120);
+  w.__DLG179 = null;
+  t('v179 Vazgec: DZ pasif kaldi', rowType('DZ', CM)===null && w.eval(`isMemberEnrolledInMonth('DZ','${CM}')`)===false);
 
   console.log('[3] KEREM AKISI B: grupta cikti → Duzenle → "1 kisilik (bireysel)" → Kaydet → TAMAM → gercekten bireysel');
   fixture();
