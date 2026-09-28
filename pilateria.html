@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.28.100">
+<meta name="app-version" content="2026.09.28.101">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -8043,12 +8043,18 @@ function openMemberDetail(id, monthISO) {
   const allPayments = state.payments.filter(p=>p.memberId===id).sort((a,b)=>b.date.localeCompare(a.date));
   const allLessons = state.lessons.filter(l=>(l.memberIds||[]).includes(id)).sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time)); // v108 (Kerem): EN ESKI ders ustte (grup detay/toplu listeyle ayni)
   const payments = allPayments.filter(p => payMonthOf(p) === ctxAy);
-  const lessons = allLessons.filter(l => lesMonthOf(l) === ctxAy);
+  const lessonsAllUnits = allLessons.filter(l => lesMonthOf(l) === ctxAy);
+  // v178 (Kerem): BU BIRIMIN dersleri ana listede; onceki/baska gruplardaki (grup uyesiyse grupsuz) dersler ayri bolumde
+  const __curG178 = memberActiveGroupForMonth(id, ctxAy);
+  const __isOwn178 = l => __curG178 ? (l.groupId === __curG178.id) : !l.groupId;
+  const lessons = lessonsAllUnits.filter(__isOwn178);
+  const otherLessons178 = lessonsAllUnits.filter(l => !__isOwn178(l));
   const bought = payments.reduce((a,b)=>a+(+b.sessions||0),0);
   const used = lessons.filter(l=>l.status!=='cancelled').length;
   const r = Math.max(0, bought - used);
   const remCanon = memberRemainingForMonth(id, ctxAy); // v43: odemeden bagimsiz kalan (grup uyesi ise grubun kalani)
-  const doneCount = lessons.filter(l=>l.status==='completed').length; // v43: gercekten YAPILAN
+  const doneCount = lessons.filter(l=>l.status==='completed').length; // v43: gercekten YAPILAN (v178: bu birimin)
+  const otherDone178 = otherLessons178.filter(l=>l.status==='completed' || l.status==='missed').length;
   const totalPaid = payments.reduce((a,b)=>a+(+b.amount||0),0);
   const thisMonth = ctxAy;
   const activePkg = memberPackageForMonth(m, thisMonth);
@@ -8065,7 +8071,7 @@ function openMemberDetail(id, monthISO) {
     ${navBar}
     <div class="grid-stats">
       <div class="stat blue"><div class="label">Kalan Ders (${ctxAy})</div><div class="value">${remCanon}</div>${(function(){try{const f=sessionsFinishState('member',id,ctxAy);return f.closedEarly?`<div style="font-size:9.5px;color:var(--warn);margin-top:2px;">⭐ ${f.keptRights} hak işletmeye</div>`:''}catch(e){return ''}})()}</div>
-      <div class="stat ok"><div class="label">Yapılan Ders (${ctxAy})</div><div class="value">${doneCount}</div></div>
+      <div class="stat ok"><div class="label">Yapılan Ders (${ctxAy})</div><div class="value">${doneCount}</div>${otherDone178 ? `<div style="font-size:9.5px;color:var(--muted);margin-top:2px;" title="Bu ay başka birimde (önceki grup) yapılan dersler — aşağıda ayrı listelenir">+${otherDone178} diğer birimde</div>` : ''}</div>
       <div class="stat warn"><div class="label">Ödeme (${ctxAy}) ₺</div><div class="value">${money(totalPaid)}</div>${(function(){try{const __b=memberBalanceForMonth(id, ctxAy);return __b>0?('<div style="font-size:10px;color:#c62828;font-weight:700;margin-top:2px;">Kalan '+money(__b)+' ₺ — taksit devam</div>'):''}catch(e){return ''}})()}${(function(){try{const __x=__memberExcess177(id, ctxAy);return __x>0?('<div style="font-size:10px;color:#8a5a00;font-weight:700;margin-top:2px;" title="Grup toplamına sayılmayan tutar: iade et ya da ödeme kaydının ayını/grubunu düzelt.">⚠️ Fazla ödeme '+money(__x)+' ₺ — grup toplamına sayılmaz</div>'):''}catch(e){return ''}})()}</div>
     </div>
     <div class="row" style="margin:8px 0;flex-wrap:wrap;gap:12px;">
@@ -8106,9 +8112,18 @@ function openMemberDetail(id, monthISO) {
       ${lessons.length ? '<div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Saat</th><th>Hoca</th><th>Tip</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>' +
         lessons.map(l=>`<tr><td>${fmtDate(l.date)}</td><td>${escapeHtml(l.time)}</td><td>${escapeHtml(instructorName(l.instructorId))}</td><td>${(l.size||(l.memberIds||[]).length||1)} kişilik</td><td>${lessonStatusBadge(l.status||'planned')}</td><td><button class="btn small secondary" onclick="openLessonModal('${l.id}')" title="Dersi düzenle (tarih/saat/durum/hoca; içinde Sil de var)">Düzenle</button></td></tr>`).join('') + '</tbody></table></div>' : '<div class="empty">Ders kaydı yok.</div>'}
     </details>
+    ${otherLessons178.length ? (function(){ // v178: onceki/baska birimlerdeki dersler — grup adiyla, bu birimin hakkina sayilmaz
+      const __unitOf = l => { if (!l.groupId) return { key: '', name: 'bireysel', badge: 'bireysel ders' }; const g = state.groups.find(x => x && x.id === l.groupId); const nm = g ? (groupDisplayName(g, ctxAy) || g.name || 'Grup') : 'Silinmiş grup'; const ps = g ? partialShareFor(g.id, id, ctxAy) : null; return { key: l.groupId, name: nm, badge: 'önceki grup', share: ps }; };
+      const __units = {}; otherLessons178.forEach(l => { const u = __unitOf(l); if (!__units[u.key]) __units[u.key] = { u: u, n: 0 }; __units[u.key].n++; });
+      const __hint = Object.keys(__units).map(k => { const x = __units[k]; return escapeHtml(x.u.name) + ' ' + x.n + ' ders' + (x.u.share ? ' · payı ' + (x.u.share.sessions || 0) + ' ders / ' + money(x.u.share.price || 0) + ' ₺' : ''); }).join(' · ');
+      return `<details open><summary>Diğer birimlerdeki dersleri (${otherLessons178.length}) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— ${__hint} · bu birimin ders hakkına sayılmaz</span></summary>
+      <div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Saat</th><th>Grup</th><th>Hoca</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>` +
+        otherLessons178.map(l => { const u = __unitOf(l); return `<tr style="opacity:.85;"><td>${fmtDate(l.date)}</td><td>${escapeHtml(l.time)}</td><td>${escapeHtml(u.name)} <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">${u.badge}</span></td><td>${escapeHtml(instructorName(l.instructorId))}</td><td>${lessonStatusBadge(l.status||'planned')}</td><td><button class="btn small secondary" onclick="openLessonModal('${l.id}')" title="Dersi düzenle">Düzenle</button></td></tr>`; }).join('') +
+        '</tbody></table></div></details>';
+    })() : ''}
     <details open><summary>${ctxAy} Ödemeleri (${payments.length}) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— üstüne tıkla: düzenle/sil</span></summary>
       ${payments.length ? '<div class="table-wrap"><table class="sticky-head"><thead class="sticky-thead"><tr><th>Tarih</th><th>Paket Ayı</th><th>Paket</th><th>Ders</th><th>Tutar</th><th>Yöntem</th><th>İşlem</th></tr></thead><tbody>' +
-        payments.map(p=>`<tr style="cursor:pointer" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');"><td>${fmtDate(p.date)}</td><td>${escapeHtml(p.packageMonth||'—')}</td><td>${escapeHtml(paymentPkgLabel(p))}</td><td>${p.sessions}</td><td><b>${money(p.amount)} ₺</b></td><td>${escapeHtml(p.method||'—')}</td><td onclick="event.stopPropagation()"><button class="btn small secondary" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');" title="Düzenle">✏️</button> <button class="btn small danger" onclick="quickDeletePayment('${p.id}','${id}')" title="Sil">🗑</button></td></tr>`).join('') + '</tbody></table></div>' : '<div class="empty">Bu ay ödeme kaydı yok.</div>'}
+        payments.map(p=>`<tr style="cursor:pointer" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');"><td>${fmtDate(p.date)}</td><td>${escapeHtml(p.packageMonth||'—')}</td><td>${escapeHtml(paymentPkgLabel(p))}${(function(){ try { if (!p.groupId) return ''; const g = state.groups.find(x => x && x.id === p.groupId); if (!g) return ''; const own = __curG178 && __curG178.id === g.id; return '<br><small style="color:var(--p2)">👯 ' + escapeHtml(groupDisplayName(g, ctxAy) || g.name || 'Grup') + (own ? '' : ' <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">önceki grup</span>') + '</small>'; } catch(e) { return ''; } })()}</td><td>${p.sessions}</td><td><b>${money(p.amount)} ₺</b></td><td>${escapeHtml(p.method||'—')}</td><td onclick="event.stopPropagation()"><button class="btn small secondary" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');" title="Düzenle">✏️</button> <button class="btn small danger" onclick="quickDeletePayment('${p.id}','${id}')" title="Sil">🗑</button></td></tr>`).join('') + '</tbody></table></div>' : '<div class="empty">Bu ay ödeme kaydı yok.</div>'}
     </details>
     <details><summary>🗂 Tüm Geçmiş (${allPayments.length} ödeme · ${allLessons.filter(l => l.status === 'completed' || l.status === 'missed').length} ders) <span style="color:var(--muted);font-size:11px;font-weight:normal;">— diğer ayların kayıtları burada, listelere karışmaz</span></summary>
       ${allPayments.length ? '<div class="table-wrap"><table><thead><tr><th>Ay</th><th>Tarih</th><th>Tutar</th><th>Yöntem</th></tr></thead><tbody>' + allPayments.map(p=>`<tr style="cursor:pointer" onclick="openPaymentModal('${p.memberId}','${p.id}','${p.groupId||''}');"><td><b>${escapeHtml(p.packageMonth||String(p.date||'').slice(0,7))}</b></td><td>${fmtDate(p.date)}</td><td><b>${money(p.amount)} ₺</b></td><td>${escapeHtml(p.method||'—')}</td></tr>`).join('') + '</tbody></table></div>' : ''}
@@ -15278,7 +15293,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.28.100';
+const APP_VERSION = '2026.09.28.101';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
