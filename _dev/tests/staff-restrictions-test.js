@@ -41,7 +41,7 @@ setTimeout(function(){try{
   console.log('[4] Kod: guard + pl-owner-only + CSS');
   t("openPaymentModal personel guard", /if \(SUPABASE_MODE && __sbRole === 'staff'\) \{ if \(window\.plToast\) plToast\('Ödeme \/ paket/.test(html));
   t("togglePaidTick personel guard", /togglePaidTick[\s\S]*?if \(SUPABASE_MODE && __sbRole === 'staff'\) \{ if \(window\.plToast\) plToast\('Ödeme işlemleri/.test(html));
-  t("uye detay + Paket/Ödeme pl-owner-only", /class="btn pl-owner-only" onclick="openPaymentModal\('\$\{id\}'\);"/.test(html));
+  t("uye detay + Paket/Ödeme pl-owner-only", /class="btn pl-owner-only" onclick="openPaymentModal\('\$\{id\}'(, null, '', '\$\{thisMonth\}')?\);"/.test(html)); // v176 (F3): dugme detayin ayini tasir
   t("liste hizli-odeme pl-owner-only (togglePaidTick)", /class="btn small pl-owner-only" onclick="togglePaidTick\(/.test(html));
   t("CSS body.pl-staff-view .pl-owner-only gizler", /body\.pl-staff-view \.pl-owner-only \{ display:none !important; \}/.test(html));
   t("Ayarlar: sadece sb-session-card haric gizle", /#page-settings > \.card'\)\.forEach\(c => \{ if \(c\.id !== 'sb-session-card'\) c\.style\.display = 'none'; \}\)/.test(html));

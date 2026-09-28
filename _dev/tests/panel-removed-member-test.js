@@ -27,6 +27,7 @@ function shiftM(ym, dd){ const p=ym.split('-').map(Number); const dt=new Date(p[
 setTimeout(()=>{ try {
   const CM = w.eval('currentMonth()');
   const NM = shiftM(CM,+1), N2 = shiftM(CM,+2), PM = shiftM(CM,-1);
+  const NWM = w.eval('isoDate(addDays(startOfWeek(0), 7)).slice(0,7)'); // v176: gelecek haftanin AYI (ay sonunda NM olur) — test tarihten bagimsiz
   w.eval(`
     state.settings.reformers=10; state.settings.open=8; state.settings.close=22;
     state.packageTypes=[{id:'p8',name:'8 Ders',sessions:8,price:8000}];
@@ -37,9 +38,10 @@ setTimeout(()=>{ try {
       M('uR','RANA SILINEN',{'${CM}':{enrolled:true},'${NM}':{enrolled:false}},{archivePeriods:[{from:'${NM}',to:null}]}),
       M('uS','SELIN KALAN1',{'${CM}':{enrolled:true},'${NM}':{enrolled:false}},{archivePeriods:[{from:'${NM}',to:null}]}),
       M('uT','TULAY DURAN',{'${CM}':{enrolled:true}}),
+      M('uW','TUBA W',{'${CM}':{enrolled:true},'${NWM}':{enrolled:true}}), // v176: dersi/paketi yok — yalniz gelecek-hafta kontrolu icin (ay sinirinda)
       M('uV','VILDAN DONEN',{'${CM}':{enrolled:true},'${NM}':{enrolled:false},'${N2}':{enrolled:true}},{archivePeriods:[{from:'${NM}',to:'${N2}'}]}),
       M('g1','JULIDE G',{'${CM}':{enrolled:true}}),M('g2','KADRIYE G',{'${CM}':{enrolled:true}}),
-      M('g3','LEMAN G',{'${CM}':{enrolled:true}}),M('g4','MUKADDES G',{'${CM}':{enrolled:true}})
+      M('g3','LEMAN G',{'${CM}':{enrolled:true},'${NWM}':{enrolled:true}}),M('g4','MUKADDES G',{'${CM}':{enrolled:true},'${NWM}':{enrolled:true}})
     ];
     state.groups=[
       // gF: BU AY bitirdi (guncel) ama NM'den itibaren SILINMIS -> panelde OLMAMALI
@@ -68,8 +70,10 @@ setTimeout(()=>{ try {
   console.log('[2] GELECEK HAFTA: silinen uye/grup listelenmez; geri eklenen listelenir');
   const nwm = w.eval('(function(){const r=getNextWeekMissing();return {g:r.groups.map(x=>x.name||""),m:r.members.map(x=>x.name||"")};})()');
   t('RANA SILINEN gelecek haftada DEGIL', !nwm.m.includes('RANA SILINEN'), JSON.stringify(nwm.m));
-  t('VILDAN DONEN (silinip '+N2+' icin geri eklendi) LISTEDE', nwm.m.includes('VILDAN DONEN'), JSON.stringify(nwm.m));
-  t('TULAY DURAN listede', nwm.m.includes('TULAY DURAN'));
+  if (NWM === CM) t('VILDAN DONEN (silinip '+N2+' icin geri eklendi) LISTEDE', nwm.m.includes('VILDAN DONEN'), JSON.stringify(nwm.m));
+  else t('VILDAN DONEN gelecek hafta ('+NWM+', silindigi ay) LISTEDE DEGIL', !nwm.m.includes('VILDAN DONEN'), JSON.stringify(nwm.m));
+  if (NWM === CM) t('TULAY DURAN listede', nwm.m.includes('TULAY DURAN'));
+  t('TUBA W (gelecek haftanin ayina kayitli, dersi yok) listede', nwm.m.includes('TUBA W'), JSON.stringify(nwm.m));
   t('gF grubu gelecek haftada DEGIL', !nwm.g.some(n=>n.indexOf('JULIDE')!==-1), JSON.stringify(nwm.g));
   t('gG grubu gelecek haftada LISTEDE', nwm.g.some(n=>n.indexOf('LEMAN')!==-1), JSON.stringify(nwm.g));
 

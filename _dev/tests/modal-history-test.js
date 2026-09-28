@@ -41,7 +41,7 @@ setTimeout(async ()=>{ try {
         {id:'C',name:'CEREN',joinDate:'2026-01-01',defaultPackageId:'p8',totalPrice:8500,packages:[],monthly:{'${CM}':{enrolled:true}}}
       ];
       state.groups=[{id:'G1',name:'AYSE - BURCU',size:2,memberIds:['A','B'],defaultInstructorId:'h1',defaultPackageId:'p8',defaultDays:[1,3],defaultTime:'10:00',packages:[{month:'${CM}',startDate:'${CM}-01',sessions:8,price:17000,status:'active'}],monthlyMembers:{},monthlyNotes:{}}];
-      state.lessons=[{id:'L1',groupId:'G1',memberIds:['A','B'],date:'${FUT}',time:'10:00',status:'planned',packageMonth:'${FUT.slice(0,7)}',instructorId:'h1',size:2}];
+      state.lessons=[{id:'L1',groupId:'G1',memberIds:['A','B'],date:'${FUT}',time:'10:00',status:'planned',packageMonth:'${CM}',instructorId:'h1',size:2}]; // v176: BU AYIN paketi (ay sonunda FUT sonraki aya sarkar; kadro senkronu paket ayina bakar)
       state.payments=[];
       document.getElementById('member-month').innerHTML='<option value="${CM}">${CM}</option>';
       document.getElementById('member-month').value='${CM}';

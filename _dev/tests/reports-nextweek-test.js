@@ -14,12 +14,14 @@ let pass=0,fail=0;
 function t(n,c,x){ if(c){pass++;console.log('  OK ',n);} else {fail++;console.log('  FAIL',n,x!==undefined?'-> '+x:'');} }
 setTimeout(()=>{ try {
   // Tarihler uygulamanin KENDI fonksiyonlariyla — gercek "bugun"e gore gelecek hafta penceresi
+  // v176: uyeler gelecek haftanin ayina da kayitli (ay sonunda gelecek hafta sonraki aya duser; v58 kanonu kayit ister)
   w.eval(`
     window.__cm  = currentMonth();
     window.__ws  = startOfWeek(0);
     window.__nx1 = isoDate(addDays(window.__ws, 7));   // gelecek Pzt (pencere ICI)
     window.__nx2 = isoDate(addDays(window.__ws, 9));   // gelecek Car (pencere ICI)
     window.__tw  = isoDate(addDays(window.__ws, 1));   // BU hafta Sal (pencere DISI)
+    window.__nxm = window.__nx1.slice(0,7);            // v176: gelecek haftanin AYI (ay sinirinda cm'den farkli olabilir)
   `);
   const cm = w.__cm, nx1 = w.__nx1, nx2 = w.__nx2, tw = w.__tw;
 
@@ -28,7 +30,7 @@ setTimeout(()=>{ try {
     state.settings.instructorShareRate = 30;
     state.instructors.push({id:'h1',name:'BUSE'});
     state.packageTypes.push({id:'p8',name:'8 Ders',sessions:8,price:8000});
-    function MK(id,name,extra){ return Object.assign({id,name,joinDate:'2020-01-01',packages:[],monthly:{[cm]:{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:2000}, extra||{}); }
+    function MK(id,name,extra){ return Object.assign({id,name,joinDate:'2020-01-01',packages:[],monthly:{[cm]:{enrolled:true},[window.__nxm]:{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:2000}, extra||{}); }
     state.members.push(
       MK('mSolo1','SOLO BIR'),          // bireysel, dersi YOK  -> missing
       MK('mSolo2','SOLO IKI'),          // bireysel, gelecek hafta dersi VAR -> missing DEGIL
@@ -81,7 +83,7 @@ setTimeout(()=>{ try {
   console.log('[3] buildMemberLessonReport — uye ders programi metni');
   w.eval(`
     const cm = window.__cm;
-    state.members.push({id:'mRep',name:'RAPOR UYE',joinDate:'2020-01-01',packages:[],monthly:{[cm]:{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:4000});
+    state.members.push({id:'mRep',name:'RAPOR UYE',joinDate:'2020-01-01',packages:[],monthly:{[cm]:{enrolled:true},[window.__nxm]:{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:4000});
     let __r=0; const R=(o)=>{ o.id='R'+(++__r); state.lessons.push(o); };
     R({memberIds:['mRep'],date:cm+'-05',time:'10:00',status:'completed',packageMonth:cm,instructorId:'h1'});
     R({memberIds:['mRep'],date:cm+'-12',time:'11:00',status:'planned',  packageMonth:cm,instructorId:'h1'});
@@ -100,7 +102,7 @@ setTimeout(()=>{ try {
   w.eval(`
     const cm = window.__cm;
     // Temiz rapor grubu — kurulum dersi yok, tam olarak 2 gecerli + 1 iptal ders
-    function MK2(id,name){ return {id,name,joinDate:'2020-01-01',packages:[],monthly:{[cm]:{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:2000}; }
+    function MK2(id,name){ return {id,name,joinDate:'2020-01-01',packages:[],monthly:{[cm]:{enrolled:true},[window.__nxm]:{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'h1',health:'',note:'',totalPrice:2000}; }
     state.members.push(MK2('mgRa','GR UYE A'), MK2('mgRb','GR UYE B'));
     state.groups.push({id:'gRep',name:'RAPOR GRUBU',size:2,memberIds:['mgRa','mgRb'],defaultInstructorId:'h1',defaultPackageId:'p8',defaultTime:'10:00',defaultDays:[2],packages:[],rescheduleUsed:0,cancelUsed:0,customTotalPrice:8000,note:'',monthlyNotes:{}});
     let __rg=0; const RG=(o)=>{ o.id='RG'+(++__rg); state.lessons.push(o); };

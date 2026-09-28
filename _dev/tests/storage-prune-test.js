@@ -56,11 +56,12 @@ setTimeout(()=>{ try {
   console.log('[5] getNextWeekMissing esdegerlik (indeksli surum ayni sonucu verir)');
   const nwISO = w.eval("(function(){ const d = addDays(startOfWeek(0), 8); return (d && d.toISOString) ? d.toISOString().slice(0,10) : String(d).slice(0,10); })()");
   const cm = w.eval('currentMonth()');
+  const nxm = w.eval('isoDate(addDays(startOfWeek(0), 7)).slice(0,7)'); // v176: gelecek haftanin ayi (ay sinirinda farkli)
   w.eval(`
     state.members=[
-      {id:'m1',name:'M1',joinDate:'2026-01-01',monthly:{'${cm}':{enrolled:true}}},
-      {id:'m2',name:'M2',joinDate:'2026-01-01',monthly:{'${cm}':{enrolled:true}}},
-      {id:'m3',name:'SOLO',joinDate:'2026-01-01',monthly:{'${cm}':{enrolled:true}}}
+      {id:'m1',name:'M1',joinDate:'2026-01-01',monthly:{'${cm}':{enrolled:true},'${nxm}':{enrolled:true}}},
+      {id:'m2',name:'M2',joinDate:'2026-01-01',monthly:{'${cm}':{enrolled:true},'${nxm}':{enrolled:true}}},
+      {id:'m3',name:'SOLO',joinDate:'2026-01-01',monthly:{'${cm}':{enrolled:true},'${nxm}':{enrolled:true}}}
     ];
     state.groups=[
       {id:'g1',name:'G1',size:2,memberIds:['m1'],monthlyMembers:{},packages:[]},

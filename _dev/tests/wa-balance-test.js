@@ -38,6 +38,7 @@ setTimeout(function(){ try {
   const PKG   = `state.packageTypes=[{id:'pt8',name:'8 Ders',price:4000,sessions:8}];`;
 
   // Panelin gercek ciktisindan bir uyenin satirini cek (kullaniciya GORUNEN sey budur).
+  // v176 (F7): uyeler o aya ACIKCA kayitli (v58 kanonu) — kayitli olmayan uyenin kendi fiyati borc degildir.
   function rowOf(name){
     const el = d.getElementById('today-messages-list');
     const rows = Array.from(el.querySelectorAll('tbody tr'));
@@ -48,7 +49,7 @@ setTimeout(function(){ try {
   // ── [1] BIREYSEL: PARASINI ODEMIS ama dersi KALMIS uye borclu GORUNMEZ ─────────────────────
   console.log('[1] Parasini odemis uye "Tam" gorunur (kalan DERS borc DEGILDIR)');
   w.eval(PKG + `
-    state.members=[{id:'f1',name:'FILIZ SATMAN',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'f1',name:'FILIZ SATMAN',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[]; state.instructors=[];
     state.lessons=[{id:'L1',date:'${TODAY}',time:'11:00',memberIds:['f1'],status:'planned',packageMonth:'${AY}'}];
     state.payments=[{id:'P1',memberId:'f1',amount:4000,date:'${TODAY}',packageMonth:'${AY}'}];
@@ -64,7 +65,7 @@ setTimeout(function(){ try {
   // ── [2] TERS KISI SECIMI: dersi bitmis ama HIC ODEMEMIS uye borclu GORUNUR ─────────────────
   console.log('[2] Hic odememis uye borclu gorunur (yamasiz surumde yesil "Tam" idi)');
   w.eval(PKG + `
-    state.members=[{id:'z1',name:'ZEYNEP SAGDIK',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'z1',name:'ZEYNEP SAGDIK',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[]; state.payments=[];
     state.lessons=[];
     for(let i=1;i<=8;i++) state.lessons.push({id:'Z'+i,date:'${AY}-0'+ (i<10?i:1),time:'13:00',memberIds:['z1'],status:'completed',packageMonth:'${AY}'});
@@ -81,7 +82,7 @@ setTimeout(function(){ try {
   // ── [3] TAKSIT: kismi odeme KALAN TUTARI verir ─────────────────────────────────────────────
   console.log('[3] Kismi odeme (taksit): panel KALAN TUTARI yazar');
   w.eval(PKG + `
-    state.members=[{id:'b1',name:'BANU BASER',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'b1',name:'BANU BASER',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[];
     state.lessons=[{id:'B1',date:'${TODAY}',time:'12:15',memberIds:['b1'],status:'planned',packageMonth:'${AY}'}];
     state.payments=[{id:'PB',memberId:'b1',amount:1500,date:'${TODAY}',packageMonth:'${AY}'}];
@@ -95,7 +96,7 @@ setTimeout(function(){ try {
   console.log('[4] Fiyati tanimsiz uye icin borc UYDURULMAZ');
   w.eval(`
     state.packageTypes=[];
-    state.members=[{id:'n1',name:'NIGAR ERKOC',joinDate:'2026-01-01',monthly:{}}];
+    state.members=[{id:'n1',name:'NIGAR ERKOC',joinDate:'2026-01-01',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[]; state.payments=[];
     state.lessons=[{id:'N1',date:'${TODAY}',time:'17:45',memberIds:['n1'],status:'planned',packageMonth:'${AY}'}];
   `);
@@ -131,7 +132,7 @@ setTimeout(function(){ try {
   // ── [7] TOPLU WHATSAPP LISTESI: TL yazar, ders adedi DEGIL ─────────────────────────────────
   console.log('[7] Toplu WhatsApp listesi TL yazar');
   w.eval(PKG + `
-    state.members=[{id:'e1',name:'ECE DOLUCA',phone:'05551112233',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'e1',name:'ECE DOLUCA',phone:'05551112233',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[]; state.payments=[]; state.lessons=[{id:'E1',date:'${TODAY}',time:'19:15',memberIds:['e1'],status:'planned',packageMonth:'${AY}'}];
   `);
   ev("openWaBulkModal(['e1'],'wa-reminder')");
@@ -152,7 +153,7 @@ setTimeout(function(){ try {
   // SONSUZA KADAR "borcu yok" gorunur — sonraki aylar hic denetlenmez.
   console.log('[9] Geciken odemeler ILK AYA kilitli kalmaz (gecmis aylar da denetlenir)');
   w.eval(PKG + `
-    state.members=[{id:'o1',name:'OYKU YILMAZ',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'o1',name:'OYKU YILMAZ',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[];
     state.lessons=[
       {id:'O1',date:'${PREV2}-05',time:'10:00',memberIds:['o1'],status:'completed',packageMonth:'${PREV2}'},
@@ -168,7 +169,7 @@ setTimeout(function(){ try {
   // ── [10] VADESI GELMEMIS ODEME "geciken" SAYILMAZ ──────────────────────────────────────────
   console.log('[10] Ilk dersi BUGUN olan uye "geciken" sayilmaz');
   w.eval(PKG + `
-    state.members=[{id:'y1',name:'YENI UYE',joinDate:'${AY}-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'y1',name:'YENI UYE',joinDate:'${AY}-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[]; state.payments=[];
     state.lessons=[{id:'Y1',date:'${TODAY}',time:'09:00',memberIds:['y1'],status:'planned',packageMonth:'${AY}'}];
   `);
@@ -178,7 +179,7 @@ setTimeout(function(){ try {
   // ── [11] "kalan DERS" gostergesi BOZULMADI (adet olarak kalmali) ───────────────────────────
   console.log('[11] Dashboard "Bitmek Uzere" gostergesi hala DERS ADEDI');
   w.eval(PKG + `
-    state.members=[{id:'k1',name:'KALAN TEST',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{}}];
+    state.members=[{id:'k1',name:'KALAN TEST',joinDate:'2026-01-01',totalPrice:4000,defaultPackageId:'pt8',monthly:{'${AY}':{enrolled:true}}}];
     state.groups=[]; state.payments=[]; state.lessons=[];
     for(let i=1;i<=7;i++) state.lessons.push({id:'K'+i,date:'${AY}-0'+i,time:'10:00',memberIds:['k1'],status:'completed',packageMonth:'${AY}'});
   `);
