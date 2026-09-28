@@ -5,7 +5,9 @@
 // packageCarryInfo181 (grup: kendi paketi + kadrodaki uyelerin KENDI onceki birimleri; uye: son birimi),
 // carryText181. Yuzeyler: odeme penceresi kutusu (#mp-carry-181), Odendi tiki / toplu odeme onay metni,
 // createGroupPackage/createMemberPackage sonrasi uzun toast, grup ve uye detayi notu. Paket uzadi (0 ₺) = sessiz.
-// Yamasiz (v180) build'de FAIL eder.
+// v182 (canli olcum sonrasi): KANIT kurali — paket kaydi ancak o ay iptal-disi dersi YA DA odemesi varsa gercek pakettir
+// (kayit var, ders/odeme yok = hayalet kayit, sayilmaz); PENCERE — yalniz son 2 ay (onceki ay + 1 ay tolerans).
+// Yamasiz (v180) build'de FAIL eder; v181'de [10] FAIL eder.
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 const html = fs.readFileSync(process.argv[2], 'utf-8');
@@ -32,7 +34,7 @@ setTimeout(async ()=>{ try {
   w.eval("['renderArchive','renderCalendar'].forEach(fn=>window[fn]=function(){});");
   const CM = w.eval('currentMonth()');
   const sh = (k) => { const p=CM.split('-').map(Number); const dt=new Date(p[0],p[1]-1+k,1); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0'); };
-  const PREV = sh(-1), PREV2 = sh(-2);
+  const PREV = sh(-1), PREV2 = sh(-2), PREV3 = sh(-3);
   const LBL = (ay) => w.eval(`pkgMonthLabel('${ay}')`);
   const dd = (ay, day) => ay + '-' + String(day).padStart(2, '0');
   function fixture(){
@@ -42,7 +44,7 @@ setTimeout(async ()=>{ try {
       state.instructors=[{id:'h1',name:'HOCA',shareRate:30}];
       state.campaigns=[]; state.expenses=[]; state.instructorPayouts=[]; state.monthInit={};
       const mk = (id,name) => ({id:id,name:name,phone:'',joinDate:'2026-01-01',defaultPackageId:'p8',totalPrice:4500,packages:[],monthly:{'${PREV2}':{enrolled:true},'${PREV}':{enrolled:true},'${CM}':{enrolled:true}}});
-      state.members=[mk('A','AYSE'),mk('B','BERNA'),mk('I','IREM'),mk('J','JALE'),mk('K','KUBRA'),mk('L','LEYLA'),mk('N','NUR'),mk('C','CEREN'),mk('P','PELIN'),mk('Q','RANA'),mk('K2','KEREMCAN'),mk('R','RIZA')];
+      state.members=[mk('A','AYSE'),mk('B','BERNA'),mk('I','IREM'),mk('J','JALE'),mk('K','KUBRA'),mk('L','LEYLA'),mk('N','NUR'),mk('C','CEREN'),mk('P','PELIN'),mk('Q','RANA'),mk('K2','KEREMCAN'),mk('R','RIZA'),mk('F','FUNDA'),mk('H','HALE'),mk('O','OYA'),mk('S','SILA')];
       const gp = (ay, price) => ({month:ay,startDate:ay+'-01',sessions:8,price:price,status:'active'});
       state.groups=[
         // GA: onceki ay paketi 8 hak — 5 yapildi, 2 planli (bu ayin 2'si ve 4'u, paket ayi onceki ay), 1 planlanmamis → 3 devam eden hak
@@ -62,6 +64,12 @@ setTimeout(async ()=>{ try {
       state.members.find(m=>m.id==='K').packages=[mp('${PREV}',8,8000)];
       state.members.find(m=>m.id==='L').packages=[mp('${PREV2}',8,8000)];
       state.members.find(m=>m.id==='P').packages=[mp('${PREV}',4,4000)];
+      // v182 kanit/pencere: F hayalet kayit (ders/odeme yok); H 3 ay onceki gercek paket (pencere disi); O odeme var ders yok (0/8 gercek); S hayalet PREV + gercek PREV2 (2 ay once, 6/8)
+      state.members.find(m=>m.id==='F').packages=[mp('${PREV}',8,8000)];
+      state.members.find(m=>m.id==='H').packages=[mp('${PREV3}',8,8000)];
+      state.members.find(m=>m.id==='O').packages=[mp('${PREV}',8,8000)];
+      state.members.find(m=>m.id==='S').packages=[mp('${PREV}',8,8000), mp('${PREV2}',8,8000)];
+      state.members.find(m=>m.id==='H').monthly['${PREV3}']={enrolled:true};
       state.lessons=[];
       const L = (id, o) => state.lessons.push(Object.assign({id:id,time:'10:00',status:'completed',instructorId:'h1',size:1}, o));
       // GA onceki ay: 5 yapildi + 2 planli (bu ay 2 ve 4, paket ayi onceki ay)
@@ -79,7 +87,13 @@ setTimeout(async ()=>{ try {
       [18,20,25].forEach((day,i)=> L('p'+i, {memberIds:['P'],date:'${PREV}-'+String(day).padStart(2,'0'),packageMonth:'${PREV}',packageOwnerType:'member',packageOwnerId:'P'}));
       // GE: 6 yapildi (K2+R)
       [1,3,8,10,15,17].forEach((day,i)=> L('ge'+i, {groupId:'GE',memberIds:['K2','R'],date:'${PREV}-'+String(day).padStart(2,'0'),time:'15:00',packageMonth:'${PREV}',packageOwnerType:'group',packageOwnerId:'GE',size:2}));
-      state.payments=[{id:'pi1',memberId:'I',groupId:'',date:'${PREV}-01',packageMonth:'${PREV}',sessions:8,amount:8000,listPrice:8000,discount:0,method:'Nakit',pkgName:'8 Ders'}];
+      [1,3,8,10,15].forEach((day,i)=> L('h'+i, {memberIds:['H'],date:'${PREV3}-'+String(day).padStart(2,'0'),packageMonth:'${PREV3}',packageOwnerType:'member',packageOwnerId:'H'}));
+      [1,3,8,10,15,17].forEach((day,i)=> L('s'+i, {memberIds:['S'],date:'${PREV2}-'+String(day).padStart(2,'0'),packageMonth:'${PREV2}',packageOwnerType:'member',packageOwnerId:'S'}));
+      // GF: hayalet grup paketi (kayit var, ders/odeme yok) → grubun kendi bilgisi yok
+      state.groups.push({id:'GF',name:'FUNDA',size:2,memberIds:['F'],defaultInstructorId:'h1',defaultPackageId:'p8',defaultDays:[2],defaultTime:'16:00',packages:[gp('${PREV}',4500)],monthlyMembers:{'${PREV}':['F'],'${CM}':['F']},monthlyNotes:{}});
+      state.payments=[{id:'pi1',memberId:'I',groupId:'',date:'${PREV}-01',packageMonth:'${PREV}',sessions:8,amount:8000,listPrice:8000,discount:0,method:'Nakit',pkgName:'8 Ders'},
+        {id:'ph1',memberId:'H',groupId:'',date:'${PREV3}-01',packageMonth:'${PREV3}',sessions:8,amount:8000,listPrice:8000,discount:0,method:'Nakit',pkgName:'8 Ders'},
+        {id:'po1',memberId:'O',groupId:'',date:'${PREV}-01',packageMonth:'${PREV}',sessions:8,amount:8000,listPrice:8000,discount:0,method:'Nakit',pkgName:'8 Ders'}];
       document.getElementById('member-month').innerHTML='<option value="${CM}">${CM}</option>';
       document.getElementById('member-month').value='${CM}';
       __undoStack=[];
@@ -225,6 +239,16 @@ setTimeout(async ()=>{ try {
   w.eval(`openMemberDetail('A','${CM}')`); await tick();
   t('AYSE (GA uyesi) detayi: grubunun 3 hakki ("«AYSE - BERNA» grubunun", "önceki grubu" DEGIL)', has(d.getElementById('md-content').textContent, '«AYSE - BERNA» grubunun') && !has(d.getElementById('md-content').textContent, 'önceki grubu'), d.getElementById('md-content').textContent.replace(/\s+/g,' ').slice(0,200));
   w.eval("closeModal('modal-member-detail')");
+
+  console.log('[10] v182 KANIT + PENCERE: hayalet kayit sayilmaz; odeme var ders yok = gercek (0/8); 3 ay onceki paket pencere disi');
+  fixture();
+  t('FUNDA: PREV paket kaydi var ama ders/odeme yok (hayalet) → bilgi yok', J(`packageCarryInfo181('member','F','${CM}')`).length===0, JSON.stringify(J(`packageCarryInfo181('member','F','${CM}')`)));
+  t('GF grubu: hayalet PREV paketi → grubun kendi bilgisi yok (F de yok)', J(`packageCarryInfo181('group','GF','${CM}')`).length===0, JSON.stringify(J(`packageCarryInfo181('group','GF','${CM}')`)));
+  { const it = J(`packageCarryInfo181('member','O','${CM}')`); t('OYA: PREV odeme var, ders yok → GERCEK paket: 8 hak (0/8 yapildi)', it.length===1 && it[0].carry===8 && it[0].done===0, JSON.stringify(it)); }
+  t('HALE: 3 ay onceki gercek paket (5/8, odeme var) → pencere disi, bilgi yok', J(`packageCarryInfo181('member','H','${CM}')`).length===0, JSON.stringify(J(`packageCarryInfo181('member','H','${CM}')`)));
+  { const it = J(`packageCarryInfo181('member','S','${CM}')`); t('SILA: PREV hayalet atlanir, PREV2 (2 ay once, 6/8) gercek → 2 hak ' + PREV2, it.length===1 && it[0].prevMonth===PREV2 && it[0].carry===2, JSON.stringify(it)); }
+  t('HALE icin ' + sh(-2) + ' baglaminda (paket 1 ay once) bilgi VAR (pencere ay bazli)', J(`packageCarryInfo181('member','H','${sh(-2)}')`).length===1, JSON.stringify(J(`packageCarryInfo181('member','H','${sh(-2)}')`)));
+  t('__carryOfPackage181: hayalet kayit null; odemeli-derssiz kayit dolu', J(`__carryOfPackage181('member','F','${PREV}')`)===null && J(`__carryOfPackage181('member','O','${PREV}')`)!==null);
 
   console.log('[9] STAFF: bilgi yalniz veri (para yok) — staff rolunde de calisir, hata vermez');
   fixture();
