@@ -177,9 +177,10 @@ window.__plAudit = function(ay, opts) {
     try {
       const bal = memberBalanceForMonth(m.id, M);
       const g = memberActiveGroupForMonth(m.id, M);
-      const own = g ? memberPriceForGroupMonth(m.id, g.id, M) : (+memberMonthlyTotalPrice(m.id, M) || 0);
+      const __indiv179 = (typeof __hasIndividualUnit179 === 'function') ? __hasIndividualUnit179(m.id, M) : true; // v179: yalniz ayrilan payi olan uye bireysel degil
+      const own = g ? memberPriceForGroupMonth(m.id, g.id, M) : (__indiv179 ? (+memberMonthlyTotalPrice(m.id, M) || 0) : 0);
       const pd = memberPaidTowardsMonth(m.id, g ? g.id : '', M);
-      const recomputed = (own > 0 ? Math.max(0, Math.round((own - pd) * 100) / 100) : 0) + memberPartialDebtForMonth(m.id, M);
+      const recomputed = (own > 0 ? Math.max(0, Math.round((own - pd) * 100) / 100) : 0) + memberPartialDebtForMonth(m.id, M) + ((typeof __soloShareDebt179 === 'function') ? __soloShareDebt179(m.id, M) : 0); // v179: bireysel birim payi
       R.checks++; if (!eq(bal, recomputed)) bad('MBAL≠recomputed', m.id);
       if (opts.detail !== false) {
         openMemberDetail(m.id, M);

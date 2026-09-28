@@ -30,12 +30,16 @@ const URL = process.argv[2] || 'http://127.0.0.1:8765/pilateria.html';
     });
     return { ctx, p };
   }
-  // A) uye detayi → Aktive Et (gercek tiklama) → Tamam
+  // A) Pasif listesi → Aktive Et (gercek tiklama) → v179 birim sorusu → Bireysel
   { const { ctx, p } = await fresh();
     // ay-bazli pasif uye: "Aktive Et" dugmesi Arsiv/Pasif sayfasindaki ay listesinde (mobil kart)
     await p.evaluate(() => { switchPage('archive'); const s = document.getElementById('archive-month'); if (s) s.value = currentMonth(); renderArchive(); }); await p.waitForTimeout(500);
     const btn = await p.$('#page-archive button:has-text("Aktive Et")');
-    if (!btn) out.push('HATA A: Aktive Et dugmesi yok'); else { await btn.click(); await p.waitForTimeout(900); }
+    if (!btn) out.push('HATA A: Aktive Et dugmesi yok'); else { await btn.click(); await p.waitForTimeout(500);
+      // v179: birim sorusu (plDialog) — "Bireysel" dugmesine gercek tiklama
+      const dlgBtn = await p.$('#pl-dlg button:has-text("Bireysel")');
+      if (!dlgBtn) out.push('HATA A: birim sorusu (Bireysel dugmesi) gorunmedi'); else { await dlgBtn.click(); }
+      await p.waitForTimeout(900); }
     const r = await p.evaluate(() => { const CM = currentMonth(); const g = memberActiveGroupForMonth('DZ', CM); const row = buildMemberRows(CM).find(r=>r.memberId==='DZ')||{}; renderMembers(); const txt = document.getElementById('page-members').innerText; return { grupta: !!g, tip: row.type, yigin: __modalStack.slice(), bireyselYazisi: /Bireysel/.test(txt), grupKarti: /👯\s*DUYGU/.test(txt), ders: state.lessons.filter(l=>(l.memberIds||[]).includes('DZ') && !l.groupId && (l.packageMonth||l.date.slice(0,7))===CM).length }; });
     out.push((!r.grupta && r.tip==='individual' && !r.grupKarti && r.ders===8 ? 'OK  ' : 'HATA') + ' A) Aktive Et → soru → Tamam → bireysel ' + JSON.stringify(r) + ' | dialoglar: ' + JSON.stringify(p.__dialogs));
     await ctx.close(); }
