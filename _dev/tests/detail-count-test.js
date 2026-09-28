@@ -46,12 +46,15 @@ setTimeout(()=>{ try {
   if (ms) ms.value=CM;
   w.openMemberDetail('m1');
   const md = d.getElementById('md-content').innerHTML;
-  // uye detayi uyenin GRUP derslerini de listeler: bireysel(5y+1f) + grup(3y) = 9 sayilir; 2 planli + 2 iptal sayilmaz
-  t('baslik Dersleri (9) — 13 DEGIL (2 iptal + 2 planli sayilmadi)', md.includes('Dersleri (9)'), (md.match(/Dersleri \(\d+\)/)||['yok'])[0]);
-  t('rozetler: 8 yapildi + 1 yandi + 2 planli', /✅ 8 yapıldı/.test(md) && /🔥 1 yandı/.test(md) && /📅 2 planlı/.test(md));
-  t('iptal ayri: "2 iptal (sayılmaz)"', /🚫 2 iptal \(sayılmaz\)/.test(md));
+  // v178: uye o ay GRUP uyesi → ana liste = grubun dersleri (3y + 1 planli + 1 iptal → sayilan 3); bireysel dersler
+  // (5y+1f+1p+1c) "Diger birimlerdeki dersleri (8)" bolumunde (bireysel ders etiketi). Iptal yine sayilmaz.
+  t('baslik Dersleri (3) — bu birimin (grup) dersleri; iptal/planli sayilmadi', md.includes('Dersleri (3)'), (md.match(/Dersleri \(\d+\)/)||['yok'])[0]);
+  t('rozetler: 3 yapildi + 1 planli', /✅ 3 yapıldı/.test(md) && /📅 1 planlı/.test(md));
+  t('iptal ayri: "1 iptal (sayılmaz)"', /🚫 1 iptal \(sayılmaz\)/.test(md));
+  t('v178: bireysel dersler "Diğer birimlerdeki dersleri (8)" bolumunde, "bireysel ders" etiketiyle', /Diğer birimlerdeki dersleri \(8\)/.test(md) && /bireysel ders/.test(md), (md.match(/Diğer birimlerdeki dersleri \(\d+\)/)||['yok'])[0]);
   const satir = (md.match(/openLessonModal\('B\d'\)/g)||[]).length;
-  t('LISTE aynen 8 satir (tarihsel kayit gorunur)', satir === 8, satir);
+  t('LISTE aynen 8 bireysel satir (tarihsel kayit gorunur — diger birim bolumunde)', satir === 8, satir);
+  t('Yapılan Ders sayaci 3 + "+6 diğer birimde" (5y+1f)', /Yapılan Ders[^]*?<div class="value">3<\/div>/.test(md) && /\+6 diğer birimde/.test(md));
 
   console.log('[2] TUM GECMIS: gecmis ay sayaci da iptal saymaz');
   t('Tum Gecmis 11 ders der (14 kayittan 3 iptal/planli-disi: yalniz yapilan+yanan)', /Tüm Geçmiş \(0 ödeme · 11 ders\)/.test(md), (md.match(/Tüm Geçmiş[^<]*/)||['yok'])[0]);
