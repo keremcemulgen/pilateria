@@ -139,7 +139,12 @@ setTimeout(async ()=>{ try {
   w.eval("S().lessons.find(x=>x.id==='LZ').instructorRateOverride=40;");
   t('ELLE override %40 CALISIR', w.resolveInstructorRate(LZ())===40, w.resolveInstructorRate(LZ()));
   w.eval("S().lessons.find(x=>x.id==='LZ').instructorRateOverride=null; S().groups[0].packages[0].instructorShareRate=50;");
-  t('paket orani 50 gecerli (0 degilse zincir calisir)', w.resolveInstructorRate(LZ())===50, w.resolveInstructorRate(LZ()));
+  // v177 (Kerem 28.09): paket kaydina kopyalanan oran (bayat anlik goruntu) cozumde YOK — grubun GUNCEL orani; grup orani
+  // tanimsizsa hoca/ayar (%30). Grup oranini 50 yapinca zincir calisir.
+  t('paket kaydindaki 50 ARTIK GECERSIZ (v177) -> %30', w.resolveInstructorRate(LZ())===30, w.resolveInstructorRate(LZ()));
+  w.eval("S().groups[0].instructorShareRate=50;");
+  t('grup orani 50 gecerli (0 degilse zincir calisir)', w.resolveInstructorRate(LZ())===50, w.resolveInstructorRate(LZ()));
+  w.eval("S().groups[0].instructorShareRate=null;");
   w.eval("S().groups[0].packages[0].instructorShareRate=0; S().lessons[0].instructorRateOverride=0; S().instructors[0].shareRate=0; applyV10MigrationToState(state);");
   t('MIGRATION 0 oranlari null yapar (paket+ders+hoca)', w.S().groups[0].packages[0].instructorShareRate===null && w.S().lessons[0].instructorRateOverride===null && w.S().instructors[0].shareRate===null,
     J([w.S().groups[0].packages[0].instructorShareRate, w.S().lessons[0].instructorRateOverride, w.S().instructors[0].shareRate]));

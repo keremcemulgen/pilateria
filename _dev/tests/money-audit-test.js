@@ -47,7 +47,7 @@ setTimeout(()=>{ try {
   w.eval(`state.groups.find(g=>g.id==='gA').instructorShareRate = 35;`);
   t('grup orani hoca oranini ezer -> %35', w.resolveInstructorRate({...L, instructorId:'hB'}) === 35);
   w.eval(`state.groups.find(g=>g.id==='gA').packages[0].instructorShareRate = 45;`);
-  t('paket orani grubu ezer -> %45', w.resolveInstructorRate({...L, instructorId:'hB'}) === 45);
+  t('v177: paket kaydindaki oran (bayat kopya) grubu EZMEZ -> %35 kalir', w.resolveInstructorRate({...L, instructorId:'hB'}) === 35, w.resolveInstructorRate({...L, instructorId:'hB'}));
   t('ders override hepsini ezer -> %60', w.resolveInstructorRate({...L, instructorRateOverride:60}) === 60);
   w.eval(`delete state.groups.find(g=>g.id==='gA').packages[0].instructorShareRate; state.groups.find(g=>g.id==='gA').instructorShareRate = undefined;`);
   t('bireysel uye orani -> %50 (mB)', w.resolveInstructorRate({ date:'2026-06-10', instructorId:'hA', memberIds:['mB'], groupId:'', status:'completed' }) === 50);

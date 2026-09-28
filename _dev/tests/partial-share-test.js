@@ -62,14 +62,13 @@ setTimeout(async ()=>{ try {
   t('partialShareFor / setPartialShare / memberPriceForGroupMonth var', ['partialShareFor','setPartialShare','removePartialShare','memberPriceForGroupMonth','__queuePartialOffer','__queueJoinOffer','editPartialShare','deletePartialShare'].every(f=>w.eval("typeof "+f)==='function'), w.eval("typeof partialShareFor"));
   if (w.eval("typeof partialShareFor")!=='function') { console.log('\nSONUC: '+pass+' gecti, '+(fail+40)+' kaldi'); process.exit(1); }
 
-  console.log('[2] AYSE baska gruba tasindi → eski grupta 2 dersin PAYI (tek soru, onerilen tutar)');
+  console.log('[2] AYSE baska gruba tasindi → eski grupta 2 dersin PAYI (v177: SORUSUZ, 1-ders x alinan = 2.125)');
   fixture();
   w.eval("assignMemberToSlot('A','G2',1)");
   await tick();
-  t('soru soruldu: "2 ders aldı"', seen('grubunda 2 ders aldı'), w.__msgs.join(' || ').slice(0,300));
-  t('oneri metni 8.500 × 2/8 = 2.125', seen('2/8'), w.__msgs.join(' || ').slice(0,300));
+  t('v177: soru SORULMADI (Kerem 28.09: tasinmada pay = 1 derslik para x alinan ders)', !seen('grubunda 2 ders aldı'), w.__msgs.join(' || ').slice(0,300));
   const ps = w.eval(`JSON.stringify(partialShareFor('G1','A','${CM}'))`);
-  t('pay kaydi: 2 ders · 2.125 ₺', ps!=='null' && JSON.parse(ps).sessions===2 && JSON.parse(ps).price===2125, ps);
+  t('pay kaydi: 2 ders · 2.125 ₺ · not "taşındı"', ps!=='null' && JSON.parse(ps).sessions===2 && JSON.parse(ps).price===2125 && /taşın/.test(JSON.parse(ps).note||''), ps);
   t('AYSE G2 kadrosunda, G1 kadrosunda DEGIL', w.eval(`(memberActiveGroupForMonth('A','${CM}')||{}).id`)==='G2' && !w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('A')`));
   t('yapilmis 2 ders AYNEN duruyor (AYSE icinde)', w.eval("state.lessons.filter(l=>l.status==='completed'&&(l.memberIds||[]).includes('A')).length")===2);
 
@@ -122,13 +121,16 @@ setTimeout(async ()=>{ try {
   w.eval(`applyRosterChange(state.groups.find(g=>g.id==='G1'),'${CM}', mids => mids.map(x => x==='D' ? 'A' : x));`);
   t('AYSE geri kadroda → pay silindi', w.eval(`partialShareFor('G1','A','${CM}')`)===null && w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('A')`));
 
-  console.log('[9] Vazgec → pay yok; gecersiz cevap → pay yok');
+  console.log('[9] Vazgec → pay yok; gecersiz cevap → pay yok (v177: soru yalniz PASIFE ALMADA — tasinma otomatik)');
   fixture(); DLG_INPUT = () => null;
-  w.eval("assignMemberToSlot('A','G2',1)"); await tick();
+  w.eval(`removeMemberFromMonth('A','${CM}')`); await tick();
   t('Vazgec: pay acilmadi', w.eval(`partialShareFor('G1','A','${CM}')`)===null);
   fixture(); DLG_INPUT = () => 'not';
-  w.eval("assignMemberToSlot('A','G2',1)"); await tick();
+  w.eval(`removeMemberFromMonth('A','${CM}')`); await tick();
   t('gecersiz tutar: pay acilmadi', w.eval(`partialShareFor('G1','A','${CM}')`)===null);
+  fixture(); DLG_INPUT = () => null;
+  w.eval("assignMemberToSlot('A','G2',1)"); await tick();
+  t('v177: tasinmada Vazgec YOK — pay otomatik 2.125', w.eval(`(partialShareFor('G1','A','${CM}')||{}).price`)===2125, w.eval(`JSON.stringify(partialShareFor('G1','A','${CM}'))`));
   DLG_INPUT = (o) => (o.input && o.input.value !== undefined) ? String(o.input.value) : 'not';
 
   console.log('[10] diger ayrilma yollari: aydan cikar + grup penceresinden cikarma');
@@ -162,10 +164,10 @@ setTimeout(async ()=>{ try {
   console.log('[13] Geri Al + elle sil/duzenle');
   fixture(); w.eval("assignMemberToSlot('A','G2',1)"); await tick();
   t('on kosul: pay var', w.eval(`partialShareFor('G1','A','${CM}')`)!==null);
-  t('soruya "Evet" kendi Geri Al kaydini acar (Pay kaydi)', w.eval("(__undoStack[__undoStack.length-1]||{}).label||''").indexOf('Pay kaydı')===0, w.eval("(__undoStack[__undoStack.length-1]||{}).label||''"));
+  t('v177: tasinma TEK Geri Al adimi acar ("Taşınma: …")', w.eval("(__undoStack[__undoStack.length-1]||{}).label||''").indexOf('Taşınma')===0, w.eval("(__undoStack[__undoStack.length-1]||{}).label||''"));
   w.undoLast();
-  // v165 kapsami: slota atama/tasima geri alinmaz; yalniz PAY kaydi geri alinir (tasima durur)
-  t('geri al → yalniz pay silindi, AYSE G2 kadrosunda kaldi', w.eval(`partialShareFor('G1','A','${CM}')`)===null && w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G2'),'${CM}').includes('A')`) && !w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('A')`));
+  // v177: tasinma butunuyle geri alinir (kadro + pay + odeme) — v165'in "yalniz pay" kapsami tasinma icin genisledi
+  t('geri al → pay silindi, AYSE G1 kadrosuna dondu, G2 de degil', w.eval(`partialShareFor('G1','A','${CM}')`)===null && !w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G2'),'${CM}').includes('A')`) && w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('A')`));
   fixture(); w.eval("assignMemberToSlot('D','G1',0)"); await tick();
   t('orantili ucret kabulu de Geri Al kaydi acar', w.eval("(__undoStack[__undoStack.length-1]||{}).label||''").indexOf('Orantılı ücret')===0, w.eval("(__undoStack[__undoStack.length-1]||{}).label||''"));
   w.undoLast();
