@@ -30,7 +30,10 @@ window.__plAudit = function(ay, opts) {
     R.checks++; if (!eq(r.totalPrice, groupExpectedTotal(g, M))) bad('ROW_GTOTAL≠groupExpectedTotal', g.id);
     R.checks++; if (!eq(r.groupPaid, groupPaidForMonth(g, M))) bad('ROW_GPAID≠groupPaidForMonth', g.id);
     const paysG = pays.filter(p => p.groupId === g.id).reduce((a, p) => a + (+p.amount || 0), 0);
-    R.checks++; if (!eq(r.groupPaid, paysG)) bad('ROW_GPAID≠Σpayments(group)', g.id);
+    // v177: askida odeme (kadro disi paysiz / payi-fiyati asan) grubun Toplanan'ina sayilmaz — Σpayments − askida
+    let __ex177 = 0; if (typeof __memberGroupExcess177 === 'function') { const __sm = {}; pays.filter(p => p.groupId === g.id && p.memberId).forEach(p => { if (__sm[p.memberId]) return; __sm[p.memberId] = 1; __ex177 += __memberGroupExcess177(p.memberId, g.id, M); }); }
+    R.counts.askida = Math.round(((R.counts.askida || 0) + __ex177) * 100) / 100;
+    R.checks++; if (!eq(r.groupPaid, paysG - __ex177)) bad('ROW_GPAID≠Σpayments(group)−askıda', g.id);
     R.checks++; if (!eq(r.remaining, Math.max(0, (+r.totalPrice || 0) - (+r.groupPaid || 0)))) bad('ROW_GREMAIN≠max(0,total−paid)', g.id);
     R.checks++; if (!eq(r.remaining, groupBalanceForMonth(g.id, M))) bad('ROW_GREMAIN≠groupBalanceForMonth', g.id);
     const mrows = rows.filter(x => x.type === 'group' && x.groupId === g.id && x.memberId);
@@ -40,8 +43,9 @@ window.__plAudit = function(ay, opts) {
     });
     const sumOwn = mrows.reduce((a, x) => a + (+x.ownPrice || 0), 0);
     if (sumOwn > 0) { R.checks++; if (!eq(sumOwn, r.totalPrice)) bad('ROW_GTOTAL≠Σownprice', g.id); }
-    const sumMPaid = mrows.reduce((a, x) => a + (+x.paid || 0), 0);
-    R.checks++; if (!eq(sumMPaid, r.groupPaid)) bad('ROW_GPAID≠Σmemberpaid(kadro dışı ödeme?)', g.id);
+    const sumMPaid = mrows.reduce((a, x) => a + (+x.paid || 0), 0); // (mrows v171 pay satirlarini da icerir)
+    let __exRows177 = 0; if (typeof __memberGroupExcess177 === 'function') { const __sr = {}; mrows.forEach(x => { if (__sr[x.memberId]) return; __sr[x.memberId] = 1; __exRows177 += __memberGroupExcess177(x.memberId, g.id, M); }); }
+    R.checks++; if (!eq(sumMPaid - __exRows177, r.groupPaid)) bad('ROW_GPAID≠Σmemberpaid−askıda(kadro dışı ödeme?)', g.id);
   });
   rows.filter(r => r.type === 'individual').forEach(r => {
     R.checks++; if (!eq(r.paid, memberPaidTowardsMonth(r.memberId, '', M))) bad('ROW_IPAID≠memberPaidTowardsMonth', r.memberId);

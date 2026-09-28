@@ -32,6 +32,10 @@ window.__plFinanceProbe = function(months) {
     o.groups.quotaMismatch = groups.filter(g => { const gq = +sessionQuotaFor('group', g.id, M); return activeGroupRosterForMonth(g, M).some(mid => +sessionQuotaFor('member', mid, M) !== gq); }).map(g => mask(groupDisplayName(g, M)) + ' (' + sessionQuotaFor('group', g.id, M) + ')');
     o.groups.solo = groups.filter(g => activeGroupRosterForMonth(g, M).length === 1).length;
     o.groups.extended = groups.filter(g => (g.packages||[]).some(p => p.month === M && p.status === 'extended')).length;
+    // v177: askida odeme (grup toplamina sayilmayan) — uye|grup basina maskeli
+    o.groups.askida177 = (function(){ if (typeof __memberGroupExcess177 !== 'function') return null; const out = []; const seen = {}; pays.forEach(function(p){ if (!p.groupId || !p.memberId) return; const k = p.memberId + '|' + p.groupId; if (seen[k]) return; seen[k] = 1; const ex = __memberGroupExcess177(p.memberId, p.groupId, M); if (ex > 0) out.push(mask(memberName(p.memberId)) + '@' + mask(groupDisplayName(state.groups.find(function(g){ return g.id === p.groupId; }) || {}, M)) + ':' + ex); }); return out; })();
+    // v177: hakedis — uyeye ozel oranin (memberInstructorRates) cok kisilik derste etkisi: v176 (tek oran) ↔ v177 (uye bazli)
+    o.instructorsRateDelta177 = (function(){ const out = {}; (state.instructors||[]).forEach(function(inst){ let cur = 0, old = 0; (state.lessons||[]).filter(l => l.instructorId === inst.id && lessonHappened(l) && String(l.date||'').startsWith(M)).forEach(function(l){ cur += instructorEarningForLesson(l); old += perLessonPriceForLesson(l) * (resolveInstructorRate(l) / 100); }); const dlt = Math.round((cur - old) * 100) / 100; if (dlt !== 0) out[mask(inst.name)] = dlt; }); return out; })();
     // Hoca hakedisi: mevcut (v176) ↔ eski taban (uyenin kendi hakki, grup toplam fallback yok)
     (state.instructors||[]).forEach(function(inst){
       const ls = (state.lessons||[]).filter(l => l.instructorId === inst.id && lessonHappened(l) && String(l.date||'').startsWith(M));
