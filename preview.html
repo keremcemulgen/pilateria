@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.28.105-onizleme">
+<meta name="app-version" content="2026.09.29.107-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -1473,7 +1473,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
     <div class="toolbar">
       <button class="btn" onclick="openMemberModal()">+ Yeni Üye</button>
       <button class="btn secondary" onclick="openGroupModal()">+ Yeni Grup</button>
-      <input type="search" id="member-search" placeholder="Üye ara..." oninput="renderMembers()">
+      <input type="search" id="member-search" placeholder="Üye, grup ya da hoca ara..." oninput="renderMembers()">
       <select id="member-month" onchange="renderMembers()"></select>
       <button class="btn secondary" id="month-add-btn" style="display:none;" onclick="openMonthAddPicker((document.getElementById('member-month')||{}).value||'')" title="Seçili aya üye ekle (yalnız o ay etkilenir)">🗓️+ Aya Üye Ekle</button>
       <button class="btn secondary pl-owner-only" id="month-prep-btn" onclick="openMonthPrep((document.getElementById('member-month')||{}).value||'')" title="Geçen ayın grup ve üyeleri için seçili ay: Devam / Paket Uzadı / Pasif — tek ekranda">🗓️ Yeni Ay Hazırlığı</button>
@@ -6717,7 +6717,7 @@ function renderMembers() {
   const monthISO = document.getElementById('member-month').value || '';
   try { renderMonthNotes(monthISO || currentMonth()); } catch(e) {} // v140
   let rows = buildMemberRows(monthISO);
-  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q) || (r.groupName||'').toLowerCase().includes(q));
+  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q) || (r.groupName||'').toLowerCase().includes(q) || __rowInstructorName184(r).toLowerCase().includes(q)); // v184: hoca adiyla da
   if (f==='group') rows = rows.filter(r => r.type==='group');
   else if (f==='individual') rows = rows.filter(r => r.type==='individual');
   else if (f==='unpaid') {
@@ -6818,12 +6818,12 @@ function renderMembers() {
         const subLabel = filled < total
           ? `<span style="color:#c62828;font-weight:600;">${filled}/${total} dolu</span>`
           : `${total} kişi`;
-        groupNameCell = `<td class="grp-name-cell${r.groupFullyPaid ? ' grp-all-paid' : ''}" rowspan="${rs}" style="cursor:pointer;" onclick="event.stopPropagation();openGroupDetail('${r.groupId}')" title="Grup detayına git"><div class="grp-name-inner"><div class="grp-name-title">👯 ${r.groupName}</div><div class="grp-name-sub">${subLabel}</div></div></td>`;
+        groupNameCell = `<td class="grp-name-cell${r.groupFullyPaid ? ' grp-all-paid' : ''}" rowspan="${rs}" style="cursor:pointer;" onclick="event.stopPropagation();openGroupDetail('${r.groupId}')" title="Grup detayına git"><div class="grp-name-inner"><div class="grp-name-title">👯 ${r.groupName}</div><div class="grp-name-sub">${subLabel}</div>${(function(){ const __in = __rowInstructorName184(r); return __in ? `<div class="grp-name-sub" style="margin-top:2px;">🧑‍🏫 ${escapeHtml(__in)}</div>` : ''; })()}</div></td>`;
       } else {
         groupNameCell = '';
       }
     } else {
-      groupNameCell = `<td style="text-align:center;color:var(--muted);font-size:12px;">Bireysel</td>`;
+      groupNameCell = `<td style="text-align:center;color:var(--muted);font-size:12px;">Bireysel${(function(){ const __in = __rowInstructorName184(r); return __in ? `<div style="font-size:11px;margin-top:2px;color:var(--p2);">🧑‍🏫 ${escapeHtml(__in)}</div>` : ''; })()}</td>`;
     }
 
     // Excel tarzı rowspan: grup üyeleri için Toplam, Alınan, Kalan sütunları birleştirilir (tek hücrede, grup boyutu kadar yüksek)
@@ -6943,7 +6943,7 @@ function renderMembersCardsMobile(rows, monthISO) {
     if (r.type === 'group' && r.isFirstInGroup) {
       const gRem = +r.remaining || 0;
       html += `<div class="mc-group-head" onclick="openGroupDetail('${r.groupId}','${monthISO||''}')">
-        <span class="mc-gname">👯 ${escapeHtml(r.groupName||'')}</span>
+        <span class="mc-gname">👯 ${escapeHtml(r.groupName||'')}</span>${(function(){ const __in = __rowInstructorName184(r); return __in ? `<small class="mc-gins184" style="flex-shrink:0;font-weight:500;opacity:.85;white-space:nowrap;margin-left:6px;">🧑‍🏫 ${escapeHtml(__in)}</small>` : ''; })()}
         <span class="mc-gsum ${gRem>0?'due':'ok'}">${gRem>0 ? 'Kalan ' + money(gRem) + ' ₺' : (r.groupFullyPaid ? '✅ Ödendi' : '')}</span>
       </div>`;
     }
@@ -6972,7 +6972,7 @@ function renderMembersCardsMobile(rows, monthISO) {
     const isPartial = !isPaid && paid > 0 && fee > 0; // v123
     html += `<div class="mc-card ${r.type==='group'?'mc-in-group':''}" onclick="openMemberDetail('${r.memberId}')">
       <div class="mc-top">
-        <span class="mc-name">${escapeHtml(r.name||'')}${(function(){const __hm=state.members.find(x=>x.id===r.memberId);return (__hm&&__hm.health)?' 🩺':'';})()}</span>
+        <span class="mc-name">${escapeHtml(r.name||'')}${(function(){const __hm=state.members.find(x=>x.id===r.memberId);return (__hm&&__hm.health)?' 🩺':'';})()}${(function(){ if (r.type === 'group') return ''; const __in = __rowInstructorName184(r); return __in ? ` <small class="mc-ins184" style="font-weight:400;color:var(--muted);">· 🧑‍🏫 ${escapeHtml(__in)}</small>` : ''; })()}</span>
         <span class="mc-status ${isPaid?'ok':'due'}">${isPaid?'✅ Ödendi':(isPartial?('🟡 Kısmi '+money(paid)+'/'+money(fee)):'⏳ Bekliyor')}</span>
       </div>
       <div class="mc-mid">
@@ -8662,69 +8662,110 @@ function quickDeletePayment(payId, memberId) {
 // ========== INSTRUCTORS ==========
 // v14: Bir hoca için üye dağılımı analizi: bireysel, 2-li, 3-lü, 4-lü, 5-li grup üyeleri
 // monthISO opsiyonel — verilirse o ay'da aktif olan üye/grupları gösterir, yoksa tümünü.
-function instructorMemberBreakdown(instructorId, monthISO) {
-  const breakdown = { 1:[], 2:[], 3:[], 4:[], 5:[] };
-  // Bireysel üyeler (gruba dahil olmayanlar, archived olmayanlar)
-  state.members.forEach(m => {
-    if (m.archived) return;
-    const inGroup = monthISO ? !!memberActiveGroupForMonth(m.id, monthISO) : state.groups.some(g => !g.archived && (g.memberIds||[]).includes(m.id)); // v163: ay verildiyse ay-cozumlu
+// ===== v183: HOCA KADRO SAYIMI — TEK KAYNAK (Kerem 2026-09-29) =====
+// Kisi = benzersiz KISI (v59: 2. paket klonu ayni kisidir). Grup = benzersiz grup (ayni ayin 2. paket grubu = ayni grup).
+// Siralama: once gercek (klon olmayan) kayitlar kisiyi "evine" yazar (grup ya da bireysel), klonlar sonra — kisi zaten
+// sayildiysa "ek 2. paket kaydi" olur. Kova = grubun tanimli boyutu (v14). Ay verildiyse arsiv bayragi DEGIL ay kanonu.
+function __instructorRoster183(instructorId, monthISO) {
+  const ay = monthISO || '';
+  const bySize = {}; [1,2,3,4,5].forEach(k => { bySize[k] = { groups: 0, persons: 0, twinGroups: 0, extraRecords: 0, list: [] }; });
+  const out = { bySize: bySize, persons: 0, groups: 0, twinGroups: 0, extraRecords: 0, groupList: [], individualList: [] }; // v184: listeler
+  const mById = {}; (state.members || []).forEach(m => { if (m) mById[m.id] = m; });
+  const isClone = mid => !!(mById[mid] && mById[mid].secondOfMember);
+  const pid = mid => (mById[mid] && mById[mid].secondOfMember) || mid;
+  const activeM = mid => { const mm = mById[mid]; if (!mm) return false; return ay ? isMemberEnrolledInMonth(mid, ay) : !mm.archived; };
+  // 1) bu hocanin o ay aktif gruplari + kadrolari
+  const groups = [];
+  (state.groups || []).forEach(g => {
+    if (!g || g.defaultInstructorId !== instructorId) return;
+    if (ay ? isGroupInactiveInMonth(g, ay) : g.archived) return;
+    let ros; try { ros = ay ? activeGroupRosterForMonth(g, ay) : (g.memberIds || []).filter(Boolean).filter(activeM); } catch(e) { ros = []; }
+    ros = (ros || []).filter(mid => mById[mid]);
+    if (ay && !ros.length) return;
+    if (!ros.length) return;
+    const size = Math.max(1, Math.min(5, +g.size || ros.length || 1));
+    const nClone = ros.filter(isClone).length;
+    groups.push({ g: g, ros: ros, size: size, allClone: nClone === ros.length, nClone: nClone, persons: new Set(ros.map(pid)) });
+  });
+  // gercek gruplar once (klon orani az, kok grup, kucuk paket no)
+  groups.sort((a, b) => (a.allClone - b.allClone) || (a.nClone / a.ros.length - b.nClone / b.ros.length) || ((a.g.secondOfGroup ? 1 : 0) - (b.g.secondOfGroup ? 1 : 0)) || (((+a.g.pkgNo) || 1) - ((+b.g.pkgNo) || 1)));
+  const accepted = [];
+  groups.forEach(x => {
+    let twin = false;
+    if (x.allClone) {
+      twin = accepted.some(a => (x.g.secondOfGroup && a.g.id === x.g.secondOfGroup) || (a.g.secondOfGroup && x.g.secondOfGroup && a.g.secondOfGroup === x.g.secondOfGroup) || [...x.persons].every(p => a.persons.has(p)));
+    }
+    x.twin = twin;
+    if (twin) { bySize[x.size].twinGroups++; out.twinGroups++; }
+    else { bySize[x.size].groups++; out.groups++; accepted.push(x); }
+    // v184: ikizin koku = kisileri kapsayan (ya da secondOfGroup ile bagli) sayilmis grup
+    const rootX = twin ? (accepted.find(a => (x.g.secondOfGroup && a.g.id === x.g.secondOfGroup) || (a.g.secondOfGroup && x.g.secondOfGroup && a.g.secondOfGroup === x.g.secondOfGroup)) || accepted.find(a => [...x.persons].every(p => a.persons.has(p)))) : null;
+    let nm = ''; try { nm = ay ? groupDisplayName(x.g, ay) : (x.g.name || ''); } catch(e) { nm = x.g.name || ''; }
+    x.item = { gid: x.g.id, name: nm || x.g.name || 'Grup', size: x.size, twin: twin, rootGid: rootX ? rootX.g.id : '', members: [] };
+    out.groupList.push(x.item);
+  });
+  // 2) bireysel kayitlar (o ay hicbir aktif grupta degil, hocasi bu hoca)
+  const indiv = [];
+  (state.members || []).forEach(m => {
+    if (!m || m.instructorId !== instructorId) return;
+    if (!activeM(m.id)) return;
+    const inGroup = ay ? !!memberActiveGroupForMonth(m.id, ay) : (state.groups || []).some(g => g && !g.archived && (g.memberIds || []).includes(m.id)); // v163
     if (inGroup) return;
-    if (m.instructorId !== instructorId) return;
-    // v14: Ay filtresi — o ay'da enrolled değilse atla
-    if (monthISO && !isMemberEnrolledInMonth(m.id, monthISO)) return;
-    breakdown[1].push({ memberId: m.id, source: 'individual' });
+    indiv.push(m.id);
   });
-  // Gruplar
-  state.groups.forEach(g => {
-    if (g.archived) return;
-    if (g.defaultInstructorId !== instructorId) return; // bu hoca grubun varsayılan değil
-    // v14: Ay filtresi — o ay'da enrolled üyeleri al
-    if (monthISO && isGroupInactiveInMonth(g, monthISO)) return; // v163: o ay pasif grup sayilmaz
-    const activeMids = (monthISO ? resolveGroupMembersForMonth(g, monthISO) : (g.memberIds||[])).filter(mid => { // v163: ay-cozumlu kadro
-      if (!mid) return false;
-      const mm = state.members.find(m => m.id === mid && !m.archived);
-      if (!mm) return false;
-      if (monthISO && !isMemberEnrolledInMonth(mid, monthISO)) return false;
-      return true;
-    });
-    // v14: O ay'da bu grup hiç aktif değilse (hiç üyesi yoksa) atla
-    if (monthISO && activeMids.length === 0) return;
-    // v14 FIX: Grup boyutu HER ZAMAN tanımlı g.size'a göre (4 kişilik grup 3 üyeli olsa bile 4'lükte sayılır)
-    const size = Math.max(1, Math.min(5, +g.size || activeMids.length || 1));
-    activeMids.forEach(mid => breakdown[size].push({ memberId: mid, source: 'group', groupId: g.id, groupSize: size }));
+  // 3) kisileri yaz: once gercek kayitlar (grup, sonra bireysel), sonra klonlar
+  const seen = new Set();
+  const slots = [];
+  groups.forEach(x => x.ros.forEach(mid => slots.push({ mid: mid, size: x.size, gid: x.g.id, twin: x.twin, item: x.item })));
+  indiv.forEach(mid => slots.push({ mid: mid, size: 1, gid: '', twin: false, item: null }));
+  slots.sort((a, b) => (isClone(a.mid) ? 1 : 0) - (isClone(b.mid) ? 1 : 0)); // kararli siralama: gercek once
+  slots.forEach(sl => {
+    const p = pid(sl.mid);
+    const __mi = { mid: sl.mid, name: (mById[sl.mid] && mById[sl.mid].name) || '—', extra: seen.has(p) }; // v184
+    if (sl.item) sl.item.members.push(__mi); else out.individualList.push(__mi);
+    if (seen.has(p)) { bySize[sl.size].extraRecords++; out.extraRecords++; return; }
+    seen.add(p);
+    bySize[sl.size].persons++; out.persons++;
+    bySize[sl.size].list.push(sl.gid ? { memberId: sl.mid, source: 'group', groupId: sl.gid, groupSize: sl.size } : { memberId: sl.mid, source: 'individual' });
   });
+  return out;
+}
+// v184: Hocalar karti — "Gruplari ve uyeleri" listesi (sayimla ayni kaynak)
+function __instructorRosterListHtml184(r, ay) {
+  if (!r || (!r.groupList.length && !r.individualList.length)) return '';
+  const cmp = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'tr');
+  const memLink = mi => `<a href="#" onclick="event.preventDefault();openMemberDetail('${mi.mid}','${ay || ''}')" style="color:inherit;${mi.extra ? 'opacity:.75;' : ''}">${escapeHtml(mi.name)}</a>${mi.extra ? ' <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">2. paket</span>' : ''}`;
+  const real = r.groupList.filter(x => !x.twin).slice().sort((a, b) => (b.size - a.size) || cmp(a, b));
+  const twinsOf = gid => r.groupList.filter(x => x.twin && x.rootGid === gid).sort(cmp);
+  const grpLine = (x, twin) => `<div style="margin:${twin ? '2px 0 2px 16px' : '6px 0 2px'};font-size:12.5px;line-height:1.45;">${twin ? '↳ <span class="badge" style="background:#f5f0e0;color:#8a8573;font-size:10px;">2. paket grubu</span> ' : '👯 '}<a href="#" onclick="event.preventDefault();openGroupDetail('${x.gid}','${ay || ''}')" style="font-weight:${twin ? 500 : 700};color:var(--p2);">${escapeHtml(x.name)}</a> <span style="color:var(--muted);font-size:11px;">${x.size} kişilik · ${twin ? x.members.length + ' kayıt (aynı kişiler, ayrı sayılmaz)' : x.members.filter(m => !m.extra).length + ' üye'}</span><br><span style="color:var(--text);">${x.members.slice().sort(cmp).map(memLink).join(', ') || '—'}</span></div>`;
+  const orphanTwins = r.groupList.filter(x => x.twin && !real.some(g => g.gid === x.rootGid));
+  const ind = r.individualList.slice().sort(cmp);
+  const nPers = r.persons;
+  return `<details open class="inst-roster-184" style="margin-top:8px;"><summary style="cursor:pointer;font-size:13px;font-weight:600;">📋 Grupları ve üyeleri <span style="color:var(--muted);font-weight:400;font-size:11px;">— ${r.groups} grup · ${nPers} üye${r.twinGroups ? ' · ' + r.twinGroups + ' 2. paket grubu' : ''}</span></summary>` +
+    real.map(x => grpLine(x, false) + twinsOf(x.gid).map(t => grpLine(t, true)).join('')).join('') +
+    orphanTwins.map(t => grpLine(t, true)).join('') +
+    (ind.length ? `<div style="margin:6px 0 2px;font-size:12.5px;line-height:1.45;">👤 <b>Bireysel</b> <span style="color:var(--muted);font-size:11px;">${ind.filter(m => !m.extra).length} üye</span><br>${ind.map(memLink).join(', ')}</div>` : '') +
+    '</details>';
+}
+// Uyeler listesi satirinin hocasi (v184): grup → grubun hocasi, bireysel → uyenin hocasi
+function __rowInstructorId184(r) {
+  if (!r) return '';
+  if (r.type === 'group' && r.groupId) { const g = state.groups.find(x => x && x.id === r.groupId); return (g && g.defaultInstructorId) || ''; }
+  const m = state.members.find(x => x && x.id === r.memberId); return (m && m.instructorId) || '';
+}
+function __rowInstructorName184(r) { const id = __rowInstructorId184(r); return id ? instructorName(id) : ''; }
+// Geriye uyum: kova basina KISI listesi (benzersiz kisi — v183)
+function instructorMemberBreakdown(instructorId, monthISO) {
+  const r = __instructorRoster183(instructorId, monthISO);
+  const breakdown = { 1:[], 2:[], 3:[], 4:[], 5:[] };
+  [1,2,3,4,5].forEach(k => { breakdown[k] = r.bySize[k].list.slice(); });
   return breakdown;
 }
-// v14: Bir hocanın o aydaki grup sayısı (1 grupta birden fazla üye var ama 1 grup sayılır)
+// v14: Bir hocanın o aydaki grup sayısı (1 grupta birden fazla üye var ama 1 grup sayılır) — v183: 2. paket grubu ayrı grup değil
 function instructorGroupCountForMonth(instructorId, monthISO) {
-  const groupsBySize = { 1:0, 2:0, 3:0, 4:0, 5:0 };
-  let individualMembers = 0;
-  // Bireysel üyeler
-  state.members.forEach(m => {
-    if (m.archived) return;
-    const inGroup = monthISO ? !!memberActiveGroupForMonth(m.id, monthISO) : state.groups.some(g => !g.archived && (g.memberIds||[]).includes(m.id)); // v163: ay verildiyse ay-cozumlu
-    if (inGroup) return;
-    if (m.instructorId !== instructorId) return;
-    if (monthISO && !isMemberEnrolledInMonth(m.id, monthISO)) return;
-    individualMembers++;
-  });
-  groupsBySize[1] = individualMembers;
-  // Gruplar
-  state.groups.forEach(g => {
-    if (g.archived) return;
-    if (g.defaultInstructorId !== instructorId) return;
-    if (monthISO && isGroupInactiveInMonth(g, monthISO)) return; // v163: o ay pasif grup sayilmaz
-    const activeMids = (monthISO ? resolveGroupMembersForMonth(g, monthISO) : (g.memberIds||[])).filter(mid => { // v163: ay-cozumlu kadro
-      if (!mid) return false;
-      const mm = state.members.find(m => m.id === mid && !m.archived);
-      if (!mm) return false;
-      if (monthISO && !isMemberEnrolledInMonth(mid, monthISO)) return false;
-      return true;
-    });
-    if (monthISO && activeMids.length === 0) return;
-    const size = Math.max(1, Math.min(5, +g.size || activeMids.length || 1));
-    if (size > 1) groupsBySize[size] = (groupsBySize[size]||0) + 1;
-  });
+  const r = __instructorRoster183(instructorId, monthISO);
+  const groupsBySize = { 1: r.bySize[1].persons, 2:0, 3:0, 4:0, 5:0 };
+  [2,3,4,5].forEach(k => { groupsBySize[k] = r.bySize[k].groups; });
   return groupsBySize;
 }
 // v10: Bir hocanın (kümülatif veya o ay'a ait) grup-boyutu bazında kazancı
@@ -8780,8 +8821,9 @@ function renderInstructors() {
     const totalMonth = lessonsMonth.length;
     const doneMonth = lessonsMonth.filter(l => l.status === 'completed').length;
     const missedMonth = lessonsMonth.filter(l => l.status === 'missed').length;
-    const breakdown = instructorMemberBreakdown(inst.id, monthISO);
-    const groupCounts = instructorGroupCountForMonth(inst.id, monthISO);
+    const roster183 = __instructorRoster183(inst.id, monthISO); // v183: tek kaynak (benzersiz kisi / grup)
+    const breakdown = { 1:[], 2:[], 3:[], 4:[], 5:[] }; [1,2,3,4,5].forEach(k => { breakdown[k] = roster183.bySize[k].list; });
+    const groupCounts = { 1: roster183.bySize[1].persons, 2: roster183.bySize[2].groups, 3: roster183.bySize[3].groups, 4: roster183.bySize[4].groups, 5: roster183.bySize[5].groups };
     const monthEarn = instructorEarningsByGroupSize(inst.id, monthISO);
     const allEarn = instructorEarningsByGroupSize(inst.id, '');
     const totalMembersMonth = breakdown[1].length + breakdown[2].length + breakdown[3].length + breakdown[4].length + breakdown[5].length;
@@ -8798,7 +8840,7 @@ function renderInstructors() {
         <button class="btn small secondary" onclick="openInstructorModal('${inst.id}')">Düzenle</button>
       </div>
       <div class="grid-stats" style="margin:12px 0 4px;">
-        <div class="stat blue"><div class="label">${monthISO?monthLabel+' Üye':'Toplam Üye'}</div><div class="value">${totalMembersMonth}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">${totalIndividualMonth} bireysel + ${totalGroupsMonth} grup</div></div>
+        <div class="stat blue"><div class="label">${monthISO?monthLabel+' Üye':'Toplam Üye'}</div><div class="value">${totalMembersMonth}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">${totalIndividualMonth} bireysel + ${totalGroupsMonth} grup</div>${(roster183.extraRecords || roster183.twinGroups) ? `<div style="font-size:10px;color:var(--muted);margin-top:1px;" title="Aynı kişinin aynı aydaki 2./3. paket kaydı ayrı kişi, aynı grubun 2. paket grubu ayrı grup sayılmaz">+${roster183.extraRecords} 2. paket kaydı${roster183.twinGroups ? ' · ' + roster183.twinGroups + ' 2. paket grubu' : ''} (sayılmadı)</div>` : ''}</div>
         <div class="stat"><div class="label">${monthISO?monthLabel+' Ders':'Toplam Ders'}</div><div class="value">${totalMonth}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">✅ ${doneMonth} · 🔥 ${missedMonth}</div></div>
         <div class="stat ok"><div class="label">${monthISO?monthLabel+' Kazanç':'Toplam Kazanç'}</div><div class="value">${money(monthEarnTotal)} ₺</div></div>
       </div>
@@ -8815,9 +8857,11 @@ function renderInstructors() {
           // 1 kişilik (bireysel): sayı = üye sayısı
           // 2-5 kişilik: sayı = grup sayısı, alt yazıda üye sayısı
           const mainVal = s === 1 ? memberCnt : groupCnt;
+          const __b183 = roster183.bySize[s] || {};
+          const __x183 = (__b183.extraRecords || __b183.twinGroups) ? ` · +${__b183.twinGroups ? __b183.twinGroups + ' 2. paket grubu' + (__b183.extraRecords ? ', ' : '') : ''}${__b183.extraRecords ? __b183.extraRecords + ' 2. paket kaydı' : ''}` : ''; // v183: ek paketler ayri kisi/grup sayilmaz
           const subLine = s === 1
-            ? (memberCnt > 0 ? `${memberCnt} üye` : '')
-            : (groupCnt > 0 ? `${groupCnt} grup · ${memberCnt} üye` : '');
+            ? (memberCnt > 0 ? `${memberCnt} üye${__x183}` : '')
+            : (groupCnt > 0 ? `${groupCnt} grup · ${memberCnt} üye${__x183}` : (__x183 ? __x183.slice(3) : ''));
           return `<div class="inst-bd-cell">
             <div class="ibd-val">${mainVal}</div>
             <div class="ibd-lbl">${lbl}</div>
@@ -8827,6 +8871,7 @@ function renderInstructors() {
           </div>`;
         }).filter(Boolean).join('') || '<div style="color:var(--muted);font-size:12px;padding:8px;">'+(monthISO ? `Bu hocaya ${monthLabel} ayında bağlı üye/grup yok.` : 'Bu hocaya bağlı aktif üye yok.')+'</div>'}
       </div>
+      ${__instructorRosterListHtml184(roster183, monthISO)}
       ${(() => { // v41 (Kerem): DERS BAZLI hakedis dokumu — hangi dersten, hangi gruptan, ne kadar
         const __hl = lessonsMonth.filter(l => lessonHappened(l)).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
         if (!__hl.length) return '';
@@ -15638,7 +15683,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.28.105-onizleme';
+const APP_VERSION = '2026.09.29.107-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
