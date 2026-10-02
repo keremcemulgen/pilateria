@@ -33,6 +33,9 @@ function shiftM(ym, dd){ const p=ym.split('-').map(Number); const dt=new Date(p[
 setTimeout(async ()=>{ try {
   const CM = w.eval('currentMonth()');
   const NM = shiftM(CM,+1), N2 = shiftM(CM,+2);
+  // v185: tarih-bagimsiz — dolu gunler grubun varsayilan gunleri (Sali/Persembe) DISINDA secilir (eskiden NM-05/12 sabitti)
+  const __freeDays = []; for (let dd = 3; dd <= 26 && __freeDays.length < 2; dd++) { const dow = new Date(+NM.slice(0,4), +NM.slice(5,7)-1, dd).getDay(); if ([1,3,5].includes(dow) && dd !== 10 && dd !== 11 && (!__freeDays.length || dd - __freeDays[0] >= 2)) __freeDays.push(dd); }
+  const D_KAP = String(__freeDays[0]).padStart(2,'0'), D_HOC = String(__freeDays[1]).padStart(2,'0');
   w.eval(`
     state.settings.reformers=10; state.settings.open=10; state.settings.close=11; state.settings.slotStepMin=30;
     state.packageTypes=[{id:'p8',name:'8 Ders',sessions:8,price:8000}];
@@ -50,10 +53,10 @@ setTimeout(async ()=>{ try {
     // DOLULUK: NM-05'te TUM saatler makine kapasitesini asacak kadar dolu (9 kisilik yabanci ders)
     const slots = hourSlots();
     slots.forEach(function(tm, i){
-      state.lessons.push({id:'kap'+i,date:'${NM}-05',time:tm,durationMin:30,instructorId:'h2',size:9,
+      state.lessons.push({id:'kap'+i,date:'${NM}-'+'${D_KAP}',time:tm,durationMin:30,instructorId:'h2',size:9,
         memberIds:['x1','x2','x3','x4','x5','x6','x7','x8','x9'],groupId:'gX',packageMonth:'${NM}',status:'planned'});
       // HOCA: NM-12'de birimin hocasi (h1) tum saatlerde baska derste
-      state.lessons.push({id:'hoc'+i,date:'${NM}-12',time:tm,durationMin:30,instructorId:'h1',size:1,
+      state.lessons.push({id:'hoc'+i,date:'${NM}-'+'${D_HOC}',time:tm,durationMin:30,instructorId:'h1',size:1,
         memberIds:['x1'],groupId:'',packageMonth:'${NM}',status:'planned'});
     });
     state.payments=[];
@@ -84,8 +87,8 @@ setTimeout(async ()=>{ try {
   t('doldurulan planli satirlar MAVI (bd-planned)', planli>=6, planli);
 
   console.log('[4] DERS GIRILEBILIRLIK: makine + hoca doluluguna gore');
-  t('NM-05 (tum saatler makine dolu) bd-full tarali', !!d.querySelector('#bd-minical .bd-cal-day.bd-full[data-iso="'+NM+'-05"]'), (d.querySelector('#bd-minical [data-iso="'+NM+'-05"]')||{}).className);
-  t('NM-12 (birimin hocasi h1 tum saatlerde dolu) bd-full', !!d.querySelector('#bd-minical .bd-cal-day.bd-full[data-iso="'+NM+'-12"]'), (d.querySelector('#bd-minical [data-iso="'+NM+'-12"]')||{}).className);
+  t('NM-'+D_KAP+' (tum saatler makine dolu) bd-full tarali', !!d.querySelector('#bd-minical .bd-cal-day.bd-full[data-iso="'+NM+'-'+D_KAP+'"]'), (d.querySelector('#bd-minical [data-iso="'+NM+'-'+D_KAP+'"]')||{}).className);
+  t('NM-'+D_HOC+' (birimin hocasi h1 tum saatlerde dolu) bd-full', !!d.querySelector('#bd-minical .bd-cal-day.bd-full[data-iso="'+NM+'-'+D_HOC+'"]'), (d.querySelector('#bd-minical [data-iso="'+NM+'-'+D_HOC+'"]')||{}).className);
   const bosGun = d.querySelectorAll('#bd-minical .bd-cal-day.bd-free').length;
   t('bos gunler bd-free (girilebilir)', bosGun>0, bosGun);
 

@@ -66,6 +66,7 @@ setTimeout(()=>{ try {
   view(true,'day',CM+'-11');   t('son ders OLMAYAN gunde yildiz YOK', stars()===0, stars());
 
   console.log('[3b] KAPALI GUN: ders masaustunde gorunur, bos saat kutusu YOK');
+  w.eval(`(function(){ const c=parseISO('${CM}-13').getDay(); state.settings.workDays=[0,1,2,3,4,5,6].filter(x=>x!==c); })()`); // v185: tarih-bagimsiz — CM-13 kapali gun yapilir (eskiden Eylul 13 Pazar varsayimi)
   view(false,'day',CM+'-13'); // Pazar (workDays disi) — masaustu gun gorunumu
   t('kapali gun basligi hala kapali isaretli', d.getElementById('calendar').innerHTML.indexOf('gcal-dayhead')!==-1 && d.getElementById('calendar').innerHTML.indexOf(' closed')!==-1);
   t('kapali gunde bos saat kutusu (ders ekleme) yok', d.getElementById('calendar').innerHTML.indexOf('gcal-hcell')===-1);

@@ -24,9 +24,9 @@ setTimeout(()=>{ try {
   // Senaryo: uye P2'de katildi, P1'de pasife alindi, CM'de (bu ay) aktive edilecek.
   w.eval(`
     state.members=[
-      {id:'pB',name:'PASIF BIREY',joinDate:'${P2}-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'',health:'',note:'',totalPrice:4000,archived:true,archivedAt:'${P1}-20T09:00:00',archivedReason:'manual-delete'},
-      {id:'pG',name:'PASIF GRUPCU',joinDate:'${P2}-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'',health:'',note:'',totalPrice:4000,archived:true,archivedAt:'${P1}-20T09:00:00'},
-      {id:'ok1',name:'NORMAL UYE',joinDate:'${P2}-01',packages:[],monthly:{},phone:'',tcno:'',adres:'',instructorId:'',health:'',note:'',totalPrice:4000}
+      {id:'pB',name:'PASIF BIREY',joinDate:'${P2}-01',packages:[],monthly:{'${P2}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'',health:'',note:'',totalPrice:4000,archived:true,archivedAt:'${P1}-20T09:00:00',archivedReason:'manual-delete'},
+      {id:'pG',name:'PASIF GRUPCU',joinDate:'${P2}-01',packages:[],monthly:{'${P2}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'',health:'',note:'',totalPrice:4000,archived:true,archivedAt:'${P1}-20T09:00:00'},
+      {id:'ok1',name:'NORMAL UYE',joinDate:'${P2}-01',packages:[],monthly:{'${P2}':{enrolled:true}},phone:'',tcno:'',adres:'',instructorId:'',health:'',note:'',totalPrice:4000}
     ];
     state.groups=[{id:'gp',name:'GRUP',size:2,memberIds:['pG','ok1'],packages:[],monthlyMembers:{},monthlyNotes:{}}];
     state.lessons=[]; state.payments=[];
