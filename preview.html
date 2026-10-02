@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.09.29.107-onizleme">
+<meta name="app-version" content="2026.10.02.108-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -7486,15 +7486,30 @@ function __prepContinueMemberCore(mid, S, T) {
   }
   if (T >= ROSTER_START_MONTH) { if (!state.monthInit) state.monthInit = {}; state.monthInit[T] = true; }
 }
-function __prepContinueGroupCore(g, S, T) {
+// v185: hedef ayda KARAR VERILMEMIS uye = ne kayitli ne acikca cikarilmis
+function __prepUndecided185(mid, T) {
+  const mm = state.members.find(function(x){ return x.id === mid; }); if (!mm) return false;
+  return !isMemberEnrolledInMonth(mid, T) && !__prepMemberOut(mm, T);
+}
+// Birimin hedef ayda karar bekleyen uyeleri (toplu "eksikleri tamamla" icin)
+function __prepUndecidedOf185(u, T) {
+  return (u.members || []).filter(function(mid){ return __prepUndecided185(mid, T); });
+}
+function __prepContinueGroupCore(g, S, T, opts) {
+  opts = opts || {};
   const roster = activeGroupRosterForMonth(g, S);
+  // v185: grubun TAMAMI hedef aydan cikarilmissa (Pasif → Devam) hepsi geri; aksi halde cikarilanlar (Kerem'in karari) korunur
+  const allOut = roster.length > 0 && roster.every(function(mid){ return __prepMemberOut(state.members.find(function(x){ return x.id === mid; }), T); });
+  const add = roster.filter(function(mid){ return allOut || __prepUndecided185(mid, T); });
   __closeGroupArchiveAt(g, T);
   const curT = (resolveGroupMembersForMonth(g, T) || []).filter(Boolean);
-  const same = curT.length === roster.length && roster.every(function(x){ return curT.includes(x); });
-  if (!same) applyRosterChange(g, T, function(){ return roster.slice(); });
-  roster.forEach(function(mid){ __prepContinueMemberCore(mid, S, T); });
+  const missing = add.filter(function(mid){ return !curT.includes(mid); });
+  if (missing.length) applyRosterChange(g, T, function(mids){ const out = mids.slice(); missing.forEach(function(mid){ if (!out.includes(mid)) out.push(mid); }); return out; }); // v185: BIRLESIM — hedef ay kadrosundan kimse dusmez
+  add.forEach(function(mid){ __prepContinueMemberCore(mid, S, T); }); // v185: yalniz eklenen / geri yazilan uyeler — kayitlilara dokunulmaz
   const pkg = (g.packages || []).find(function(p){ return p && p.month === T; });
-  if (pkg && pkg.status === 'extended') { // daha once "uzadi" denmisse geri al
+  if (opts.fill && pkg && pkg.status === 'extended') { // v185: EKSIK TAMAMLAMA "uzadi"yi geri ALMAZ — eklenen uye de bu ay 0 ₺ (grubun uzama kurali)
+    try { if (missing.length || add.length) __groupPackageExtendCore(g, T, pkg.extendedNote || ''); } catch(e) {}
+  } else if (pkg && pkg.status === 'extended') { // daha once "uzadi" denmisse geri al (tek tik Devam)
     pkg.status = 'active'; delete pkg.extendedNote;
     const dp = (state.packageTypes || []).find(function(p){ return p.id === g.defaultPackageId; }) || (state.packageTypes || [])[0] || { price: 0 };
     pkg.price = (g.customTotalPrice !== undefined && g.customTotalPrice !== null && g.customTotalPrice !== '') ? +g.customTotalPrice : (+dp.price || 0);
@@ -7529,7 +7544,7 @@ async function prepAction(kind, id, action) {
     else { __prepContinueMemberCore(id, S, T); __memberPackageExtendCore(m, T, note); }
   } else if (action === 'continue') {
     __undoSnapshot('Yeni ay — Devam: ' + name + ' — ' + T);
-    if (g) __prepContinueGroupCore(g, S, T); else __prepContinueMemberCore(id, S, T);
+    if (g) { __prepContinueGroupCore(g, S, T); try { syncGroupLessonsToRoster(g.id, T); } catch(e) {} } else __prepContinueMemberCore(id, S, T);
   } else if (action === 'passive') {
     __undoSnapshot('Yeni ay — Pasif: ' + name + ' — ' + T);
     if (g) __prepPassiveGroupCore(g, S, T); else __removeMemberFromMonthCore(id, T);
@@ -7539,12 +7554,14 @@ async function prepAction(kind, id, action) {
 function prepAllContinue() {
   const T = __prepMonth; if (!T) return;
   const S = prevMonthISO(T);
-  const pend = __prepUnits(T).units.filter(function(u){ return __prepStatus(u, T) === 'pending'; });
+  // v185: karar bekleyen uyesi olan TUM birimler (bekleyen + Kismen + Uzadi/Devam'da sonradan eklenen uye)
+  const pend = __prepUnits(T).units.filter(function(u){ const st = __prepStatus(u, T); return st !== 'passive' && __prepUndecidedOf185(u, T).length > 0; });
   if (!pend.length) { alert('Karar bekleyen birim yok.'); return; }
   const ng = pend.filter(function(u){ return u.kind === 'group'; }).length;
-  if (!confirm(pend.length + ' birim (' + ng + ' grup, ' + (pend.length - ng) + ' bireysel) ' + __prepLabel(T) + ' ayında DEVAM olarak işaretlenecek.\n\n• Aynı kayıt, aynı kadro; üyeler ' + __prepLabel(T) + ' listesine alınır.\n• Geri Al ile tek seferde geri alınabilir.\n\nDevam?')) return;
+  if (!confirm(pend.length + ' birim (' + ng + ' grup, ' + (pend.length - ng) + ' bireysel) ' + __prepLabel(T) + ' ayında DEVAM — yalnız EKSİKLER tamamlanır.\n\n• ' + S + ' ayında olup ' + __prepLabel(T) + ' listesinde henüz olmayan üyeler (sonradan eklenenler dahil) aynı grup/bireysel kayıtla ' + __prepLabel(T) + ' listesine alınır.\n• ' + __prepLabel(T) + ' ayında girdiğin HER ŞEY korunur: dersler, ödemeler, fiyatlar, paket uzadı, ' + __prepLabel(T) + '\'de eklediğin ve çıkardığın üyeler.\n• Geri Al ile tek seferde geri alınabilir.\n\nDevam?')) return;
   __undoSnapshot('Yeni ay — Bekleyenler devam (' + pend.length + ') — ' + T);
-  pend.forEach(function(u){ if (u.kind === 'group') __prepContinueGroupCore(u.g, S, T); else __prepContinueMemberCore(u.id, S, T); });
+  pend.forEach(function(u){ if (u.kind === 'group') __prepContinueGroupCore(u.g, S, T, { fill: true }); else __prepContinueMemberCore(u.id, S, T); });
+  try { pend.forEach(function(u){ if (u.kind === 'group') syncGroupLessonsToRoster(u.g.id, T); }); } catch(e) {} // v185: eklenen uye hedef ayin PLANLI derslerine
   __prepAfterChange();
   if (typeof plToast === 'function') { try { plToast('✅ ' + pend.length + ' birim ' + __prepLabel(T) + ' ayında devam ediyor'); } catch(e) {} }
 }
@@ -7573,8 +7590,10 @@ function renderMonthPrep() {
     pending:  { l: '⏳ Karar bekliyor', c: '#6B8DB0', b: '#e3f2fd' }
   };
   const counts = { active: 0, extended: 0, passive: 0, partial: 0, pending: 0 };
+  let __fill185 = 0;
   const rows = units.map(function(u){
     const st = __prepStatus(u, T); counts[st]++;
+    const __und185 = (st !== 'passive') ? __prepUndecidedOf185(u, T) : []; if (__und185.length) __fill185++;
     const s = ST[st] || ST.pending;
     const ls = __prepLessonStats(u, S);
     let sub = '';
@@ -7583,6 +7602,7 @@ function renderMonthPrep() {
     let extra = '';
     if (st === 'active' && u.kind === 'group') { const act = activeGroupRosterForMonth(u.g, T); if (act.length !== u.members.length) extra = ' (' + act.length + '/' + u.members.length + ')'; }
     if (st === 'partial' && u.kind === 'group') { const act = activeGroupRosterForMonth(u.g, T); extra = ' (' + act.length + '/' + u.members.length + ' kayıtlı)'; }
+    if (u.kind === 'group' && __und185.length) sub += (sub ? '<br>' : '') + '<span style="color:#6B8DB0;">⏳ ' + __prepLabel(T) + ' listesinde yok: ' + __und185.map(function(mid){ return escapeHtml(memberName(mid)); }).join(', ') + '</span>';
     const b = function(action, label, title, on) { return '<button class="btn small ' + (on ? '' : 'secondary') + '" onclick="prepAction(\'' + u.kind + '\',\'' + u.id + '\',\'' + action + '\')" title="' + title + '">' + label + '</button>'; };
     return '<div class="prep-row" data-kind="' + u.kind + '" data-id="' + u.id + '" data-status="' + st + '" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid var(--border);">' +
       '<div style="flex:1;min-width:220px;"><div style="font-weight:700;">' + (u.kind === 'group' ? '👥 ' : '👤 ') + escapeHtml(u.name) + '</div>' + (sub ? '<div style="font-size:12px;color:var(--muted);">' + sub + '</div>' : '') + '<div style="font-size:12px;color:var(--muted);">' + escapeHtml(lsTxt) + '</div></div>' +
@@ -7597,7 +7617,7 @@ function renderMonthPrep() {
   box.innerHTML =
     '<div class="row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">' +
       '<div>Kaynak ay: <b>' + escapeHtml(__prepLabel(S)) + '</b> → Hedef ay: <select id="month-prep-month" style="width:auto;display:inline-block;min-width:150px;" onchange="setMonthPrepMonth(this.value)">' + opts.join('') + '</select></div>' +
-      '<button class="btn small" onclick="prepAllContinue()"' + (counts.pending ? '' : ' disabled') + ' title="Karar bekleyen tüm birimleri DEVAM olarak işaretle">▶ Bekleyenlerin hepsi devam etsin (' + counts.pending + ')</button>' +
+      '<button class="btn small" onclick="prepAllContinue()"' + (__fill185 ? '' : ' disabled') + ' title="' + escapeHtml(__prepLabel(S)) + ' ayında olup ' + escapeHtml(__prepLabel(T)) + ' listesinde henüz olmayan TÜM üyeleri (sonradan eklenenler dahil) aynı grup/bireysel kayıtla alır — ' + escapeHtml(__prepLabel(T)) + ' ayındaki ders, ödeme, fiyat ve kararlar korunur">▶ Eksikleri tamamla — bekleyenlerin hepsi devam etsin (' + __fill185 + ')</button>' +
     '</div>' +
     '<div id="month-prep-summary" style="font-size:13px;color:var(--muted);margin-bottom:8px;">' + units.length + ' birim (' + ng + ' grup · ' + (units.length - ng) + ' bireysel) — ✅ Devam ' + counts.active + ' · 📌 Uzadı ' + counts.extended + ' · ⏸ Pasif ' + counts.passive + (counts.partial ? ' · ⚠️ Kısmen ' + counts.partial : '') + ' · ⏳ Bekleyen ' + counts.pending + '</div>' +
     (rows.length ? '<div style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:0 6px;">' + rows.join('') + '</div>'
@@ -15683,7 +15703,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.09.29.107-onizleme';
+const APP_VERSION = '2026.10.02.108-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
