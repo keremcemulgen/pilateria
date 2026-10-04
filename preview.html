@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.02.108-onizleme">
+<meta name="app-version" content="2026.10.04.109-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -2012,7 +2012,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
         <label>Paket <small style="color:var(--muted);font-weight:400;">— opsiyonel</small></label>
         <select id="mp-pkg" onchange="onPkgChange()"></select>
       </div>
-      <div class="field"><label>Ders Sayısı (hak) <small style="color:var(--muted);font-weight:400;">— otomatik (8), opsiyonel</small></label><input type="number" id="mp-sessions" min="0" placeholder="otomatik: 8"></div>
+      <div class="field"><label>Ders Sayısı (hak) <small style="color:var(--muted);font-weight:400;">— otomatik (8), opsiyonel</small></label><input type="number" id="mp-sessions" min="0" placeholder="otomatik: 8" oninput="onPaySessionsChange186()"></div>
       <div class="field">
         <label>Kampanya / İndirim</label>
         <select id="mp-campaign" onchange="applyCampaign()"></select>
@@ -3541,10 +3541,20 @@ function quotaCeilingMsg(ownerType, ownerId, pm, excludeLessonId) {
   return null;
 }
 // Bir uyenin O AYKI kalan dersi: grup uyesiyse GRUBUN kalani (tek birim), degilse bireysel.
+// v186: grupta uyeye ozel hak (elle hak / kalan derse gore hak) varsa kalan = kendi hakki − kendi iptal-disi dersleri
+function __memberOwnRemaining186(memberId, g, ay) {
+  try {
+    if (!g || !memberId || !ay) return null;
+    const ov = memberSessionsOverride(memberId, ay); if (ov === null) return null;
+    if (__pkgClosedEarlyLesson('group', g.id, ay)) return 0;
+    const used = (state.lessons || []).filter(function(l){ return l && l.groupId === g.id && l.status !== 'cancelled' && (l.packageMonth || String(l.date || '').slice(0, 7)) === ay && (l.memberIds || []).includes(memberId); }).length;
+    return Math.max(0, ov - used);
+  } catch(e) { return null; }
+}
 function memberRemainingForMonth(memberId, monthISO){
   const ay = monthISO || currentMonth();
   const g = state.groups.find(gr => !isGroupInactiveInMonth(gr, ay) && (typeof __activeRosterForMonth==='function' ? __activeRosterForMonth(gr, ay) : resolveGroupMembersForMonth(gr, ay)).includes(memberId));
-  if (g) return sessionsRemainingFor('group', g.id, ay);
+  if (g) { const __own186 = __memberOwnRemaining186(memberId, g, ay); if (__own186 !== null) return __own186; return sessionsRemainingFor('group', g.id, ay); }
   return sessionsRemainingFor('member', memberId, ay);
 }
 // O ay odeme yapilmis mi? (para gostergesi — ders hakkindan AYRI)
@@ -7763,6 +7773,15 @@ function __queuePartialOffer(g, memberId, ay) {
     clearTimeout(__partialOfferQueue._t); __partialOfferQueue._t = setTimeout(__runPartialOffers, 0);
   } catch(e) {}
 }
+// v186 (Kerem: "sorsun"): gruptan cikarilan ve o ay baska bir birimi olmayan uye icin soru siraya girer
+function __queueLeaveUnit186(g, memberId, ay) {
+  try {
+    if (!g || !memberId || !ay) return;
+    if (__partialOfferQueue.some(function(q){ return q.kind === 'leaveunit186' && q.mid === memberId && q.ay === ay; })) return;
+    __partialOfferQueue.push({ kind: 'leaveunit186', gid: g.id, mid: memberId, ay: ay });
+    clearTimeout(__partialOfferQueue._t); __partialOfferQueue._t = setTimeout(__runPartialOffers, 0);
+  } catch(e) {}
+}
 function __queueJoinOffer(g, memberId, ay) {
   try {
     if (!g || !memberId || !ay) return;
@@ -7793,6 +7812,28 @@ async function __runPartialOffers() {
       const gName = groupDisplayName(g, it.ay) || g.name || 'Grup';
       const q = +sessionQuotaFor('group', g.id, it.ay) || 0;
       const __staff = !!(typeof SUPABASE_MODE !== 'undefined' && SUPABASE_MODE && typeof __sbRole !== 'undefined' && __sbRole === 'staff'); // F16
+      if (it.kind === 'leaveunit186') { // v186
+        if (!isMemberEnrolledInMonth(it.mid, it.ay) || memberActiveGroupForMonth(it.mid, it.ay)) continue;
+        const __pmOf186 = x => x.packageMonth || String(x.date || '').slice(0, 7);
+        const __own186 = (state.lessons || []).some(function(l){ return l && !l.groupId && l.status !== 'cancelled' && (l.memberIds || []).includes(it.mid) && __pmOf186(l) === it.ay; })
+          || (state.payments || []).some(function(p){ return p && p.memberId === it.mid && !p.groupId && __pmOf186(p) === it.ay; })
+          || (m.packages || []).some(function(p){ return p && p.month === it.ay; });
+        if (__own186) continue; // zaten bireysel birimi var — sorulmaz
+        const __lbl = pkgMonthLabel(it.ay);
+        let ansU = await plDialog({
+          msg: m.name + ' «' + gName + '» grubundan çıkarıldı.\n\n' + __lbl + ' ayında ne olsun?\n\n' +
+            '• Pasif: ' + __lbl + ' listesinden çıkar (geçmiş aylar, aldığı dersler ve payı korunur).\n' +
+            '• Bireysel: ' + __lbl + ' listesinde bireysel üye olarak kalır (bu ayın ücreti borç görünür).',
+          buttons: [{ label: '⏸ Pasif', value: 'passive', cls: 'ok' }, { label: '👤 Bireysel devam', value: 'individual' }, { label: 'Sonra karar veririm', value: null, cls: 'secondary' }],
+          escValue: null
+        });
+        if (ansU !== 'passive') continue; // varsayilan/Vazgec: eski davranis (listede kalir)
+        __undoSnapshot('Pasife al: ' + m.name + ' — ' + it.ay);
+        __removeMemberFromMonthCore(it.mid, it.ay);
+        changed = true;
+        if (typeof plToast === 'function') { try { plToast('⏸ ' + m.name + ' — ' + __lbl + ' ayından itibaren pasif'); } catch(e) {} }
+        continue;
+      }
       if (it.kind === 'leave') {
         if (partialShareFor(g.id, it.mid, it.ay)) continue;
         if (activeGroupRosterForMonth(g, it.ay).includes(it.mid)) continue; // geri eklendi — pay yok
@@ -7839,7 +7880,7 @@ async function __runPartialOffers() {
           continue;
         }
         const base = +memberMonthlyTotalPrice(it.mid, it.ay) || 0;
-        const sug = base > 0 ? Math.round(base * kalan / q) : 0;
+        const sug = base > 0 ? Math.round(base * kalan / q * 100) / 100 : 0; // v186: 1 ders ucreti × kalan (kurus hassas)
         const ans = await plPrompt(
           '«' + gName + '» ' + pkgMonthLabel(it.ay) + ' paketinde ' + takenG + ' ders yapıldı, ' + kalan + ' ders kaldı.\n\n' +
           m.name + ' için bu ayın ücreti ve ders hakkı kalan derse göre olsun mu? (ders hakkı: ' + kalan + ')\nÜcret (₺) — değiştirebilirsin:\n' +
@@ -7998,6 +8039,37 @@ function __spillPackageMonth179(g, memberId, ctxAy) {
   });
   return best;
 }
+// ===== v186: DEVAM EDEN (SARKAN) PAKETE KATILIM — yerine gelen uye gidenin yerine gecer =====
+// Grubun ctxAy'dan ONCEKI bir pakete ait, ctxAy ve sonrasi tarihli planli dersi varsa o paket "devam ediyor"dur.
+function __groupSpillMonth186(g, ctxAy) {
+  let best = '';
+  (state.lessons || []).forEach(function(l){
+    if (!l || !g || l.groupId !== g.id || l.status !== 'planned') return;
+    const pm = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (pm >= ctxAy || String(l.date || '') < ctxAy + '-01') return;
+    if (!best || pm < best) best = pm;
+  });
+  return best;
+}
+// Yeni uye devam eden pakete (S) de girer: gidenin bos slotu, katilis tarihi, S kaydi, kalan derse gore ucret/hak sorusu.
+function __joinSpilledPackage186(g, mid, ctxAy) {
+  try {
+    if (!g || !mid || !ctxAy) return '';
+    const S = __groupSpillMonth186(g, ctxAy); if (!S) return '';
+    if (activeGroupRosterForMonth(g, S).includes(mid)) return '';
+    const m = state.members.find(function(x){ return x && x.id === mid; }); if (!m) return '';
+    applyRosterChange(g, S, function(mids){ const out = mids.slice(); if (out.includes(mid)) return out; const fi = out.indexOf(''); if (fi >= 0) out[fi] = mid; else out.push(mid); return out; });
+    setMemberMonthly(mid, S, { enrolled: true });
+    try { __closeArchivePeriodAt(m, S); } catch(e) {}
+    if (!g.memberJoinDates) g.memberJoinDates = {};
+    const jd = (ctxAy === currentMonth()) ? todayISO() : (ctxAy + '-01');
+    if (!g.memberJoinDates[mid] || String(g.memberJoinDates[mid]) < S + '-01' || String(g.memberJoinDates[mid]) > jd) g.memberJoinDates[mid] = jd;
+    __queueJoinOffer(g, mid, S); // kalan derse gore ucret + hak (v171)
+    try { syncGroupLessonsToRoster(g.id, S); } catch(e) {}
+    try { __autoNameAfterRosterChange(g, S); } catch(e) {}
+    return S;
+  } catch(e) { return ''; }
+}
 // Onceki paketlerin bu ay ve sonrasi tarihli PLANLI derslerinden uyeyi cikar (paket ayi ne olursa olsun)
 function __dropFromFutureLessons179(g, memberId, ctxAy) {
   let n = 0;
@@ -8115,6 +8187,7 @@ function syncGroupLessonsToRoster(groupId, fromMonth) {
     // v34: her ders KENDI AYININ kadrosuyla guncellenir
     let mids = activeGroupRosterForMonth(g, pm); // v57: kanonik kadro
     mids = __applyRosterOverrides(mids, l, g); // v54: elle cikarma + gec katilim
+    { const __dm186 = String(l.date || '').slice(0, 7); if (__dm186 > pm) mids = mids.filter(function(mid){ const mm = state.members.find(function(x){ return x.id === mid; }); return !(mm && __prepMemberOut(mm, __dm186)); }); } // v186: sarkan paketin dersi — dersin AYINDAN acikca cikarilan (pasif) uye geri yazilmaz
     if (JSON.stringify(l.memberIds||[]) === JSON.stringify(mids)) return;
     l.memberIds = mids.slice();
     if (+g.size) l.size = +g.size;
@@ -8150,6 +8223,7 @@ function assignMemberToSlot(memberId, groupId, slotIndex) {
   // v106 (Kerem): yeni gelen uye derslere KATILDIGI TARIHTEN itibaren yazilir — onceki dersler tiksiz kalir.
   { if (!g.memberJoinDates) g.memberJoinDates = {};
     g.memberJoinDates[memberId] = (__ctxAy === currentMonth()) ? todayISO() : (__ctxAy + '-01'); }
+  __joinSpilledPackage186(g, memberId, __ctxAy); // v186: devam eden (sarkan) pakete de gidenin yerine
   __queueJoinOffer(g, memberId, __ctxAy); // v171: paket baslamissa kalan derse gore ucret onerisi
   __autoNameAfterRosterChange(g, __ctxAy); // v41: ad AY BAZLI guncellenir
   { const _am = state.members.find(x=>x.id===memberId); if (_am && _am.archived && typeof unarchiveMember==='function') unarchiveMember(memberId, __ctxAy); }
@@ -8299,10 +8373,13 @@ function saveMember() {
     try { const __newPid = (document.getElementById('mm-package')||{}).value || ''; const __oldPid = __prevM.defaultPackageId || ''; if (__newPid !== __oldPid) __freezePastMonthsPkg176(__prevM, __ctxM, __oldPid); } catch(e) {}
     const __mm = {};
     __mm.note = __noteVal;
-    if (totalPrice !== null) { __mm.totalPrice = totalPrice; __mm.__prorata = false; } // v171: elle girilen fiyat kalici (bayrak kalkar)
+    if (totalPrice !== null) { __mm.totalPrice = totalPrice; __mm.__prorata = (__sessRaw !== ''); } // v171: elle fiyat kalici · v186 (Kerem): bu aya OZEL hakla girilen ucret yalniz bu ay (sonraki aya tasinmaz)
+    const __oldMonthPid186 = (((__prevM.monthly || {})[__ctxM] || {}).packageId) || __prevM.defaultPackageId || '';
     __mm.packageId = (document.getElementById('mm-package')||{}).value || ''; // v25: paket de AY bazli
     __mm.sessionsOverride = __sessOverride; // v43: ders hakki (bos='' -> otomatik)
     setMemberMonthly(id, __ctxM, __mm);
+    // v186: ay icinde paket TIPI degistiyse o ayin (onceden 8 ile acilmis) paket kaydinin hakki yeni tipe esitlenir
+    try { if (__mm.packageId && __mm.packageId !== __oldMonthPid186) { const __pt186 = (state.packageTypes || []).find(function(p){ return p.id === __mm.packageId; }); const __rec186 = (__prevM.packages || []).find(function(p){ return p && p.month === __ctxM; }); if (__pt186 && +__pt186.sessions > 0 && __rec186) __rec186.sessions = +__pt186.sessions; } } catch(e) {}
   }
   // v23: YENI uye, olusturuldugu ayin listesine otomatik girer (>=2026-08 aylar acik katilim ister)
   if (!__prevM) {
@@ -10509,7 +10586,9 @@ function saveGroup() {
           if (__effR) { applyRosterChange(__pg0, __effR, mids => { const out = mids.map(x => x === rid ? '' : x); while (out.length > 0 && out[out.length-1] === '') out.pop(); return out; }); syncGroupLessonsToRoster(__pg0.id, __effR); }
           __dropFromFutureLessons179(__pg0, rid, __gAy);
           __queuePartialOffer(__pg0, rid, __effR || __gAy);
+          __queueLeaveUnit186(__pg0, rid, __gAy); // v186: baska yere gitmiyorsa "Pasif mi / Bireysel mi"
         });
+        __added.forEach(aid => { __joinSpilledPackage186(__pg0, aid, __gAy); }); // v186: devam eden pakete gidenin yerine
         __added.forEach(aid => __queueJoinOffer(__pg0, aid, __gAy));        // v171
         __autoNameAfterRosterChange(__pg0, __gAy);
       }
@@ -10931,7 +11010,7 @@ function openGroupDetail(id, monthISO) {
     const hasGroupPay = ayPays.length > 0;
     const __paidTL = ayPays.reduce((a,b)=>a+(+b.amount||0),0); // v123
     // v43: KALAN DERS = GRUBUN kalani (tek birim, odemeden bagimsiz) — tum uyelerde ayni. Odeme AYRI (asagidaki tik).
-    const rem = sessionsRemainingFor('group', id, monthISO || currentMonth());
+    const rem = (function(){ const __o = __memberOwnRemaining186(m.id, g, monthISO || currentMonth()); return __o !== null ? __o : sessionsRemainingFor('group', id, monthISO || currentMonth()); })(); // v186: uyenin kendi hakki
     const paid = hasGroupPay;
     const __fs = sessionsFinishState('group', id, monthISO || currentMonth()); // v60: bitti mi, planlandi mi?
     const badge = rem<=0
@@ -12130,7 +12209,34 @@ function openPaymentModal(memberId, editId, groupId, pkgMonthCtx) {
   renderTaxBreakdown();
   renderPayBalanceStrip(); // v123
   __refreshPayCarry181(); // v181
+  __payBase186Set(); // v186
   openModal('modal-payment');
+}
+// ===== v186: ODEME PENCERESI "DERS SAYISI" → bu ayin HAKKI + UCRETI (1 ders ucreti sabit) =====
+function __payBase186Set() {
+  try {
+    const editId = (document.getElementById('mp-id') || {}).value || '';
+    const mid = (document.getElementById('mp-member') || {}).value || '';
+    const gid = (document.getElementById('mp-group') || {}).value || '';
+    const pm = ((document.getElementById('mp-pkg-month') || {}).value) || currentMonth();
+    if (editId || !mid) { window.__payBase186 = null; return; }
+    const q = +memberEffectiveQuota(mid, pm, gid || '') || 0;
+    let price = +memberPriceForGroupMonth(mid, gid || '', pm) || 0;
+    if (!(price > 0)) price = +((document.getElementById('mp-list') || {}).value) || 0;
+    window.__payBase186 = { mid: mid, gid: gid || '', pm: pm, q: q, price: price, per: (q > 0 && price > 0) ? price / q : 0 };
+  } catch(e) { window.__payBase186 = null; }
+}
+function onPaySessionsChange186() {
+  const b = window.__payBase186; if (!b) return;
+  const info = document.getElementById('mp-discount-info');
+  const n = Math.round(+((document.getElementById('mp-sessions') || {}).value) || 0);
+  if (!(n > 0) || !(b.per > 0)) return;
+  const newPrice = (n === b.q) ? b.price : Math.round(n * b.per * 100) / 100;
+  const paid = memberPaidTowardsMonth(b.mid, b.gid, b.pm);
+  document.getElementById('mp-list').value = newPrice;
+  document.getElementById('mp-amount').value = Math.max(0, Math.round((newPrice - paid) * 100) / 100);
+  if (info) info.textContent = (n === b.q) ? '' : ('📐 ' + n + ' ders × ' + money(b.per) + ' ₺ = ' + money(newPrice) + ' ₺ — kaydedince bu üyenin ' + pkgMonthLabel(b.pm) + ' ders hakkı ' + n + ', ücreti ' + money(newPrice) + ' ₺ olur (1 ders ücreti aynı; yalnız bu ay).');
+  try { renderTaxBreakdown(); } catch(e) {}
 }
 // ========== TAX HELPERS ==========
 // v176 (F12): KDV orani TEK KAYNAK — bos/gecersiz = %20 (varsayilan), acikca 0 girilmisse 0.
@@ -12326,6 +12432,7 @@ function onPayMemberChange() {
   }
   renderPayBalanceStrip(); // v123
   __refreshPayCarry181(); // v181
+  __payBase186Set(); // v186
 }
 function savePayment() {
   clearModalErrors('modal-payment');
@@ -12359,6 +12466,21 @@ function savePayment() {
   const isRefund = !!(document.getElementById('mp-refund') && document.getElementById('mp-refund').checked); // v127
   if (isRefund && !(amount > 0)) { markInvalid('mp-amount', 'İade tutarı 0\'dan büyük olmalı'); return; }
   if (isRefund && !note) { markInvalid('mp-note', 'İade için açıklama zorunlu'); alert('⛔ İade kaydı için Not alanına kısa bir açıklama yaz (örn. "2 ders iadesi").'); return; }
+  // v186: Ders Sayisi uyenin bu ayki hakkindan farkliysa → bu ayin HAKKI + UCRETI (ay-ozel); kayit basarisizsa geri alinir
+  let __hk186 = null;
+  if (!id && !isRefund && !(document.getElementById('mp-prorate') && document.getElementById('mp-prorate').checked)) {
+    const __b186 = window.__payBase186; const __pm186 = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
+    const __gEx186 = !groupId || (function(){ const gg = state.groups.find(x => x.id === groupId); if (!gg) return false; return (gg.packages || []).some(p => p && p.month === __pm186); })(); // grup paketi henuz yoksa eski davranis (v172: alan grubun paketini belirler)
+    if (__gEx186 && __b186 && __b186.mid === memberId && __b186.gid === (groupId || '') && __b186.pm === __pm186 && sessions > 0 && sessions !== __b186.q && __b186.per > 0) {
+      const __m186 = state.members.find(x => x.id === memberId);
+      if (__m186) {
+        const __np186 = listPrice > 0 ? listPrice : Math.round(sessions * __b186.per * 100) / 100;
+        __hk186 = { m: __m186, pm: __pm186, prev: (__m186.monthly && __m186.monthly[__pm186]) ? JSON.parse(JSON.stringify(__m186.monthly[__pm186])) : null };
+        setMemberMonthly(memberId, __pm186, { sessionsOverride: sessions, totalPrice: __np186, __prorata: true });
+      }
+    }
+  }
+  const __undo186 = () => { if (!__hk186) return; if (__hk186.prev) __hk186.m.monthly[__hk186.pm] = __hk186.prev; else delete __hk186.m.monthly[__hk186.pm]; };
   if (!isRefund) {
     const __pmMonth = ((document.getElementById('mp-pkg-month')||{}).value) || String(date).slice(0,7);
     const __cap = paymentCapCheck(memberId, groupId, __pmMonth, amount, id || '');
@@ -12367,6 +12489,7 @@ function savePayment() {
         const __dm = state.members.find(x=>x.id===memberId);
         markInvalid('mp-amount', 'Tanımlı fiyat aşılıyor');
         alert(`⛔ ${(__dm&&__dm.name)||'Üye'} — ${__pmMonth} paketi ${money(__cap.defined)} ₺.\nŞimdiye kadar ödenen: ${money(__cap.paid)} ₺.\nEn fazla ${money(__cap.kalan)} ₺ daha alınabilir (taksit toplamı tanımlı fiyatı aşamaz).`);
+        __undo186();
         return;
       }
     } else if (!id) {
@@ -15703,7 +15826,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.02.108-onizleme';
+const APP_VERSION = '2026.10.04.109-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
