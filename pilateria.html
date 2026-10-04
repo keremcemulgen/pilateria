@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.04.111">
+<meta name="app-version" content="2026.10.04.112">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -11886,27 +11886,33 @@ function saveBatchDates() {
     const __mids = g ? activeGroupRosterForMonth(g, packageMonth) : [m.id]; // v57 KOK FIX: o AYIN aktif kadrosu
     const __inst = g ? (g.defaultInstructorId || '') : (m.instructorId || '');
     const __moved = new Set(idsToRemove);
-    __batchDatesRows.forEach(r => { if (r.lessonId) __moved.add(r.lessonId); });
+    // v189 (Kerem): tarihi/saati DEGISMEYEN mevcut ders OLDUGU GIBI sabit — yeniden simule edilmez (elle verilen hoca/kadro korunur)
+    const __off189 = st => st === 'cancelled' || st === 'missed';
+    const __untouched189 = r => { if (!r || !r.lessonId) return false; const L = state.lessons.find(x => x.id === r.lessonId); if (!L) return false; return L.date === r.date && L.time === r.time && !(__off189(L.status) && !__off189(r.status || 'planned')); };
+    __batchDatesRows.forEach(r => { if (r.lessonId && !__untouched189(r)) __moved.add(r.lessonId); });
     const __fixed = state.lessons.filter(l => l.status !== 'cancelled' && l.status !== 'missed' && !__moved.has(l.id));
-    const __rows = __batchDatesRows.map((r,i) => ({...r, __no: i+1})).filter(r => r.date && r.time && r.status !== 'cancelled' && r.status !== 'missed'); // v48: iptal/yanan makine isgal etmez
+    const __rows = __batchDatesRows.map((r,i) => {
+      const L = r.lessonId ? state.lessons.find(x => x.id === r.lessonId) : null; // v189: degisen mevcut ders KENDI hocasi/kadrosu/suresiyle
+      return {...r, __no: i+1, __ins: L ? (L.instructorId || '') : __inst, __m: L ? ((L.memberIds || []).filter(Boolean)) : __mids, __d: (L && +L.durationMin) || __dur };
+    }).filter(r => r.date && r.time && r.status !== 'cancelled' && r.status !== 'missed' && !__untouched189(r)); // v48: iptal/yanan makine isgal etmez · v189: dokunulmayan mevcut ders kontrol edilmez
     const __problems = [];
     const __confDetails = []; // v141: {baslik, tip, blockers:[{id?, simNo?, label}]}
     for (let i = 0; i < __rows.length; i++) {
       const r = __rows[i];
-      const sMin = timeToMinutes(r.time), eMin = sMin + __dur;
-      const peers = __fixed.concat(__rows.filter((x,j) => j !== i).map(x => ({ date:x.date, time:x.time, durationMin:__dur, memberIds:__mids, instructorId:__inst, status:'planned', __sim: x.__no })));
+      const sMin = timeToMinutes(r.time), eMin = sMin + r.__d;
+      const peers = __fixed.concat(__rows.filter((x,j) => j !== i).map(x => ({ date:x.date, time:x.time, durationMin:x.__d, memberIds:x.__m, instructorId:x.__ins, status:'planned', __sim: x.__no })));
       const __overlaps = function(){ return peers.filter(function(l){ return l.date === r.date && timeToMinutes(l.time) < eMin && sMin < timeToMinutes(l.time) + (+l.durationMin || __dur); }); };
       const peak = peakUsageIn(peers, r.date, sMin, eMin);
-      if (peak + __mids.length > getReformers()) {
-        __problems.push(`#${r.__no} — ${fmtDate(r.date)} ${r.time}: en fazla ${getReformers()-peak} makine boş, ${__mids.length} gerekiyor`);
-        __confDetails.push({ baslik: `#${r.__no} — ${fmtDate(r.date)} ${r.time}`, tip: `⛔ makine: en fazla ${getReformers()-peak} boş, ${__mids.length} gerekiyor`, blockers: __overlaps().map(__confBlockerInfo) });
+      if (peak + r.__m.length > getReformers()) {
+        __problems.push(`#${r.__no} — ${fmtDate(r.date)} ${r.time}: en fazla ${getReformers()-peak} makine boş, ${r.__m.length} gerekiyor`);
+        __confDetails.push({ baslik: `#${r.__no} — ${fmtDate(r.date)} ${r.time}`, tip: `⛔ makine: en fazla ${getReformers()-peak} boş, ${r.__m.length} gerekiyor`, blockers: __overlaps().map(__confBlockerInfo) });
         continue;
       }
-      if (__inst) {
-        const busy = peers.find(l => l.date === r.date && (l.instructorId||'') === __inst && timeToMinutes(l.time) < eMin && sMin < timeToMinutes(l.time) + (+l.durationMin || __dur));
+      if (r.__ins) { // v189: satirin KENDI hocasi (mevcut derste elle verilen hoca; yeni satirda varsayilan)
+        const busy = peers.find(l => l.date === r.date && (l.instructorId||'') === r.__ins && timeToMinutes(l.time) < eMin && sMin < timeToMinutes(l.time) + (+l.durationMin || __dur));
         if (busy) {
-          __problems.push(`#${r.__no} — ${fmtDate(r.date)} ${r.time}: ${instructorName(__inst)} aynı anda başka derste`);
-          __confDetails.push({ baslik: `#${r.__no} — ${fmtDate(r.date)} ${r.time}`, tip: `⛔ hoca: ${escapeHtml(instructorName(__inst))} aynı anda başka derste`, blockers: [__confBlockerInfo(busy)] });
+          __problems.push(`#${r.__no} — ${fmtDate(r.date)} ${r.time}: ${instructorName(r.__ins)} aynı anda başka derste`);
+          __confDetails.push({ baslik: `#${r.__no} — ${fmtDate(r.date)} ${r.time}`, tip: `⛔ hoca: ${escapeHtml(instructorName(r.__ins))} aynı anda başka derste`, blockers: [__confBlockerInfo(busy)] });
         }
       }
     }
@@ -15878,7 +15884,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.04.111';
+const APP_VERSION = '2026.10.04.112';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
