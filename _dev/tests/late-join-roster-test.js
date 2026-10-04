@@ -35,13 +35,20 @@ setTimeout(()=>{ try {
   `);
   const L=id=>w.S().lessons.find(x=>x.id===id);
 
-  console.log('[1] m4 gruba katilir -> sync: BITEN dersler korunur, PLANLI dersler otomatik dolar');
+  console.log('[1] m4 (KENDI HAKKI 5) gruba katilir -> sync: biten dersler korunur; v187: kendi hakki olan OTOMATIK eklenmez, Kerem secer');
   w.eval(`state.groups[0].memberIds=['m1','m2','m3','m4']; state.groups[0].monthlyMembers['2026-07']=['m1','m2','m3','m4'];
           syncGroupLessonsToRoster('G','2026-07');`);
   t('L1 (yapildi) hala 3 kisi (m4 EKLENMEDI)', J(L('L1').memberIds)===J(['m1','m2','m3']), J(L('L1').memberIds));
   t('L3 (yandi) hala 3 kisi', J(L('L3').memberIds)===J(['m1','m2','m3']), J(L('L3').memberIds));
-  t('L4 (planli) artik 4 kisi (m4 OTOMATIK eklendi)', L('L4').memberIds.includes('m4') && L('L4').memberIds.length===4, J(L('L4').memberIds));
-  t('L5 (planli) artik 4 kisi', L('L5').memberIds.includes('m4'), J(L('L5').memberIds));
+  t('v188: hak 5 >= kalan 2 planli ders → L4 e m4 OTOMATIK eklendi', L('L4').memberIds.includes('m4'), J(L('L4').memberIds));
+  // v187 hala gecerli: hak kalan derslerden AZSA (1 < 2) otomatik eklenmez; Kerem secer, secim sync te KORUNUR
+  w.eval(`['L4','L5'].forEach(id=>{ const l=S().lessons.find(x=>x.id===id); l.memberIds=['m1','m2','m3']; });
+          S().members.find(x=>x.id==='m4').monthly['2026-07'].sessionsOverride=1; syncGroupLessonsToRoster('G','2026-07');`);
+  t('v187: hak 1 < kalan 2 → m4 OTOMATIK eklenmedi', !L('L4').memberIds.includes('m4') && !L('L5').memberIds.includes('m4'), J(L('L4').memberIds));
+  w.eval(`['L4','L5'].forEach(id=>{ const l=S().lessons.find(x=>x.id===id); l.memberIds=['m1','m2','m3','m4']; });
+          S().members.find(x=>x.id==='m4').monthly['2026-07'].sessionsOverride=5; syncGroupLessonsToRoster('G','2026-07');`);
+  t('L4 (planli) elle secilen m4 sync sonrasi KORUNDU (4 kisi)', L('L4').memberIds.includes('m4') && L('L4').memberIds.length===4, J(L('L4').memberIds));
+  t('L5 (planli) elle secilen m4 KORUNDU', L('L5').memberIds.includes('m4'), J(L('L5').memberIds));
 
   console.log('[2] PARA: biten 3-kisilik ders vs 4-kisilik planli ders farkli taban');
   t('L1 (3 kisi) taban = 1687.5', R(w.perLessonPriceForLesson(L('L1')))===1687.5, w.perLessonPriceForLesson(L('L1')));
@@ -65,7 +72,11 @@ setTimeout(()=>{ try {
     state.lessons.push(L('E28','28',['m1','m2','m3']));
     applyV10MigrationToState(state);`);
   t('E20 (20<25, katilim oncesi) m4 EKLENMEDI', !L('E20').memberIds.includes('m4'), J(L('E20').memberIds));
-  t('E28 (28>=25, katilim sonrasi) m4 EKLENDI', L('E28').memberIds.includes('m4'), J(L('E28').memberIds));
+  t('v188: E28 (katilim sonrasi) hak 5 yeterli → m4 OTOMATIK eklendi', L('E28').memberIds.includes('m4'), J(L('E28').memberIds));
+  // kendi hakki olmayan gec katilan: katilim tarihi kurali aynen calisir
+  w.eval(`delete S().members.find(x=>x.id==='m4').monthly['2026-07'].sessionsOverride; applyV10MigrationToState(state);`);
+  t('hak yok: E20 (katilim oncesi) m4 yine EKLENMEDI', !L('E20').memberIds.includes('m4'), J(L('E20').memberIds));
+  t('hak yok: E28 (28>=25, katilim sonrasi) m4 EKLENDI', L('E28').memberIds.includes('m4'), J(L('E28').memberIds));
 
   console.log('[5] GEC KATILIM + elle ekleme: joinDate oncesi derse ELLE eklenmis m4 KORUNUR');
   w.eval(`const l=S().lessons.find(x=>x.id==='E20'); l.memberIds=['m1','m2','m3','m4']; // Kerem elle ekledi

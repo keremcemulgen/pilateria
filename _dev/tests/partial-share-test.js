@@ -199,8 +199,12 @@ setTimeout(async ()=>{ try {
   w.eval("assignMemberToSlot('D','G1',0)"); await tick();
   t('F15: DENIZ ders hakki 6 (sessionsOverride), fiyat 6.375', w.eval(`sessionQuotaFor('member','D','${CM}')`)===6 && w.eval(`memberMonthlyTotalPrice('D','${CM}')`)===6375);
   t('F15: soru metni hakki soyluyor', seen('ders hakkı: 6'));
+  // v188: DENIZ'in hakki (6) kalan planli dersleri karsiliyor → otomatik eklenir (secilecek bir sey yok)
+  const __p0a = w.eval("JSON.stringify((state.lessons.find(x=>x.id==='P0')||{}).memberIds)");
+  t('v188: P0 a DENIZ otomatik eklendi (hak yeterli), AYSE cikti', /"D"/.test(__p0a) && !/"A"/.test(__p0a) && /"B"/.test(__p0a), __p0a);
+  w.eval("(function(){ const l=state.lessons.find(x=>x.id==='P0'); l.memberIds=['D','B']; syncGroupLessonsToRoster('G1', l.packageMonth); })()");
   const __p0 = w.eval("JSON.stringify((state.lessons.find(x=>x.id==='P0')||{}).memberIds)");
-  t('planli ders P0 kadrosu DENIZ+BURCU', /"D"/.test(__p0) && /"B"/.test(__p0) && !/"A"/.test(__p0), __p0);
+  t('planli ders P0 kadrosu (elle secim sonrasi, sync korur) DENIZ+BURCU', /"D"/.test(__p0) && /"B"/.test(__p0) && !/"A"/.test(__p0), __p0);
   const __baseP0 = w.eval("perLessonPriceForLesson(Object.assign({packageOwnerType:'group',packageOwnerId:'G1'}, state.lessons.find(x=>x.id==='P0')))");
   t('P0 taban = DENIZ 6.375/6 + BURCU 8.500/8 = 2.125', __baseP0===2125, __baseP0);
   w.eval(`__prepContinueMemberCore('D','${CM}','${NM}');`);
