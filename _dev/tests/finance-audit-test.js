@@ -126,7 +126,7 @@ setTimeout(async ()=>{ try {
   w.eval("closeWaModal(); document.getElementById('member-month').value='"+PREV1+"'; renderMembers(); openWaBulkModal(['C'],'wa-reminder');"); await tick();
   { const txt = (d.getElementById('modal-whatsapp-bulk')||{}).textContent||''; t('toplu WhatsApp: gorunen ayin (' + PREV1 + ') bakiyesi 4.000 ₺', /4\.000 ₺/.test(txt), txt.replace(/\s+/g,' ').slice(0,140)); }
   w.eval("const b=document.getElementById('modal-whatsapp-bulk'); if (b) b.remove(); document.getElementById('member-month').value='"+CM+"';");
-  w.eval(`state.payments = state.payments.filter(p=>!['pap','pbp'].includes(p.id)); state.lessons.push({id:'tdy',groupId:'G1',memberIds:['A','B'],date:'${TODAY}',time:'18:00',status:'planned',packageMonth:'${PREV1}',packageOwnerType:'group',packageOwnerId:'G1',instructorId:'h1',size:2});`);
+  w.eval(`state.payments = state.payments.filter(p=>!['pap','pbp'].includes(p.id)); state.lessons = state.lessons.filter(l=>!(l.groupId==='G1' && l.date==='${TODAY}')); /* v186: tarih-bagimsiz — fikstur dersi bugune denk gelirse 'bugunun dersi' o olurdu */ state.lessons.push({id:'tdy',groupId:'G1',memberIds:['A','B'],date:'${TODAY}',time:'18:00',status:'planned',packageMonth:'${PREV1}',packageOwnerType:'group',packageOwnerId:'G1',instructorId:'h1',size:2});`);
   { const r = J('getTodayMessageTargets()'); const g = (r.groups||[]).find(x=>x.group && x.group.id==='G1'); t('bugunun dersi (paketi ' + PREV1 + '): grup bakiyesi 9.000 (o paketin ayi)', !!g && eq(g.balance, 9000), g && g.balance); }
 
   console.log('[F5] "Onceki ay listesini bu aya cek": 2. paket klonu tasinmaz (Yeni Ay Hazirligi ile ayni kural)');
