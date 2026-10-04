@@ -76,6 +76,13 @@ setTimeout(()=>{ try {
     __mk('p','member','u10','',['u10'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8 ama PASIFE ALINDI -> listede DEGIL
     __mk('q','group','gpasif','gpasif',['u3','u4'],'${PM}',['completed','completed','completed','completed','completed','completed','completed','completed']); // PM 8/8 ama grup PASIF -> listede DEGIL
   `);
+  // v190 (Kerem, karar B): yeni paketle gecilen / v158 ile dusen paket artik yalniz GORULDU isaretliyse duser;
+  // gorulmemisken Kerem isaretleyene kadar listede kalir. Eski kanon "gorulen" satirlar uzerinden dogrulanir.
+  w.eval("__LF_SEEN_SINCE190 = '2000-01';"); // v190: yayin esigi devre disi (test tarihe bagimsiz)
+  w.renderDashboard();
+  { const __b = d.getElementById('low-members').innerHTML;
+    t('v190: GORULMEMIS iken G BITTIPM (v158) ve G ROLL (yeni paket basladi) listede KALIR', /G BITTIPM/.test(__b) && /G ROLL/.test(__b), __b.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,300)); }
+  w.eval(`['gbitpm','groll'].forEach(function(id){ const g=state.groups.find(function(x){return x.id===id;}); g.lfSeen={'${PM}':todayISO()}; });`);
   w.renderDashboard();
   const lh = d.getElementById('low-members').innerHTML;
   const pmLbl = ev("pkgMonthLabel('"+PM+"')");
@@ -105,7 +112,7 @@ setTimeout(()=>{ try {
   t('erken kapanista 3/8 — Bitti', lh.indexOf('✅ 3/8 — Bitti') !== -1);
   t('sarkan satirda 📦 + ay adi (' + pmLbl + ')', lh.indexOf('📦 ' + pmLbl) !== -1);
   t('📦 yalniz sarkanlarda (3 adet: gpm, u8, u9 — v158: gbitpm dustu)', lh.split('📦').length - 1 === 3, lh.split('📦').length - 1);
-  const satirlar = lh.split('class="row between"').length - 1;
+  const satirlar = lh.split('class="row between lf-row-190').length - 1; // v190: satir sinifi
   t('7 satir (gpm,gcm + u1,u2,u7,u8,u9 — v158: gbitpm dustu)', satirlar === 7, satirlar);
 
   console.log('[4] SATIR -> DETAY: sarkan satir KENDI ayinin detayina gider + SAYAC + SIRA');

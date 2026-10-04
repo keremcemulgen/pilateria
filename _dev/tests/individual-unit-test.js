@@ -77,9 +77,13 @@ setTimeout(async ()=>{ try {
   console.log('[3] GERCEK yeni paket varsa eski paketin "bitti" satiri yine duser (regresyon)');
   fixtureSarkan('completed');
   w.eval(`state.groups[0].packages.push({month:'${CM}',startDate:'${CM}-01',sessions:8,price:8500,status:'active'}); state.members.find(m=>m.id==='BX').packages.push({month:'${CM}',startDate:'${CM}-01',sessions:8,price:8500,status:'active'});`);
+  // v190 (Kerem, karar B): yeni paketle gecilen satir yalniz GORULDU isaretliyse duser; gorulmemisken Kerem isaretleyene kadar kalir
+  { const h0 = lowHtml();
+    t('v190: GORULMEMIS iken yeni paket kaydina ragmen grup + bireysel LISTEDE KALIR', /DUYGU/.test(h0) && /BIREYSEL/.test(h0), h0.replace(/<[^>]*>/g,' ').slice(0,160)); }
+  w.eval(`state.groups[0].lfSeen={'${PREV2}':todayISO()}; state.members.find(m=>m.id==='BX').lfSeen={'${PREV2}':todayISO()};`);
   { const h = lowHtml();
-    t('yeni paket kaydi varken grup DUSER', !/DUYGU/.test(h));
-    t('yeni paket kaydi varken bireysel DUSER', !/BIREYSEL/.test(h));
+    t('yeni paket kaydi varken grup DUSER (gorulduyse)', !/DUYGU/.test(h));
+    t('yeni paket kaydi varken bireysel DUSER (gorulduyse)', !/BIREYSEL/.test(h));
     t('superseded true/true', w.eval(`__supersededGroupFin('G1','${PREV2}')`)===true && w.eval(`__supersededMemberFin('BX','${PREV2}')`)===true);
   }
 

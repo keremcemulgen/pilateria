@@ -71,8 +71,17 @@ setTimeout(()=>{ try {
   `);
 
   console.log('[1] BITEN: yeni aya yazilan/2. paketi acilan DUSER, devami olmayan KALIR');
+  // v190 (Kerem, karar B): v157/v158 dusme kurallari artik yalniz GORULDU isaretli paket icin; gorulmemis paket Kerem
+  // isaretleyene kadar listede kalir. Eski kanon aynen "gorulen" satirlar uzerinden dogrulanir.
+  w.eval("__LF_SEEN_SINCE190 = '2000-01';"); // v190: yayin esigi devre disi (test tarihe bagimsiz)
+  w.eval(`(function(){ const once=document.getElementById('low-members'); renderDashboard(); window.__lf190before=once.innerHTML; })()`);
+  const __b190 = w.eval('window.__lf190before');
+  t('v190: GORULMEMIS iken ASU / CEREN / DILA-EMEL / FUNDA-GAMZE / HALE-IPEK listede KALIR', ['ASU ESKI','CEREN CIFT','DILA D - EMEL E','FUNDA F - GAMZE G','HALE H - IPEK I'].every(function(n){ return __b190.indexOf(n) !== -1; }), __b190.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,300));
+  w.eval(`['uA','uC','uH','uB'].forEach(function(id){ const m=state.members.find(function(x){return x.id===id;}); m.lfSeen={'${PM}':todayISO()}; });
+          ['gA','gB','gC'].forEach(function(id){ const g=state.groups.find(function(x){return x.id===id;}); g.lfSeen={'${PM}':todayISO()}; });`);
   w.renderDashboard();
   const lf = d.getElementById('low-members').innerHTML;
+  t('v190: gorulen ama devami olmayan BUKET / FUNDA-GAMZE... (asagida eski kanon) — gorulen satir SOLUK sinifiyla', /lf-seen-row-190/.test(lf));
   t('ASU ESKI (CM kaydi var) listede DEGIL', lf.indexOf('ASU ESKI')===-1, (lf.match(/ASU ESKI[^<]*/)||[''])[0]);
   t('BUKET KALIR (devami yok) listede', lf.indexOf('BUKET KALIR')!==-1);
   t('CEREN CIFT (ayni ay 2. paket acilmis) listede DEGIL', !/CEREN CIFT\s*</.test(lf.replace(/CEREN CIFT \(2\. Paket\)/g,'')), (lf.match(/CEREN CIFT[^<]*/)||[''])[0]);
