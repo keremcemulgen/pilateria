@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.14.115">
+<meta name="app-version" content="2026.10.14.117">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -343,6 +343,8 @@
   /* Ödeme durumu renklendirmesi: sarı = ödeme yapmamış, yeşil = yapmış */
   #members-table tr.pay-due td { background: #FFF8E1; }           /* sarı — ödeme bekleniyor */
   #members-table tr.pay-ok  td { background: #E8F5E9; }           /* yeşil — ödeme alındı */
+  #members-table tr.pay-part td:first-child { box-shadow: inset 4px 0 0 #f0a000; } /* v194: kısmi ödeme — turuncu şerit */
+  .pay-part-badge-194 { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:10px; background:#FFF3C4; color:#7a5b00; font-size:11px; font-weight:600; white-space:nowrap; vertical-align:middle; }
   /* v109 (Kerem): grup adi + birlesik hucreler SABIT renk — ilk satirin (bos-kirmizi/yesil/hover) rengini ASLA almaz */
   #members-table td.grp-name-cell { background: #F3E6C7 !important; }
   #members-table td.grp-merge { background: #FBF5E7 !important; }
@@ -1356,6 +1358,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
     <div class="stat"><div class="label" id="s-occupancy-label">Bu Ay Doluluk</div><div class="value" id="s-occupancy">—</div></div>
     <div class="stat bad"><div class="label">1 Kalan / Biten</div><div class="value" id="s-low">0</div></div>
   </div>
+  <div id="dash-sync-status-top" style="margin:-4px 0 10px 2px;font-size:12px;color:var(--muted);"></div><!-- v193: bulut/uygulama ders sayimi kaniti ustte -->
   <div class="card">
     <h2>🔔 Yaklaşan Dersler (Bugün kalan + Yarın)</h2>
     <div id="today-lessons"></div>
@@ -6889,6 +6892,14 @@ function renderMembers() {
       isPaid = __own > 0 ? ((+r.paid || 0) >= __own - 0.005) : (+r.paid || 0) > 0;
     }
     if (!r.isEmpty) rowClasses.push(isPaid ? 'pay-ok' : 'pay-due');
+    // v194: KISMI odeme (0 < odenen < kendi fiyati) — rozet + 🟡 tik; satir sarida kalir, sol serit turuncu
+    const __own194 = r.isEmpty ? 0 : (r.type === 'group' ? (+r.ownPrice || 0) : (+r.totalPrice || 0));
+    const __paid194 = +r.paid || 0;
+    const __part194 = !r.isEmpty && !isPaid && __own194 > 0 && __paid194 > 0.005 && __paid194 < __own194 - 0.005;
+    if (__part194) rowClasses.push('pay-part');
+    const __partBadge194 = __part194 ? ' <span class="pay-part-badge-194" title="Kısmi ödeme — kalan ' + money(__own194 - __paid194) + ' ₺">🟡 Kısmi ' + money(__paid194) + ' / ' + money(__own194) + ' · kalan ' + money(__own194 - __paid194) + ' ₺</span>' : '';
+    const __tick194 = __part194 ? '🟡' : ((+r.paid||0)>0 ? '✅' : '⬜');
+    const __tickTitle194 = __part194 ? ('Kısmi ödeme: ' + money(__paid194) + ' / ' + money(__own194) + ' ₺ — tıkla: kalan ' + money(__own194 - __paid194) + ' ₺ tahsil') : ((+r.paid||0)>0 ? 'Ödemeyi kaldır' : 'Varsayılan paket fiyatıyla hızlı ödeme kaydı yarat');
     const rowClass = rowClasses.join(' ');
 
     // Grup İsmi sütunu (en sol): grup ise ilk satırda rowspan, bireyselde "—"
@@ -6972,7 +6983,7 @@ function renderMembers() {
       return `<tr class="${rowClass}" onclick="openMemberDetail('${r.memberId}')" style="cursor:pointer;background:#fbf8f1;">
         <td>${idx+1}</td>
         ${groupNameCell}
-        <td><b>${escapeHtml(r.name)}</b> <span class="badge" style="background:#f5f0e0;color:#8a8573;">ayrıldı · ${r.partialSessions} ders</span>${__own > 0 ? ' <small style="color:var(--muted);white-space:nowrap;">· ' + money(__own) + ' ₺</small>' : ''}</td>
+        <td><b>${escapeHtml(r.name)}</b> <span class="badge" style="background:#f5f0e0;color:#8a8573;">ayrıldı · ${r.partialSessions} ders</span>${__own > 0 ? ' <small style="color:var(--muted);white-space:nowrap;">· ' + money(__own) + ' ₺</small>' : ''}${__partBadge194}</td>
         <td>—</td>
         <td>—</td>
         <td>${r.payDate ? fmtDate(r.payDate) : '—'}</td>
@@ -6982,7 +6993,7 @@ function renderMembers() {
         <td style="font-size:11px;max-width:180px;">${escapeHtml(r.note||'')}</td>
         <td>${r.method?`<span class="badge ${r.method==='IBAN'?'blue':''}">${r.method}</span>`:'—'}</td>
         <td onclick="event.stopPropagation()">
-          <button class="btn small pl-owner-only" onclick="togglePaidTick('${r.memberId}','${r.groupId}',event,'${monthISO||''}')" title="${__pd>0?'Ödemeyi kaldır':'Pay tutarıyla hızlı ödeme kaydı yarat'}" style="${__pd>0?'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;':'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;'}font-weight:600;">${__pd>0?'✅':'⬜'}</button>
+          <button class="btn small pl-owner-only" onclick="togglePaidTick('${r.memberId}','${r.groupId}',event,'${monthISO||''}')" title="${__part194 ? __tickTitle194 : (__pd>0?'Ödemeyi kaldır':'Pay tutarıyla hızlı ödeme kaydı yarat')}" style="${__part194?'background:#FFF3C4;color:#7a5b00;border:1px solid #f0a000;':(__pd>0?'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;':'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;')}font-weight:600;">${__part194?'🟡':(__pd>0?'✅':'⬜')}</button>
           <button class="btn small pl-owner-only" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId}','${monthISO||''}')" title="Bu gruba ödeme al">+ ₺</button>
           <button class="btn small secondary pl-owner-only" onclick="editPartialShare('${r.groupId}','${r.memberId}','${monthISO||''}')" title="Payın ücretini/ders sayısını düzenle">✏️</button>
           <button class="btn small secondary pl-owner-only" onclick="deletePartialShare('${r.groupId}','${r.memberId}','${monthISO||''}')" title="Pay kaydını sil">✕</button>
@@ -6997,7 +7008,7 @@ function renderMembers() {
     return `<tr class="${rowClass}" onclick="openMemberDetail('${r.memberId}')" style="cursor:pointer;">
       <td>${idx+1}</td>
       ${groupNameCell}
-      <td><b>${r.name}</b>${r.type==='group' && r.ownPrice ? ' <small style="color:var(--muted);white-space:nowrap;">· '+money(r.ownPrice)+' ₺</small>' : ''}</td>
+      <td><b>${r.name}</b>${r.type==='group' && r.ownPrice ? ' <small style="color:var(--muted);white-space:nowrap;">· '+money(r.ownPrice)+' ₺</small>' : ''}${__partBadge194}</td>
       ${pkgStartCell}
       <td>${r.pkgEnd ? fmtDate(r.pkgEnd) : '—'}</td>
       <td>${r.payDate ? fmtDate(r.payDate) : '—'}</td>
@@ -7008,7 +7019,7 @@ function renderMembers() {
       <td>${r.method?`<span class="badge ${r.method==='IBAN'?'blue':''}">${r.method}</span>`:'—'}</td>
       <td onclick="event.stopPropagation()">
         <button class="btn small secondary" onclick="openMemberModal('${r.memberId}')" title="Üyeyi düzenle">✏️</button>
-        <button class="btn small pl-owner-only" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)" title="${(+r.paid||0)>0?'Ödemeyi kaldır':'Varsayılan paket fiyatıyla hızlı ödeme kaydı yarat'}" style="${(+r.paid||0)>0?'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;':'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;'}font-weight:600;">${(+r.paid||0)>0?'✅':'⬜'}</button>
+        <button class="btn small pl-owner-only" onclick="togglePaidTick('${r.memberId}','${r.groupId||''}',event)" title="${__tickTitle194}" style="${__part194?'background:#FFF3C4;color:#7a5b00;border:1px solid #f0a000;':((+r.paid||0)>0?'background:#E8F5E9;color:#2E7D32;border:1px solid #2E7D32;':'background:#FFF8E1;color:#8a7b20;border:1px dashed #c9b85f;')}font-weight:600;">${__tick194}</button>
         <button class="btn small pl-owner-only" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')" title="Hızlı ödeme al (manuel)">+ ₺</button>
         ${monthISO ? `<button class="btn small" onclick="removeMemberFromMonth('${r.memberId}','${monthISO}')" title="Sadece bu aydan çıkar (geçmiş aylar etkilenmez)" style="background:#fff3e0;color:#e65100;border:1px solid #ffb74d;">🗓️✕</button>` : ''}
       </td>
@@ -15641,11 +15652,15 @@ function setCloudDot(mode) {
 function __renderSyncStatusLine(mode, last) {
   const el = document.getElementById('dash-sync-status');
   if (!el) return;
-  if (SUPABASE_MODE && !sbClient) { el.textContent = ''; return; }
+  const __top193 = document.getElementById('dash-sync-status-top'); // v193: ayni metin sayac kutularinin altinda da
+  const __mirror193 = function(){ try { if (__top193) __top193.innerHTML = el.innerHTML; } catch(e) {} };
+  if (SUPABASE_MODE && !sbClient) { el.textContent = ''; __mirror193(); return; }
   if (mode === 'offline') {
     el.innerHTML = '⚠️ <b style="color:#c62828;">Buluta GÖNDERİLEMİYOR</b> — değişiklikler bu cihazda bekliyor' + (last ? ' · son başarılı gönderim: ' + last : '') + ' · <a href="#" onclick="cloudDotClick();return false;">şimdi dene</a>';
+    __mirror193();
   } else if (mode === 'syncing' || mode === 'pending') {
     el.textContent = '☁️ Buluta yazılıyor…';
+    __mirror193();
   } else {
     // v192 (Kerem: "dersler gorunmeli KESINLIKLE"): bulut sayimi = uygulama sayimi kaniti; esit degilse kirmizi uyari
     let __cnt192 = '';
@@ -15658,6 +15673,7 @@ function __renderSyncStatusLine(mode, last) {
       }
     } catch(e) { __cnt192 = ''; }
     el.innerHTML = '☁️ Bulut senkron aktif' + (last ? ' · son gönderim: ' + escapeHtml(String(last)) : '') + __cnt192;
+    __mirror193();
   }
 }
 // v192: tam cekimden sonra bulut/uygulama ders sayimi esit degilse sesli uyari (tek kaynak: __sbCloudCounts)
@@ -16082,7 +16098,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.14.115';
+const APP_VERSION = '2026.10.14.117';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
