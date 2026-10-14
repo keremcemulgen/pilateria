@@ -34,7 +34,7 @@ setTimeout(async function(){try{
 
   console.log('[4] Kod: sbLoadAll + sbResync abort guard');
   t("sbLoadAll __loadOk abort", /if \(!__loadOk\) \{[\s\S]*?return; \}/.test(html));
-  t("sbResync __resyncOk abort", /if \(!__resyncOk\) \{[\s\S]{0,90}?return; \}/.test(html));
+  t("sbResync __resyncOk abort", /if \(!__resyncOk\) \{[\s\S]{0,400}?return; \}/.test(html)); // v192: eksik cekimde uyari (toast + nokta) eklendi, bloğun sonu yine return
 
   console.log("\n=== sync-nocache: "+pass+" OK, "+fail+" FAIL ===");
   process.exit(fail?1:0);
