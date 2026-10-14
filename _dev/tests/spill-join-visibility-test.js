@@ -69,7 +69,9 @@ setTimeout(async () => { try {
     t('Eylul aktif kadro: SILA+IKRA+YASEMIN+KUMIS', J(w, `activeGroupRosterForMonth(state.groups[0],'${S}').slice().sort()`) === JSON.stringify(['I1','S1','Y1',k].sort()), J(w, `activeGroupRosterForMonth(state.groups[0],'${S}')`));
     t('Nese "ayrildi · 2 ders" payi KORUNDU', partialN(w), J(w, 'state.groups[0].monthlyPartials'));
     const inLes = J(w, `state.lessons.filter(l=>l.groupId==='G'&&l.status==='planned').map(l=>l.memberIds.includes('${k}'))`);
-    t('KUMIS sarkan 6 planli dersin HEPSINDE', inLes === JSON.stringify([true,true,true,true,true,true]), inLes);
+    // v191: TARIHTEN BAGIMSIZ — baglam ayi bu ay ise katilis tarihi BUGUN (v106), degilse ayin 1'i; ondan sonraki dersler
+    const expLes = J(w, `(function(){ const jd = ('${ctx}' === currentMonth()) ? todayISO() : '${ctx}-01'; return state.lessons.filter(l=>l.groupId==='G'&&l.status==='planned').map(l=>l.date >= jd); })()`);
+    t('KUMIS sarkan planli derslerin KATILIS TARIHINDEN SONRAKILERINDE', inLes === expLes && JSON.parse(expLes).some(Boolean), inLes + ' / beklenen ' + expLes);
     t('yapilmis dersler (Nese ile) DOKUNULMADI', J(w, `state.lessons.filter(l=>l.status==='completed').map(l=>l.memberIds.join(','))`) === JSON.stringify(['I1,N1,S1,Y1','I1,N1,S1,Y1']));
     if (ctx === S) {
       w.eval(`document.getElementById('member-search').value='KUMIS'; switchPage('members'); renderMembers();`); await tick();
