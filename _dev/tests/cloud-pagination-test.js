@@ -71,6 +71,7 @@ setTimeout(async function(){try{
   t('__sbCloudCounts.lessons = 5500', w.eval("__sbCloudCounts.lessons")===5500, w.eval("JSON.stringify(__sbCloudCounts)"));
   w.eval("__renderSyncStatusLine('ok','')");
   t('panel: "bulut 5.500 ders = uygulama 5.500"', /bulut 5\.500 ders = uygulama 5\.500/.test(w.document.getElementById('dash-sync-status').textContent), w.document.getElementById('dash-sync-status').textContent);
+  t('v193: ayni metin sayac kutularinin ALTINDA da (dash-sync-status-top)', /bulut 5\.500 ders = uygulama 5\.500/.test((w.document.getElementById('dash-sync-status-top')||{}).textContent||''), (w.document.getElementById('dash-sync-status-top')||{}).textContent);
   w.eval("state.lessons = state.lessons.slice(0, 5000); __renderSyncStatusLine('ok','')");
   t('uygulama eksikse panelde KIRMIZI "EKSİK" uyarisi', /EKSİK: bulut 5\.500 ders, uygulama 5\.000/.test(w.document.getElementById('dash-sync-status').textContent), w.document.getElementById('dash-sync-status').textContent);
 
