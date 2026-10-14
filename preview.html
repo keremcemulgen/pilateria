@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.14.114-onizleme">
+<meta name="app-version" content="2026.10.14.115-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -14767,7 +14767,7 @@ async function sbResync(reason) {
       try { const r = await __sbSelectAll191(t); /* v191: SAYFALI */ if (r && r.error) __resyncOk = false; (r.data || []).forEach(row => { if (!row || __sbBadKey(String(row.id))) return; all[t][row.id] = row.data; }); }
       catch(e) { __resyncOk = false; console.error('[sb] resync select', t, e); }
     }
-    if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); return; }
+    if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); try { setCloudDot && setCloudDot('offline'); if (typeof plToast === 'function') plToast('⚠️ Buluttan eksik çekim — veriler korundu, tekrar denenecek', 6000); } catch(e) {} return; }
     __trace('RESYNC('+reason+'): TAM TAZELE (sunucudan tüm veri)');
     __sbHarvestVer(all);
     // v115 KORUMA: ÜZERİNE YAZMADAN ÖNCE yerel anlık yedek. Günlük halka günde yalnız bir kez
@@ -14804,6 +14804,7 @@ async function sbResync(reason) {
     state = __incoming; applyV10MigrationToState(state); sanitizeStateText(state); save();
     window.__pilSuppressDirty = false; __sbApplying = false;
     sbSnapshotShadow(sbStateToRows());
+    try { __sbVerifyCounts192('tazeleme'); } catch(e) {} // v192
     __refreshUIWhenIdle(); // v122: mesgulse ERTELENIR ama KAYBOLMAZ (eskiden sessizce atiliyordu)
   } catch(e) { console.error('[sb] resync', e); }
   finally { __sbResyncBusy = false; }
@@ -15037,6 +15038,7 @@ async function __restoreDailyBackupNow(day) {
 // Sayfa siniri sunucuda daha kucuk olsa bile 'count' ile eksiksiz; herhangi bir sayfa hata verirse {error} doner (cagiran
 // eksik veriyi state'e YAZMAZ). range() desteklemeyen eski/sahte istemcide tek istek (geri uyumlu).
 var __SB_PAGE191 = 1000;
+var __sbCloudCounts = {}; // v192: son TAM cekimde sunucudan gelen satir sayilari (panelde kanit)
 async function __sbSelectAll191(t) {
   const rows = [];
   let total = null;
@@ -15053,6 +15055,13 @@ async function __sbSelectAll191(t) {
     if (total !== null) { if (rows.length >= total) break; }
     else if (d.length < __SB_PAGE191) break;
   }
+  // v192 BUTUNLUK: sunucu sayimi ile gelen satir sayisi uyusmuyorsa sayimi yeniden sor; hala eksikse HATA (eksik veri yazilmaz)
+  if (total !== null && rows.length < total) {
+    let again = null;
+    try { let q2 = sbClient.from(t).select('id', { count: 'exact' }); if (q2 && typeof q2.range === 'function') q2 = q2.range(0, 0); const r2 = await q2; if (r2 && !r2.error && typeof r2.count === 'number') again = r2.count; } catch(e) {}
+    if (again === null || rows.length < again) { try { __trace('⛔ EKSİK ÇEKİM ' + t + ': sunucu ' + (again !== null ? again : total) + ' / gelen ' + rows.length + ' — yerel korundu'); } catch(e) {} return { data: null, error: { message: 'eksik çekim: ' + t + ' ' + rows.length + '/' + (again !== null ? again : total) } }; }
+  }
+  __sbCloudCounts[t] = rows.length;
   return { data: rows, error: null };
 }
 async function sbLoadAll() {
@@ -15146,6 +15155,7 @@ async function sbLoadAll() {
   __refreshUIInPlace();
   sbSubscribeAll();
   setCloudDot && setCloudDot('ok');
+  try { __sbVerifyCounts192('açılış'); } catch(e) {} // v192
   try { __pilOffsiteDaily(); } catch(e) {} // v104: gunde 1 kez ikinci buluta (JSONBin) tam yedek
   try { if (__sbRole === 'owner') setTimeout(function(){ try { __offerSpillJoinRepair191(); } catch(e) {} }, 2500); } catch(e) {} // v191: sarkan pakete yanlis katilim onarimi (soruyla)
 }
@@ -15649,8 +15659,26 @@ function __renderSyncStatusLine(mode, last) {
   } else if (mode === 'syncing' || mode === 'pending') {
     el.textContent = '☁️ Buluta yazılıyor…';
   } else {
-    el.textContent = '☁️ Bulut senkron aktif' + (last ? ' · son gönderim: ' + last : '');
+    // v192 (Kerem: "dersler gorunmeli KESINLIKLE"): bulut sayimi = uygulama sayimi kaniti; esit degilse kirmizi uyari
+    let __cnt192 = '';
+    try {
+      const c = (typeof __sbCloudCounts === 'object' && __sbCloudCounts && typeof __sbCloudCounts.lessons === 'number') ? __sbCloudCounts.lessons : null;
+      const a = (state.lessons || []).length;
+      if (c !== null) {
+        const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        __cnt192 = (c === a) ? ' · bulut ' + fmt(c) + ' ders = uygulama ' + fmt(a) : ' · <b style="color:#c62828;">⚠️ EKSİK: bulut ' + fmt(c) + ' ders, uygulama ' + fmt(a) + '</b>';
+      }
+    } catch(e) { __cnt192 = ''; }
+    el.innerHTML = '☁️ Bulut senkron aktif' + (last ? ' · son gönderim: ' + escapeHtml(String(last)) : '') + __cnt192;
   }
+}
+// v192: tam cekimden sonra bulut/uygulama ders sayimi esit degilse sesli uyari (tek kaynak: __sbCloudCounts)
+function __sbVerifyCounts192(where) {
+  try {
+    const c = __sbCloudCounts && __sbCloudCounts.lessons; const a = (state.lessons || []).length;
+    if (typeof c === 'number' && c !== a) { __trace('⚠️ SAYIM FARKI (' + where + '): bulut ' + c + ' ders / uygulama ' + a); if (typeof plToast === 'function') plToast('⚠️ Ders sayımı tutmuyor: bulut ' + c + ' / uygulama ' + a + ' — yenileyip tekrar dene', 8000); return false; }
+  } catch(e) {}
+  return true;
 }
 function cloudDotClick() {
   if (SUPABASE_MODE) { if (window.plToast) plToast('☁️ Eşitleniyor…'); try { sbResync('manual'); } catch(e) {} return; }
@@ -16066,7 +16094,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.14.114-onizleme';
+const APP_VERSION = '2026.10.14.115-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
