@@ -80,7 +80,7 @@ setTimeout(async function(){try{
     t('Eylul kadrosundan ISIL kok cikti', !J(w,`state.groups.find(g=>g.id==='IC').monthlyMembers['${S}']`).includes('"R"'), J(w,`state.groups.find(g=>g.id==='IC').monthlyMembers['${S}']`));
     t('Ekim kadrosunda ISIL kok KALDI', w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='IC'),'${T}').includes('R')`)===true);
     t('15/17 planli derslerden ISIL kok cikti (klon kaldi)', plannedS(w)===JSON.stringify(['C2,N,Z','C2,N,Z']), plannedS(w));
-    t('Eylul hak 2 / orantili kaldirildi, fiyat 4.500 aynen', J(w,`state.members.find(m=>m.id==='R').monthly['${S}']`)===JSON.stringify({enrolled:true,totalPrice:4500}), J(w,`state.members.find(m=>m.id==='R').monthly['${S}']`));
+    t('Eylul hak 2 / orantili (oneriyle yazilan ucret dahil) kaldirildi — Eylul kaydi (Gizem grubu) korundu, fiyat varsayilan 4.500', J(w,`state.members.find(m=>m.id==='R').monthly['${S}']`)===JSON.stringify({enrolled:true}) && Math.round(w.eval(`memberMonthlyTotalPrice('R','${S}')`))===4500, J(w,`state.members.find(m=>m.id==='R').monthly['${S}']`)); // v195: oneriyle yazilan ucret de geri alinir
     const b1=w.eval("perLessonPriceForLesson(state.lessons.find(l=>l.groupId==='GZ'))");
     t('Gizem Eylul dersi taban tekrar 2.250', Math.round(b1)===2250, b1);
     t('ikinci tarama 0 (idempotent)', w.__spillJoinRepairScan191().length===0);
