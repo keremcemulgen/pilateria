@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.126-onizleme">
+<meta name="app-version" content="2026.10.18.127-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -2558,7 +2558,7 @@ function load() {
       // v125: bozuk-yedek anahtarlari sinirsiz birikiyordu — yazarken de en fazla 2 tut
       const __oldCb = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_corrupted_BACKUP_') === 0) __oldCb.push(k); }
       __oldCb.sort(); while (__oldCb.length >= 2) { try { localStorage.removeItem(__oldCb.shift()); } catch(_) {} }
-      localStorage.setItem('pilateria_preview_corrupted_BACKUP_' + Date.now(), raw.substring(0, 100000));
+      localStorage.setItem('pilateria_preview_corrupted_BACKUP_' + Date.now(), __plzCompress(raw.substring(0, 100000))); // v204
     } catch(_) {}
     setTimeout(() => {
       alert(
@@ -6271,14 +6271,14 @@ function __undoSnapshot(label) {
     var snap = { label: String(label || 'İşlem'), at: new Date().toISOString(), ms: Date.now(), state: JSON.stringify(state) };
     __undoStack.push(snap);
     while (__undoStack.length > __UNDO_MAX) __undoStack.shift();
-    try { localStorage.setItem(__UNDO_LS, JSON.stringify(snap)); } catch(e) { try { localStorage.removeItem(__UNDO_LS); } catch(_) {} } // kota: bayat yedek kalmasin
+    try { __pilBackupSet(__UNDO_LS, JSON.stringify(snap)); } catch(e) { try { localStorage.removeItem(__UNDO_LS); } catch(_) {} } // kota: bayat yedek kalmasin · v204: sıkıştırılmış
     __undoMetaSave();
     renderUndoBtn();
   } catch(e) {}
 }
 function __undoLoad() {
   try {
-    var raw = localStorage.getItem(__UNDO_LS); if (!raw) return;
+    var raw = __pilBackupGet(__UNDO_LS); if (!raw) return; // v204: paketli çözülür
     var snap = JSON.parse(raw); if (!(snap && snap.state && snap.label)) return;
     var ms = snap.ms || Date.parse(snap.at) || 0;
     if (!ms || (Date.now() - ms) > 3 * 24 * 3600 * 1000) { localStorage.removeItem(__UNDO_LS); localStorage.removeItem(__UNDO_META_LS); return; }
@@ -16045,7 +16045,7 @@ async function pullFromCloud(silent) {
     // v30 GÜVENLİK: buluttaki hali yazmadan önce CİHAZDAKİ hali yedekle (tek slot)
     try {
       const __cur = localStorage.getItem('pilateria_preview');
-      if (__cur) { const __pk = JSON.stringify({ at: new Date().toISOString(), state: __cur }); __pilLsMakeRoom203(__pk.length, 'pilateria_preview_pre_pull_backup'); localStorage.setItem('pilateria_preview_pre_pull_backup', __pk); } // v203: bütçe
+      if (__cur) __pilBackupSet('pilateria_preview_pre_pull_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); // v203 bütçe · v204 sıkıştırılmış
     } catch(e){}
     state = { ...structuredClone(DEFAULT_STATE), ...record };
     delete state._updatedAt;
@@ -16329,15 +16329,16 @@ async function sbResync(reason) {
       if (__cur) {
         // FAKİRLEŞTİRME KORUMASI: mevcut yedek daha zenginse (art arda ikinci azalma) DOKUNMA.
         let __old = -1;
-        try { const __p = localStorage.getItem('pilateria_pre_overwrite_backup'); if (__p) __old = __tot(JSON.parse(__p)); } catch(e) {}
+        try { const __p = __pilBackupGet('pilateria_pre_overwrite_backup'); if (__p) __old = __tot(JSON.parse(__p)); } catch(e) {} // v204
         if (__tot(state) >= __old) {
           let __ok = false;
           const __daily = [];
           for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_daily_') === 0) __daily.push(k); }
           __daily.sort();
-          try { __pilLsMakeRoom203(__cur.length, 'pilateria_pre_overwrite_backup'); } catch(e) {} // v203: bütçe
+          const __curZ = __plzCompress(__cur); // v204
+          try { __pilLsMakeRoom203(__curZ.length, 'pilateria_pre_overwrite_backup'); } catch(e) {} // v203: bütçe
           for (;;) {
-            try { localStorage.setItem('pilateria_pre_overwrite_backup', __cur); __ok = true; break; }
+            try { localStorage.setItem('pilateria_pre_overwrite_backup', __curZ); __ok = true; break; }
             catch(e) { if (!__daily.length) break; try { localStorage.removeItem(__daily.shift()); } catch(e2) { break; } } // KOTA: en eski günlükten başla
           }
           __trace(__ok ? ('🧷 TAZELEME ÖNCESİ yerel yedek alındı (azalan: ' + __shrink.join(', ') + ')')
@@ -16420,9 +16421,9 @@ function __pilPreCloudRing(raw) {
     const h = __sbHash(raw);
     let ix = 0; try { ix = parseInt(localStorage.getItem('pilateria_pre_cloud_ix') || '0', 10) || 0; } catch(e) { ix = 0; }
     // AYNI İÇERİK ikinci kez slot tüketmesin (değişiklik yokken açılıp kapanmak halkayı boşaltmasın)
-    try { const last = localStorage.getItem('pilateria_pre_cloud_' + (ix || 5)); if (last && JSON.parse(last).h === h) return; } catch(e) {}
+    try { const last = __pilBackupGet('pilateria_pre_cloud_' + (ix || 5)); if (last && JSON.parse(last).h === h) return; } catch(e) {} // v204: paketli slot çözülür
     const next = (ix % 5) + 1;
-    const pack = JSON.stringify({ at: new Date().toISOString(), h: h, state: raw });
+    const pack = __plzCompress(JSON.stringify({ at: new Date().toISOString(), h: h, state: raw })); // v204: SIKIŞTIRILMIŞ (≈%5)
     let ok = false;
     try { const __cur = (localStorage.getItem('pilateria_pre_cloud_' + next) || '').length; __pilLsMakeRoom203(Math.max(0, pack.length - __cur) + 64, 'pilateria_pre_cloud_' + next); } catch(e) {} // v203: bütçe
     for (let tryN = 0; tryN < 7 && !ok; tryN++) {
@@ -16455,6 +16456,84 @@ function __pilLsKeys(prefix) {
   const out = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) out.push(k); } } catch(e) {}
   return out.sort();
+}
+// ═══════ v204 PLZ — yedek kopyaları için sıkıştırma (LZ77; çıktı 15 bit/karakter, UTF-16 güvenli; eşzamanlı; bağımlılık yok) ═══════
+// Biçim: 'PLZ1:' + uzunluk(36 tabanı) + ':' + yük. Yük karakterleri 32..32799 (vekil çift yok). Simge: 1 bit bayrak; 0 = harf
+// (0 + 7 bit ASCII | 1 + 16 bit), 1 = eşleşme (uzunluk-3: 4 bit, 15 ise +8 bit, 255 ise +16 bit; uzaklık-1: 0 + 10 bit | 1 + 17 bit).
+// Pencere 131072, en kısa eşleşme 3, en uzun 4096 + ... Sıkıştırma başarısız/anlamsızsa (kazanç yok) ham metin döner (işaretsiz).
+var __PLZ_MARK = 'PLZ1:';
+function __plzIsPacked(s) { return typeof s === 'string' && s.indexOf(__PLZ_MARK) === 0; }
+function __plzCompress(s) {
+  s = String(s == null ? '' : s);
+  var n = s.length; if (!n) return __PLZ_MARK + '0:';
+  var WIN = 131072, MAXLEN = 4096 + 3 + 15 + 255, MAXCHAIN = 24, HBITS = 16, HMASK = (1 << HBITS) - 1;
+  var head = new Int32Array(1 << HBITS).fill(-1), prev = new Int32Array(n);
+  var out = [], acc = 0, nb = 0;
+  function put(v, bits) { acc = ((acc << bits) | v) >>> 0; nb += bits; while (nb >= 15) { nb -= 15; out.push(String.fromCharCode(32 + ((acc >>> nb) & 0x7FFF))); } acc = nb ? (acc & ((1 << nb) - 1)) : 0; }
+  function hash(i) { return (((s.charCodeAt(i) * 2654435761) ^ (s.charCodeAt(i + 1) * 40503) ^ (s.charCodeAt(i + 2) * 2246822519)) >>> 0) & HMASK; }
+  function ins(i) { if (i + 2 < n) { var h = hash(i); prev[i] = head[h]; head[h] = i; } }
+  var i = 0;
+  while (i < n) {
+    var bestLen = 0, bestOff = 0;
+    if (i + 2 < n) {
+      var h = hash(i), cand = head[h], chain = 0, maxLen = Math.min(MAXLEN, n - i);
+      while (cand >= 0 && chain++ < MAXCHAIN && (i - cand) <= WIN) {
+        if (s.charCodeAt(cand + bestLen) === s.charCodeAt(i + bestLen)) {
+          var l = 0; while (l < maxLen && s.charCodeAt(cand + l) === s.charCodeAt(i + l)) l++;
+          if (l > bestLen) { bestLen = l; bestOff = i - cand; if (l >= maxLen) break; }
+        }
+        cand = prev[cand];
+      }
+    }
+    if (bestLen >= 3) {
+      put(1, 1);
+      var lv = bestLen - 3;
+      if (lv < 15) put(lv, 4); else { put(15, 4); lv -= 15; if (lv < 255) put(lv, 8); else { put(255, 8); put(lv - 255, 16); } }
+      var ov = bestOff - 1;
+      if (ov < 1024) { put(0, 1); put(ov, 10); } else { put(1, 1); put(ov, 17); }
+      for (var k = 0; k < bestLen; k++) ins(i + k);
+      i += bestLen;
+    } else {
+      var c = s.charCodeAt(i);
+      put(0, 1);
+      if (c < 128) { put(0, 1); put(c, 7); } else { put(1, 1); put(c, 16); }
+      ins(i); i++;
+    }
+  }
+  if (nb > 0) out.push(String.fromCharCode(32 + ((acc << (15 - nb)) & 0x7FFF)));
+  var z = __PLZ_MARK + n.toString(36) + ':' + out.join('');
+  return (z.length < n || s.indexOf(__PLZ_MARK) === 0) ? z : s; // kazanç yoksa ham kalır — ama ham metin işaretle başlıyorsa yine paketlenir (çözücü şaşmasın)
+}
+function __plzDecompress(z) {
+  if (!__plzIsPacked(z)) return z;
+  var colon = z.indexOf(':', __PLZ_MARK.length); if (colon < 0) throw new Error('PLZ: başlık bozuk');
+  var n = parseInt(z.slice(__PLZ_MARK.length, colon), 36); if (!(n >= 0)) throw new Error('PLZ: uzunluk bozuk');
+  var p = colon + 1, acc = 0, nb = 0, len = z.length;
+  function get(bits) { while (nb < bits) { if (p >= len) throw new Error('PLZ: veri kısa'); acc = ((acc << 15) | (z.charCodeAt(p++) - 32)) >>> 0; nb += 15; } nb -= bits; var v = (acc >>> nb) & ((1 << bits) - 1); acc = nb ? (acc & ((1 << nb) - 1)) : 0; return v; }
+  var buf = new Uint16Array(n), o = 0;
+  while (o < n) {
+    if (get(1) === 1) {
+      var l = get(4) + 3; if (l === 18) { var e = get(8); l += e; if (e === 255) l += get(16); }
+      var off = (get(1) === 0 ? get(10) : get(17)) + 1;
+      if (off > o || o + l > n) throw new Error('PLZ: eşleşme sınır dışı');
+      for (var k = 0; k < l; k++) { buf[o] = buf[o - off]; o++; }
+    } else {
+      buf[o++] = get(1) === 0 ? get(7) : get(16);
+    }
+  }
+  var parts = [], CH = 8192;
+  for (var q = 0; q < n; q += CH) parts.push(String.fromCharCode.apply(null, buf.subarray(q, Math.min(n, q + CH))));
+  return parts.join('');
+}
+function __pilBackupSet(key, str) { // v204: yedek değerini sıkıştırıp yazar (bütçe v203: önce yer aç) → yazılan uzunluk
+  const z = __plzCompress(String(str == null ? '' : str));
+  try { const cur = (localStorage.getItem(key) || '').length; __pilLsMakeRoom203(Math.max(0, z.length - cur) + 16, key); } catch(e) {}
+  localStorage.setItem(key, z); return z.length;
+}
+function __pilBackupGet(key) { // v204: işaretliyse çözer; işaretsiz (eski) yedek aynen; bozuksa null
+  let v = null; try { v = localStorage.getItem(key); } catch(e) { return null; }
+  if (v == null) return null;
+  try { return __plzDecompress(v); } catch(e) { try { __trace('⚠️ Yedek çözülemedi (' + key + '): ' + (e && e.message)); } catch(_) {} return null; }
 }
 // ═══════ v203 YEREL DEPO BÜTÇESİ ═══════
 function __pilLsBudgetForUA203(ua, platform, maxTouch) { // WebKit (iPhone/iPad/Safari) ~5 MB → 2,3M karakter; diğerleri ~10 MB → 4,6M
@@ -16527,9 +16606,10 @@ function __pilDailySnapshot() {
     for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_daily_') === 0) mine.push(k); }
     mine.sort();
     while (mine.length >= 3) localStorage.removeItem(mine.shift()); // v125: en fazla 3 gun (sunucuda saatlik+gecelik+aybasi yedek var)
-    if (!__pilLsMakeRoom203(cur.length + key.length, key)) { try { __trace('📅 Cihaz günlük yedeği ATLANDI (yerel depo bütçesi)'); } catch(e) {} return; } // v203
-    try { localStorage.setItem(key, cur); }
-    catch(e) { while (mine.length) localStorage.removeItem(mine.shift()); try { localStorage.setItem(key, cur); } catch(e2) {} } // kota korumasi
+    const curZ = __plzCompress(cur); // v204: günlük yedek sıkıştırılmış
+    if (!__pilLsMakeRoom203(curZ.length + key.length, key)) { try { __trace('📅 Cihaz günlük yedeği ATLANDI (yerel depo bütçesi)'); } catch(e) {} return; } // v203
+    try { localStorage.setItem(key, curZ); }
+    catch(e) { while (mine.length) localStorage.removeItem(mine.shift()); try { localStorage.setItem(key, curZ); } catch(e2) {} } // kota korumasi
     try { __trace('📅 Cihaz günlük yedeği alındı: ' + day); } catch(e) {}
   } catch(e) {}
 }
@@ -16558,7 +16638,7 @@ async function refreshBackupPanel() {
   // v121: JSONBin satırının yerine ELLE indirilen son yedeğin tarihi — sağlayıcı
   // çeşitliliği kapandığı için kullanıcının bunu görmesi artık daha önemli.
   let lastExport = 'hiç'; try { lastExport = localStorage.getItem('pilateria_last_export_day') || 'hiç'; } catch(e) {}
-  let preCloud = '—'; try { const r = localStorage.getItem('pilateria_preview_pre_cloud_backup'); if (r) preCloud = String(JSON.parse(r).at || '').slice(0, 16).replace('T', ' '); } catch(e) {}
+  let preCloud = '—'; try { const r = __pilBackupGet('pilateria_preview_pre_cloud_backup'); if (r) preCloud = String(JSON.parse(r).at || '').slice(0, 16).replace('T', ' '); } catch(e) {} // v204
   const rows = [
     '📱 Bu cihazdaki günlük yedekler: <b>' + (ring.length ? ring.map(esc).join(', ') : 'henüz yok') + '</b>',
     '⤵️ Son açılış-öncesi yedeği: <b>' + esc(preCloud) + '</b>',
@@ -16871,7 +16951,7 @@ async function sbDiffPush() {
   const __resetOk = window.__pilAllowMassDelete && (Date.now() - window.__pilAllowMassDelete) < 300000;
   const __massDelete = !__resetOk && ((__delTotal > 15 && __delTotal > __shadowTotal * 0.3) || __wipeTables.length > 0);
   if (__massDelete) {
-    try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) { const __pk = JSON.stringify({ at: new Date().toISOString(), state: __cur }); __pilLsMakeRoom203(__pk.length, 'pilateria_preview_mass_delete_backup'); localStorage.setItem('pilateria_preview_mass_delete_backup', __pk); } } catch(e) {} // v203: bütçe
+    try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) __pilBackupSet('pilateria_preview_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {} // v203 bütçe · v204 sıkıştırılmış
     __trace('⛔ SİLME SİGORTASI (push): ' + __delTotal + ' kayıt silme girişimi ENGELLENDİ' + (__wipeTables.length ? ' (tablo boşaltma: ' + __wipeTables.join(',') + ')' : '') + ' — bulut KORUNDU, yerel sunucudan tazelenecek');
     try { if (window.plToast) plToast('⛔ Toplu silme engellendi — bulut verileri KORUNDU'); } catch(e) {}
   }
@@ -17011,7 +17091,7 @@ function sbSubscribeAll() {
           window.__rtDelWin.push(__dnow);
           if (window.__rtDelWin.length > 25) { // v112: 12 -> 25 (mesru toplu islemler 12'yi asabiliyor; wipe yuzlercedir)
             window.__rtDelTripped = true;
-            try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) { const __pk = JSON.stringify({ at: new Date().toISOString(), state: __cur }); __pilLsMakeRoom203(__pk.length, 'pilateria_preview_mass_delete_backup'); localStorage.setItem('pilateria_preview_mass_delete_backup', __pk); } } catch(e) {} // v203: bütçe
+            try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) __pilBackupSet('pilateria_preview_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {} // v203 bütçe · v204 sıkıştırılmış
             __trace('⛔ REALTIME SİLME SİGORTASI ATTI: buluttan toplu silme algılandı — bu cihazdaki veriler KORUNDU (recover.html ile geri yüklenebilir)');
             try { if (window.plToast) plToast('⛔ Toplu silme algılandı — bu cihazdaki veriler KORUNDU!'); } catch(e) {}
             try { setCloudDot && setCloudDot('offline'); } catch(e) {}
@@ -17382,7 +17462,7 @@ function setupAutoPullListeners() {
 
 async function restorePrePullBackup() {
   let raw = null;
-  try { raw = localStorage.getItem('pilateria_preview_pre_pull_backup'); } catch(e){}
+  try { raw = __pilBackupGet('pilateria_preview_pre_pull_backup'); } catch(e){} // v204
   if (!raw) { alert('Kayıtlı "çekme öncesi" yedeği yok.'); return; }
   try {
     const b = JSON.parse(raw);
@@ -17713,7 +17793,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.126-onizleme';
+const APP_VERSION = '2026.10.18.127-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
