@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.17.119-onizleme">
+<meta name="app-version" content="2026.10.18.120-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -240,6 +240,10 @@
     overflow-x: visible;
     overflow-y: visible;
   }
+  /* v197 (Kerem 18.10): pencere (modal) içindeki tablolarda yapışkan başlık KAPALI — kaydırma kabı pencere olduğu için
+     başlık 108 px aşağıda, satırların ortasında asılı kalıyordu. Pencere tabloları kısa; başlık yerinde durur. */
+  .modal thead.sticky-thead th, .modal table.sticky-head thead th { position: static !important; top: auto !important; box-shadow: none !important; }
+  .modal .table-wrap:has(table.sticky-head), .modal .table-wrap:has(thead.sticky-thead) { overflow-x: auto; overflow-y: visible; }
   /* Pasif (arşiv) üye listesi stilleri (v10) */
   .archived-row td { background: #f5efe2; color: #7c6b4d; }
   .archived-row:hover td { background: #ece2c8; }
@@ -2402,6 +2406,7 @@ const DEFAULT_STATE = {
 var FIN_COLLS196 = { finAccounts:'account', finMoves:'move', finCounterparties:'counterparty', finDues:'due', finTemplates:'template', finRules:'rule', finImports:'import' };
 var FIN_ACC_CASH = 'acc-cash', FIN_ACC_BANK = 'acc-bank';
 var FIN_MOVE_OPS196 = { transfer:'Virman', cardpay:'Kart borcu ödemesi', draw:'Ortak çekimi', capital:'Sermaye', reconcile:'Mutabakat' };
+var FIN_START_DEFAULT196 = '2026-07'; // v197: finans başlangıç ayı varsayılanı (Kerem 18.10: "hesaplamaya Temmuz itibarıyla başlasın")
 let state = load();
 // v117 AÇILIŞ PARMAK İZİ: "bu kaydı BU OTURUMDA ben mi değiştirdim?" sorusunun tek kaynağı.
 // Açılış çekimi (sbLoadAll) bayat yerel veriyi sunucunun üzerine KOYMASIN diye kullanılır.
@@ -2418,6 +2423,7 @@ function __finNormalize196(st) {
   const fs = st.settings.finance;
   if (!Array.isArray(fs.partners)) fs.partners = [];
   fs.safetyMin = +fs.safetyMin || 0;
+  if (!(fs.startMonth === '' || (typeof fs.startMonth === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(fs.startMonth)))) fs.startMonth = FIN_START_DEFAULT196; // v197: '' = sınır yok
   if (!st.finAccounts.some(function(a){ return a && a.id === FIN_ACC_CASH; })) st.finAccounts.push({ id: FIN_ACC_CASH, kind: 'account', type: 'cash', name: 'Kasa', bank: '', owner: '', openingDate: '', openingBalance: 0, active: true });
   if (!st.finAccounts.some(function(a){ return a && a.id === FIN_ACC_BANK; })) st.finAccounts.push({ id: FIN_ACC_BANK, kind: 'account', type: 'bank', name: 'Banka', bank: '', owner: '', openingDate: '', openingBalance: 0, active: true });
   st.finAccounts.forEach(function(a){ if (!a) return; a.kind = 'account'; if (a.id === FIN_ACC_CASH) a.type = 'cash'; else if (a.id === FIN_ACC_BANK) a.type = 'bank'; else if (!a.type) a.type = 'card'; if (a.active === undefined) a.active = true; });
@@ -4738,6 +4744,7 @@ function renderDashboard() {
 
   // Overdue payments
   const overdue = getOverduePayments();
+  const __ovNote197 = (function(){ try { const s2 = (typeof finStartMonth196 === 'function') ? finStartMonth196() : ''; return s2 ? '<div style="font-size:12px;color:var(--muted);margin-top:6px;">📅 ' + pkgMonthLabel(s2) + ' ve sonrası hesaba girer (Finans › 🏦 Hesaplar › Finans başlangıç ayı)</div>' : ''; } catch(e) { return ''; } })(); // v197
   const ocard = document.getElementById('overdue-card');
   const olist = document.getElementById('overdue-list');
   if (!overdue.length) { ocard.style.display='none'; }
@@ -4760,7 +4767,7 @@ function renderDashboard() {
           <button class="btn small" onclick="openPaymentModal('${o.memberId}',null,'${o.groupId||''}','${(o.months||[])[0]||''}')">+ Ödeme</button>
           ${!o.groupId ? `<button class="btn small" style="background:#25D366;border-color:#25D366;margin-left:4px;" onclick="openWhatsAppModal('${o.memberId}','overdue')" title="WhatsApp mesajı">💬</button>` : ''}
         </td>
-      </tr>`).join('') + '</tbody></table></div>';
+      </tr>`).join('') + '</tbody></table></div>' + __ovNote197;
   }
 
   // Bugünün Mesajları (sabah 08:00 hatırlatmaları için)
@@ -4977,9 +4984,11 @@ function getOverduePayments(opts) {
     return map;
   }
   // Vadesi gelmis + borclu aylari sec (fiyat tanimsizsa BORC UYDURULMAZ)
+  const __fs197 = (typeof finStartMonth196 === 'function') ? finStartMonth196() : ''; // v197: finans başlangıç ayı
   function __ovRows(map, expectedFn, paidFn) {
     const rows = [];
     Object.keys(map).sort().forEach(ay => {
+      if (__fs197 && ay < __fs197) return;              // v197: başlangıç ayından önceki ay hesaba girmez (Kerem: Haziran ödendi, işaretlenmedi)
       const firstDate = map[ay];
       if (!opts.includeFuture && firstDate >= today) return;                 // vadesi gelmemis ay
       const expected = +expectedFn(ay) || 0;
@@ -13503,6 +13512,10 @@ function finAccount196(id) { return (state.finAccounts || []).find(function(a){ 
 function finAccountLabel196(id) { const a = finAccount196(id); if (!a) return id ? '(silinmiş hesap)' : '—'; return (a.type === 'cash' ? '💵 ' : a.type === 'bank' ? '🏦 ' : '💳 ') + (a.name || ''); }
 function finAccountForMethod196(method) { const m = String(method || '').trim(); if (m === 'Nakit') return FIN_ACC_CASH; if (m === 'IBAN') return FIN_ACC_BANK; return ''; }
 function finActive196() { const a = finAccount196(FIN_ACC_CASH), b = finAccount196(FIN_ACC_BANK); return !!((a && a.openingDate) || (b && b.openingDate)); }
+// v197 FİNANS BAŞLANGIÇ AYI (Kerem 18.10): bu aydan ÖNCEKİ aylar üye borcu (Panel "Geciken Ödemeler" dahil), hoca hakedişi, şablon vadesi,
+// ekstre ve rapor sütunu hesabına GİRMEZ. '' = sınır yok. Hesap bakiyeleri hesabın açılış tarihine bağlıdır, bu ayardan etkilenmez.
+function finStartMonth196() { try { const v = ((state && state.settings && state.settings.finance) || {}).startMonth; if (v === '') return ''; if (typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v)) return v; return FIN_START_DEFAULT196; } catch(e) { return FIN_START_DEFAULT196; } }
+function finMonthInScope196(ay) { const s = finStartMonth196(); return !s || !ay || String(ay).slice(0, 7) >= s; }
 function finStartDate196() { let d = ''; (state.finAccounts || []).forEach(function(a){ if (a && a.openingDate && (!d || a.openingDate < d)) d = a.openingDate; }); return d; }
 // Bulut tablosu hazır mı? (SUPABASE_MODE + istemci varken tablo sunucuda bulunana kadar finans YAZIMI kapalı — yerel-tek veri doğmaz, kaybolmaz)
 function finCloudReady196() {
@@ -13727,6 +13740,8 @@ function renderFinAccounts196() {
   el.innerHTML = rows + '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;"><button class="btn small" onclick="openFinAccountModal196(\'\')">+ Kart hesabı ekle</button></div>' +
     '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);"><b>Ortaklar</b> <span class="fin-note">(çekim/sermaye kayıtlarında ve kart sahipliğinde kullanılır)</span>' +
     '<div class="row" style="gap:8px;flex-wrap:wrap;margin:6px 0;"><input id="fin-partners" style="flex:1;min-width:200px;" placeholder="Virgülle ayır: Kerem, Ortak" value="' + escapeHtml((fs.partners || []).join(', ')) + '"><button class="btn small secondary" onclick="saveFinSettings196()">Kaydet</button></div>' +
+    '<b>Finans başlangıç ayı</b> <span class="fin-note">(bu aydan önceki aylar hesaba girmez: üye borcu — Panel "Geciken Ödemeler" dahil —, hoca hakedişi, vade kalemleri, ekstre ve rapor sütunları; boş = sınır yok. Hesap bakiyeleri hesabın açılış tarihine bağlıdır, etkilenmez.)</span>' +
+    '<div class="row" style="gap:8px;flex-wrap:wrap;margin:6px 0;"><input type="month" id="fin-start" style="width:180px;" value="' + escapeHtml(finStartMonth196()) + '"><button class="btn small secondary" onclick="saveFinSettings196()">Kaydet</button></div>' +
     '<b>Güvenlik payı</b> <span class="fin-note">(nakit akışı projeksiyonunda bu tutarın altına düşen gün uyarılır)</span>' +
     '<div class="row" style="gap:8px;flex-wrap:wrap;margin:6px 0;"><input type="number" id="fin-safety" style="width:160px;" min="0" step="100" value="' + (+fs.safetyMin || 0) + '"><span class="fin-note">₺</span><button class="btn small secondary" onclick="saveFinSettings196()">Kaydet</button></div></div>';
 }
@@ -13735,9 +13750,11 @@ function saveFinSettings196() {
   __finNormalize196(state);
   const ps = ((document.getElementById('fin-partners') || {}).value || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
   const sm = Math.max(0, Math.round((+((document.getElementById('fin-safety') || {}).value) || 0) * 100) / 100);
+  const __stEl197 = document.getElementById('fin-start'); let __fs197 = state.settings.finance.startMonth; // v197
+  if (__stEl197) { const v = String(__stEl197.value || '').trim(); if (v !== '' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) { alert('Finans başlangıç ayı YYYY-AA biçiminde olmalı (örn. 2026-07) ya da boş bırakılmalı.'); return; } __fs197 = v; }
   __undoSnapshot('Finans ayarları');
-  state.settings.finance.partners = ps; state.settings.finance.safetyMin = sm;
-  save(); renderFinAccounts196(); if (window.plToast) plToast('✓ Finans ayarları kaydedildi');
+  state.settings.finance.partners = ps; state.settings.finance.safetyMin = sm; state.settings.finance.startMonth = __fs197;
+  save(); renderFinAccounts196(); try { __refreshUIInPlace(); } catch(e) {} if (window.plToast) plToast('✓ Finans ayarları kaydedildi');
 }
 function openFinAccountModal196(id) {
   if (!finCloudReady196()) { alert('Finans bulut tablosu henüz kurulmamış — önce _dev/finance-setup.sql çalıştırılmalı.'); return; }
@@ -13833,7 +13850,7 @@ function finEnsureTemplateDues196() {
   let n = 0;
   (state.finTemplates || []).forEach(function(tp){
     if (!tp || !tp.id || tp.active === false) return;
-    let m = tp.startMonth || cur; if (m < floor) m = floor;
+    let m = tp.startMonth || cur; if (m < floor) m = floor; { const fs197 = finStartMonth196(); if (fs197 && m < fs197) m = fs197; } // v197: başlangıç ayından önceye kalem üretilmez
     for (let guard = 0; guard < 40 && m <= until; guard++) {
       if (tp.endMonth && m > tp.endMonth) break;
       const id = 'due-' + tp.id + '-' + m;
@@ -13900,7 +13917,7 @@ function finInstructorDues196() {
     const months = {}; (state.lessons || []).forEach(function(l){ if (l && l.instructorId === inst.id && l.date && lessonHappened(l)) months[String(l.date).slice(0, 7)] = 1; });
     (state.instructorPayouts || []).forEach(function(po){ if (po && po.instructorId === inst.id && po.year && po.month) months[po.year + '-' + String(po.month).padStart(2, '0')] = 1; });
     Object.keys(months).sort().forEach(function(m){
-      if (m > cur) return;
+      if (m > cur || !finMonthInScope196(m)) return; // v197: başlangıç ayı
       const hak = finR2_196((instructorEarningsForMonth(inst.id, m) || {}).total);
       const p = m.split('-').map(Number);
       const paid = finR2_196((state.instructorPayouts || []).filter(function(po){ return po && po.instructorId === inst.id && po.year === p[0] && po.month === p[1]; }).reduce(function(a, po){ return a + (+po.amount || 0); }, 0));
@@ -14095,6 +14112,7 @@ function renderFinDues196() {
 function renderFinCari196() {
   const el = document.getElementById('fin-cari-body'); if (!el) return;
   try { finEnsureTemplateDues196(); } catch(e) {}
+  const __fsNote197 = (function(){ const s = finStartMonth196(); return s ? '; ' + pkgMonthLabel(s) + ' ve sonrası' : ''; })(); // v197
   const sum = function(arr){ return finR2_196(arr.reduce(function(a, x){ return a + (+x.amount || 0); }, 0)); };
   // A) üyeler (bize borçlu) — birim bazlı toplama
   const recv = finReceivables196(); const byUnit = {};
@@ -14111,9 +14129,9 @@ function renderFinCari196() {
   const owe = finR2_196(sum(insD) + cpRows.reduce(function(a, r){ return a + r.open; }, 0) + cardDebt);
   el.innerHTML = '<div class="row between" style="flex-wrap:wrap;gap:8px;align-items:center;"><h2 style="margin:0;">👥 Cari Hesaplar</h2><button class="btn small" onclick="openFinCpModal196(\'\')">+ Dış cari</button></div>' +
     '<div class="fin-bal" style="margin-top:8px;"><span class="chip">Bize borçlu (üyeler): <b>' + money(sum(recv)) + ' ₺</b></span><span class="chip">Biz borçluyuz: <b>' + money(owe) + ' ₺</b> <small style="color:var(--muted)">(hoca ' + money(sum(insD)) + ' · dış cari ' + money(cpRows.reduce(function(a, r){ return a + r.open; }, 0)) + ' · kart ' + money(cardDebt) + ')</small></span></div>' +
-    '<div class="fin-sec">📥 Bize borçlu — üyeler <small class="fin-note">(paket ücreti − ödenen; Üyeler sayfasındaki kayıtlardan)</small></div>' +
+    '<div class="fin-sec">📥 Bize borçlu — üyeler <small class="fin-note">(paket ücreti − ödenen; Üyeler sayfasındaki kayıtlardan' + __fsNote197 + ')</small></div>' +
     (units.length ? units.map(function(u){ return '<div class="fin-row' + (u.overdue ? ' overdue' : '') + '"><span class="t"><b>' + escapeHtml(u.label) + '</b><small style="color:var(--muted)"> · ' + u.months.join(', ') + '</small></span><span class="a">' + money(u.amount) + ' ₺</span><span><button class="btn small secondary" onclick="openFinStatement196(\'' + (u.groupId ? 'group' : 'member') + '\',\'' + (u.groupId || u.memberId) + '\')">Ekstre</button> <button class="btn small ok" onclick="openPaymentModal(\'' + u.memberId + '\',null,\'' + (u.groupId || '') + '\',\'' + u.months[0] + '\')">+ Ödeme</button></span></div>'; }).join('') : '<div class="fin-note">Açık üye alacağı yok.</div>') +
-    '<div class="fin-sec">📤 Biz borçluyuz — hocalar <small class="fin-note">(hakediş − ödenen; "Ortak" işaretli hoca hariç)</small></div>' +
+    '<div class="fin-sec">📤 Biz borçluyuz — hocalar <small class="fin-note">(hakediş − ödenen; "Ortak" işaretli hoca hariç' + __fsNote197 + ')</small></div>' +
     (insRows.length ? insRows.map(function(r){ return '<div class="fin-row"><span class="t"><b>' + escapeHtml(r.name) + '</b><small style="color:var(--muted)"> · ' + r.months.join(', ') + '</small></span><span class="a">' + money(r.amount) + ' ₺</span><span><button class="btn small secondary" onclick="openFinStatement196(\'instructor\',\'' + r.instructorId + '\')">Ekstre</button> <button class="btn small ok" onclick="switchPage(\'instructors\')">Hocalar</button></span></div>'; }).join('') : '<div class="fin-note">Açık hoca hakedişi yok.</div>') +
     '<div class="fin-sec">🏢 Dış cariler <small class="fin-note">(kiralayan, tedarikçi, muhasebeci, SGK/vergi…)</small></div>' +
     (cpRows.length ? cpRows.map(function(r){ return '<div class="fin-row' + (r.overdue ? ' overdue' : '') + (r.c.active === false ? ' est' : '') + '"><span class="t"><b>' + escapeHtml(r.c.name) + '</b><small style="color:var(--muted)"> · ' + (FIN_CP_TYPES196[r.c.type] || '') + (r.c.active === false ? ' · pasif' : '') + ' · bu yıl ödenen ' + money(r.paidYear) + ' ₺</small></span><span class="a">' + (r.openN ? money(r.open) + ' ₺' : '—') + '</span><span><button class="btn small secondary" onclick="openFinStatement196(\'cp\',\'' + r.c.id + '\')">Ekstre</button> <button class="btn small secondary" onclick="openFinCpModal196(\'' + r.c.id + '\')">✎</button></span></div>'; }).join('') : '<div class="fin-note">Dış cari yok — "+ Dış cari" ile ekle.</div>');
@@ -14127,16 +14145,16 @@ function openFinStatement196(kind, id) {
     title = (g ? groupDisplayName(g, currentMonth()) : (m ? m.name : id)) + ' — üye ekstresi';
     const months = {}; (getOverduePayments({ includeFuture: true }) || []).forEach(function(o){ if ((kind === 'group' ? o.groupId === id : (!o.groupId && o.memberId === id))) (o.monthsDetail || []).forEach(function(r){ months[r.ay] = r; }); });
     const pays = (state.payments || []).filter(function(p){ return p && (kind === 'group' ? p.groupId === id : (p.memberId === id && !p.groupId)); });
-    const allM = {}; Object.keys(months).forEach(function(k){ allM[k] = 1; }); pays.forEach(function(p){ allM[paymentMonthOf(p)] = 1; });
+    const allM = {}; Object.keys(months).forEach(function(k){ allM[k] = 1; }); pays.forEach(function(p){ if (finMonthInScope196(paymentMonthOf(p))) allM[paymentMonthOf(p)] = 1; }); /* v197 */
     Object.keys(allM).sort().forEach(function(ay){ const r = months[ay]; if (r) { rows.push({ d: ay + '-01', t: ay + ' paket ücreti', a: r.expected, dir: 1 }); } pays.filter(function(p){ return paymentMonthOf(p) === ay; }).sort(function(a, b){ return String(a.date).localeCompare(String(b.date)); }).forEach(function(p){ rows.push({ d: p.date, t: 'ödeme · ' + (p.method || '') + (kind === 'group' ? ' · ' + memberName(p.memberId) : '') + (p.note ? ' · ' + p.note : ''), a: +p.amount || 0, dir: -1 }); }); });
   } else if (kind === 'instructor') {
     const inst = (state.instructors || []).find(function(x){ return x && x.id === id; }); title = (inst ? inst.name : id) + ' — hoca ekstresi';
     const months = {}; (state.lessons || []).forEach(function(l){ if (l && l.instructorId === id && l.date && lessonHappened(l)) months[String(l.date).slice(0, 7)] = 1; }); (state.instructorPayouts || []).forEach(function(po){ if (po && po.instructorId === id) months[po.year + '-' + String(po.month).padStart(2, '0')] = 1; });
-    Object.keys(months).sort().forEach(function(m){ const hak = r2((instructorEarningsForMonth(id, m) || {}).total); if (hak) rows.push({ d: finMonthEnd196(m), t: m + ' hakedişi', a: hak, dir: 1 }); const p = m.split('-').map(Number); (state.instructorPayouts || []).filter(function(po){ return po && po.instructorId === id && po.year === p[0] && po.month === p[1]; }).forEach(function(po){ rows.push({ d: po.paidDate || finMonthEnd196(m), t: 'ödeme · ' + (po.method || '') + (po.note ? ' · ' + po.note : ''), a: +po.amount || 0, dir: -1 }); }); });
+    Object.keys(months).sort().forEach(function(m){ if (!finMonthInScope196(m)) return; /* v197 */ const hak = r2((instructorEarningsForMonth(id, m) || {}).total); if (hak) rows.push({ d: finMonthEnd196(m), t: m + ' hakedişi', a: hak, dir: 1 }); const p = m.split('-').map(Number); (state.instructorPayouts || []).filter(function(po){ return po && po.instructorId === id && po.year === p[0] && po.month === p[1]; }).forEach(function(po){ rows.push({ d: po.paidDate || finMonthEnd196(m), t: 'ödeme · ' + (po.method || '') + (po.note ? ' · ' + po.note : ''), a: +po.amount || 0, dir: -1 }); }); });
   } else {
     const c = finCounterparty196(id); title = (c ? c.name : id) + ' — cari ekstresi';
-    (state.finDues || []).filter(function(d){ return d && d.counterpartyId === id && d.status !== 'skipped'; }).forEach(function(d){ rows.push({ d: d.dueDate, t: d.title + (d.status === 'paid' ? ' (ödendi)' : ' (açık)'), a: d.amount, dir: 1 }); });
-    (state.expenses || []).filter(function(e){ return e && e.counterpartyId === id; }).forEach(function(e){ rows.push({ d: e.paidDate || e.date, t: 'ödeme · ' + (e.category || '') + (e.accountId ? ' · ' + finAccountLabel196(e.accountId) : '') + (e.note ? ' · ' + e.note : '') + (e.dueId ? '' : ' (vadesiz gider)'), a: +e.amount || 0, dir: -1, direct: !e.dueId }); });
+    (state.finDues || []).filter(function(d){ return d && d.counterpartyId === id && d.status !== 'skipped' && finMonthInScope196(String(d.period || d.dueDate || '').slice(0, 7)); }).forEach(function(d){ rows.push({ d: d.dueDate, t: d.title + (d.status === 'paid' ? ' (ödendi)' : ' (açık)'), a: d.amount, dir: 1 }); });
+    (state.expenses || []).filter(function(e){ return e && e.counterpartyId === id && finMonthInScope196(String(e.paidDate || e.date || '').slice(0, 7)); }).forEach(function(e){ rows.push({ d: e.paidDate || e.date, t: 'ödeme · ' + (e.category || '') + (e.accountId ? ' · ' + finAccountLabel196(e.accountId) : '') + (e.note ? ' · ' + e.note : '') + (e.dueId ? '' : ' (vadesiz gider)'), a: +e.amount || 0, dir: -1, direct: !e.dueId }); });
   }
   rows.sort(function(a, b){ return String(a.d).localeCompare(String(b.d)); });
   let run = 0; const body = rows.map(function(r){ if (!(r.direct)) run = r2(run + r.dir * r.a); else run = r2(run); return '<tr><td>' + fmtDate(r.d) + '</td><td>' + escapeHtml(r.t) + '</td><td style="text-align:right;">' + (r.dir > 0 ? money(r.a) : '') + '</td><td style="text-align:right;">' + (r.dir < 0 ? money(r.a) : '') + '</td><td style="text-align:right;"><b>' + money(run) + '</b></td></tr>'; }).join('');
@@ -14227,7 +14245,7 @@ function renderFinCash196() {
 // ─────────── RAPORLAR ───────────
 let __finRep196 = { kind: 'pl', months: 6, acc: FIN_ACC_BANK, cpKind: 'cp', cpId: '' };
 function finRepSet196(k, v) { __finRep196[k] = v; renderFinReports196(); }
-function finMonthsBack196(n) { const out = []; const cur = currentMonth(); for (let i = n - 1; i >= 0; i--) out.push(finMonthAdd196(cur, -i)); return out; }
+function finMonthsBack196(n) { const out = []; const cur = currentMonth(); const fs = finStartMonth196(); for (let i = n - 1; i >= 0; i--) { const m = finMonthAdd196(cur, -i); if (fs && m < fs) continue; out.push(m); } if (!out.length) out.push(cur); return out; } // v197: başlangıç ayından önceki sütun açılmaz
 function finPlRows196(months) {
   const cats = {}; const inc = {}, pay = {}, cashDelta = {};
   months.forEach(function(ay){
@@ -14260,16 +14278,16 @@ function finStatementRows196(kind, id) {
     title = (g ? groupDisplayName(g, currentMonth()) : (m ? m.name : id)) + ' — üye ekstresi';
     const months = {}; (getOverduePayments({ includeFuture: true }) || []).forEach(function(o){ if ((kind === 'group' ? o.groupId === id : (!o.groupId && o.memberId === id))) (o.monthsDetail || []).forEach(function(r){ months[r.ay] = r; }); });
     const pays = (state.payments || []).filter(function(p){ return p && (kind === 'group' ? p.groupId === id : (p.memberId === id && !p.groupId)); });
-    const allM = {}; Object.keys(months).forEach(function(k){ allM[k] = 1; }); pays.forEach(function(p){ allM[paymentMonthOf(p)] = 1; });
+    const allM = {}; Object.keys(months).forEach(function(k){ allM[k] = 1; }); pays.forEach(function(p){ if (finMonthInScope196(paymentMonthOf(p))) allM[paymentMonthOf(p)] = 1; }); /* v197 */
     Object.keys(allM).sort().forEach(function(ay){ const r = months[ay]; if (r) rows.push({ d: ay + '-01', t: ay + ' paket ücreti', a: r.expected, dir: 1 }); pays.filter(function(p){ return paymentMonthOf(p) === ay; }).sort(function(a, b){ return String(a.date).localeCompare(String(b.date)); }).forEach(function(p){ rows.push({ d: p.date, t: 'ödeme · ' + (p.method || '') + (kind === 'group' ? ' · ' + memberName(p.memberId) : '') + (p.note ? ' · ' + p.note : ''), a: +p.amount || 0, dir: -1 }); }); });
   } else if (kind === 'instructor') {
     const inst = (state.instructors || []).find(function(x){ return x && x.id === id; }); title = (inst ? inst.name : id) + ' — hoca ekstresi';
     const months = {}; (state.lessons || []).forEach(function(l){ if (l && l.instructorId === id && l.date && lessonHappened(l)) months[String(l.date).slice(0, 7)] = 1; }); (state.instructorPayouts || []).forEach(function(po){ if (po && po.instructorId === id) months[po.year + '-' + String(po.month).padStart(2, '0')] = 1; });
-    Object.keys(months).sort().forEach(function(m){ const hak = r2((instructorEarningsForMonth(id, m) || {}).total); if (hak) rows.push({ d: finMonthEnd196(m), t: m + ' hakedişi', a: hak, dir: 1 }); const p = m.split('-').map(Number); (state.instructorPayouts || []).filter(function(po){ return po && po.instructorId === id && po.year === p[0] && po.month === p[1]; }).forEach(function(po){ rows.push({ d: po.paidDate || finMonthEnd196(m), t: 'ödeme · ' + (po.method || '') + (po.note ? ' · ' + po.note : ''), a: +po.amount || 0, dir: -1 }); }); });
+    Object.keys(months).sort().forEach(function(m){ if (!finMonthInScope196(m)) return; /* v197 */ const hak = r2((instructorEarningsForMonth(id, m) || {}).total); if (hak) rows.push({ d: finMonthEnd196(m), t: m + ' hakedişi', a: hak, dir: 1 }); const p = m.split('-').map(Number); (state.instructorPayouts || []).filter(function(po){ return po && po.instructorId === id && po.year === p[0] && po.month === p[1]; }).forEach(function(po){ rows.push({ d: po.paidDate || finMonthEnd196(m), t: 'ödeme · ' + (po.method || '') + (po.note ? ' · ' + po.note : ''), a: +po.amount || 0, dir: -1 }); }); });
   } else {
     const c = finCounterparty196(id); title = (c ? c.name : id) + ' — cari ekstresi';
-    (state.finDues || []).filter(function(d){ return d && d.counterpartyId === id && d.status !== 'skipped'; }).forEach(function(d){ rows.push({ d: d.dueDate, t: d.title + (d.status === 'paid' ? ' (ödendi)' : ' (açık)'), a: d.amount, dir: 1 }); });
-    (state.expenses || []).filter(function(e){ return e && e.counterpartyId === id; }).forEach(function(e){ rows.push({ d: e.paidDate || e.date, t: 'ödeme · ' + (e.category || '') + (e.accountId ? ' · ' + finAccountLabel196(e.accountId) : '') + (e.note ? ' · ' + e.note : '') + (e.dueId ? '' : ' (vadesiz gider)'), a: +e.amount || 0, dir: -1, direct: !e.dueId }); });
+    (state.finDues || []).filter(function(d){ return d && d.counterpartyId === id && d.status !== 'skipped' && finMonthInScope196(String(d.period || d.dueDate || '').slice(0, 7)); }).forEach(function(d){ rows.push({ d: d.dueDate, t: d.title + (d.status === 'paid' ? ' (ödendi)' : ' (açık)'), a: d.amount, dir: 1 }); });
+    (state.expenses || []).filter(function(e){ return e && e.counterpartyId === id && finMonthInScope196(String(e.paidDate || e.date || '').slice(0, 7)); }).forEach(function(e){ rows.push({ d: e.paidDate || e.date, t: 'ödeme · ' + (e.category || '') + (e.accountId ? ' · ' + finAccountLabel196(e.accountId) : '') + (e.note ? ' · ' + e.note : '') + (e.dueId ? '' : ' (vadesiz gider)'), a: +e.amount || 0, dir: -1, direct: !e.dueId }); });
   }
   rows.sort(function(a, b){ return String(a.d).localeCompare(String(b.d)); });
   let run = 0; rows.forEach(function(r){ if (!r.direct) run = r2(run + r.dir * r.a); r.bal = run; });
@@ -17462,7 +17480,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.17.119-onizleme';
+const APP_VERSION = '2026.10.18.120-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
