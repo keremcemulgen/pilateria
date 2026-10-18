@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.120">
+<meta name="app-version" content="2026.10.18.121">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -1186,17 +1186,19 @@
 .gcal-ev .gev-l1 { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .gcal-ev .gev-time { font-weight:700; opacity:.9; }
 .gcal-ev .gev-l2 { font-size:10.5px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gcal-ev .gev-l3 { font-size:10px; opacity:.9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.25; } /* v198: paket ayı · kaçıncı ders (hocanın altı) */
+.gcal-ev:has(.gev-l3) { line-height:1.25; } /* v198: üç satır 45 dk kutusuna sığsın */
 .gcal-ev .gev-cnt { float:right; font-size:10px; opacity:.85; }
 .gcal-ev .gev-pm { font-size:9.5px; }
 .gst-planned   { background:#e9e9e9; color:#000000; border:1px solid #cfcfcf; }
-.gst-planned .gev-time, .gst-planned .gev-l2, .gst-planned .gev-cnt { color:#000000; }
+.gst-planned .gev-time, .gst-planned .gev-l2, .gst-planned .gev-l3, .gst-planned .gev-cnt { color:#000000; }
 .gm-chip.gst-planned { background:#e9e9e9; color:#000000; border:1px solid #cfcfcf; }
 [data-theme="dark"] .gst-planned, [data-theme="dark"] .gm-chip.gst-planned { background:#e9e9e9; color:#000000; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gst-planned, :root:not([data-theme="light"]) .gm-chip.gst-planned { background:#e9e9e9; color:#000000; } }
 .gst-completed { background:#dcebd8; color:#1c2b18; border-left:3px solid var(--ok); }
 .gst-completed { background:color-mix(in srgb, var(--ok) 22%, var(--card)); color:var(--text); }
 .gst-missed { background:#f5b8b8; color:#000000; border:1px solid #d98080; border-left:3px solid var(--bad); } /* v61 (Kerem): yanan ders KIRMIZI kutu + siyah yazi */
-.gst-missed .gev-time, .gst-missed .gev-l2, .gst-missed .gev-cnt { color:#000000; }
+.gst-missed .gev-time, .gst-missed .gev-l2, .gst-missed .gev-l3, .gst-missed .gev-cnt { color:#000000; }
 .gm-chip.gst-missed { background:#f5b8b8; color:#000000; border:1px solid #d98080; }
 [data-theme="dark"] .gst-missed, [data-theme="dark"] .gm-chip.gst-missed { background:#f5b8b8; color:#000000; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gst-missed, :root:not([data-theme="light"]) .gm-chip.gst-missed { background:#f5b8b8; color:#000000; } }
@@ -1237,6 +1239,7 @@
   .gcal-dayhead .gdh-cnt { display:none; }
   .gcal-ev { font-size:10px; padding:2px 3px; }
   .gcal-ev .gev-l2 { display:none; }
+  .gcal-ev .gev-l3 { display:none; } /* v198: telefonda hafta kutusu dar; bilgi gündem kartında */
   .gcal-topbar .cal-week-label { font-size:15px; }
   .gcal-viewseg button { padding:6px 9px; font-size:12px; }
   .gm-cell { min-height:64px; }
@@ -1275,6 +1278,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
 .pcal-card { background:#9fd8c0; color:#0e3b2e; border-radius:12px; padding:10px 14px; margin:6px 0; cursor:pointer; }
 .pcal-card .pcal-c1 { font-size:14.5px; font-weight:600; line-height:1.35; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .pcal-card .pcal-c2 { font-size:12px; opacity:.85; margin-top:2px; }
+.pcal-card .pcal-c3 { font-size:12px; opacity:.9; margin-top:2px; } /* v198: paket ayı · kaçıncı ders */
 .pcal-card.pcst-completed { background:var(--acc); color:var(--acc-contrast,#fff); }
 .pcal-card.pcst-missed { background:var(--bad,#C4634F); color:#fff; }
 .pcal-card.pcst-cancelled { background:#9aa1a6; color:#14181b; }
@@ -5120,6 +5124,33 @@ function isLastLessonOfPackage(l) {
   for (const x of peers) { const k = key(x); if (k > maxKey) maxKey = k; }
   return key(l) === maxKey;
 }
+// v198 (Kerem 18.10): takvimde dersin PAKET AYI + KAÇINCI DERS olduğu — hocanın altında. Eş-ders kümesi
+// sessionsFinishState / isLastLessonOfPackage ile AYNI kural: grup → groupId + paket ayı; bireysel → ilk üye, grupsuz; iptal sayılmaz.
+// Sıra = tarih + saat (+ id) sırası; hak = sessionQuotaFor (0 ise yalnız sıra). İptal derste sıra yok ("iptal").
+function __lessonPkgInfo198(l) {
+  try {
+    if (!l) return null;
+    const pm = __plLessonMonth(l); if (!pm) return null;
+    let ownerType, ownerId;
+    if (l.groupId) { ownerType = 'group'; ownerId = l.groupId; }
+    else { ownerId = (l.memberIds || [])[0]; if (!ownerId) return null; ownerType = 'member'; }
+    const peers = (state.lessons || []).filter(function(x){
+      if (!x || x.status === 'cancelled') return false;
+      if (__plLessonMonth(x) !== pm) return false;
+      return ownerType === 'group' ? x.groupId === ownerId : (!x.groupId && (x.memberIds || []).includes(ownerId));
+    });
+    const key = function(x){ return String(x.date || '') + 'T' + String(x.time || '') + '|' + String(x.id || ''); };
+    peers.sort(function(a, b){ const ka = key(a), kb = key(b); return ka < kb ? -1 : (ka > kb ? 1 : 0); });
+    const q = +sessionQuotaFor(ownerType, ownerId, pm) || 0;
+    const cancelled = l.status === 'cancelled';
+    const idx = cancelled ? -1 : peers.findIndex(function(x){ return x.id === l.id; });
+    const ord = idx >= 0 ? idx + 1 : 0;
+    const ml = pkgMonthLabel(pm);
+    const short = '📦 ' + ml + (ord ? ' · ' + ord + (q > 0 ? '/' + q : '. ders') : (cancelled ? ' · iptal' : ''));
+    const long = ml + ' paketi' + (ord ? ' · ' + ord + '. ders' + (q > 0 ? ' / ' + q : '') : (cancelled ? ' · iptal (hak kullanılmaz)' : ''));
+    return { pm: pm, ord: ord, quota: q, total: peers.length, short: short, long: long, ownerType: ownerType, ownerId: ownerId };
+  } catch(e) { return null; }
+}
 // v18: Paket ayi etiketi — 'Haziran' (farkli yilsa 'Haziran 2027')
 function pkgMonthLabel(pm) {
   if (!pm) return '';
@@ -5343,11 +5374,13 @@ function __gcalEventHtml(ev, dISO) {
   const cnt = `${(l.memberIds||[]).length}/${l.size || (l.memberIds||[]).length || 1}`;
   const inst = l.instructorId ? instructorName(l.instructorId) : '';
   const compact = hPx < 40;
-  const line2 = compact ? '' : `<div class="gev-l2">${escapeHtml(inst)}${inst?' · ':''}${cnt}${pmBadge}</div>`;
-  const title = `${l.time} ${label}${inst ? ' — ' + inst : ''} (${cnt})`;
+  const __pk198 = (typeof __lessonPkgInfo198 === 'function') ? __lessonPkgInfo198(l) : null; // v198: paket ayı · kaçıncı ders
+  const line3 = (!compact && __pk198) ? `<div class="gev-l3">${escapeHtml(__pk198.short)}</div>` : '';
+  const line2 = compact ? '' : `<div class="gev-l2">${escapeHtml(inst)}${inst?' · ':''}${cnt}${line3 ? '' : pmBadge}</div>`; // v198: paket ayı 3. satırda; sarkan rozeti orada tekrar etmez
+  const title = `${l.time} ${label}${inst ? ' — ' + inst : ''} (${cnt})${__pk198 ? ' · ' + __pk198.long : ''}`;
   return `<div class="gcal-ev gst-${st}" style="top:${top}px;height:${hPx}px;left:calc(${ev.col*w}% + 2px);width:calc(${w}% - 4px);" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${escapeHtml(title)}">
     <div class="gev-l1"><span class="gev-time">${l.time}</span> ${escapeHtml(label)}${star}${compact ? ` <span class="gev-cnt">${cnt}</span>` : ''}</div>
-    ${line2}
+    ${line2}${line3}
   </div>`;
 }
 function renderGcalRange(startDate, nDays) {
@@ -5442,6 +5475,7 @@ function __pcalLessonCard(l) {
   return `<div class="pcal-card pcst-${st}" onclick="openLessonModal('${l.id}')">
     <div class="pcal-c1">${l.time} · ${escapeHtml(kisiler)}${__star170}${cancelled ? ' — iptal' : ''}</div>
     <div class="pcal-c2">${l.time}${bit ? '–' + bit : ''} · ${dolu}/${l.size || state.settings.reformers}${hoca ? ' · ' + escapeHtml(hoca) : ''} · ${(LESSON_STATUS[st]||{}).label || ''}</div>
+    ${(function(){ const i = (typeof __lessonPkgInfo198 === 'function') ? __lessonPkgInfo198(l) : null; return i ? '<div class="pcal-c3">📦 ' + escapeHtml(i.long) + '</div>' : ''; })()}
   </div>`;
 }
 function __pcalAgendaHtml(dayISO) {
@@ -5729,7 +5763,8 @@ function renderCalendarMonth() {
       const label = l.groupId ? groupNameForMonth(l.groupId, l.packageMonth || String(l.date||'').slice(0,7)) : ((l.memberIds||[]).map(memberName)[0]||'');
       const st = l.status || 'planned';
       const __star170 = isLastLessonOfPackage(l) ? ' <span class="gev-star" title="Paketin son dersi">⭐</span>' : ''; // v170
-      return `<div class="gm-chip gst-${st}" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${l.time} ${escapeHtml(label)}"><span class="gmc-time">${l.time}</span> ${escapeHtml(label)}${__star170}</div>`;
+      const __pkT198 = (typeof __lessonPkgInfo198 === 'function') ? __lessonPkgInfo198(l) : null; // v198: ipucu
+      return `<div class="gm-chip gst-${st}" onclick="event.stopPropagation();openLessonModal('${l.id}')" title="${l.time} ${escapeHtml(label)}${__pkT198 ? ' · ' + escapeHtml(__pkT198.short) : ''}"><span class="gmc-time">${l.time}</span> ${escapeHtml(label)}${__star170}</div>`;
     }).join('');
     const more = dayLessons.length > 3 ? `<div class="gm-more">+${dayLessons.length-3} daha</div>` : '';
     const __hol = (typeof isHoliday === 'function') && isHoliday(dISO); // v126
@@ -9758,9 +9793,10 @@ function saveInstructor() {
   if (phone && !/^[\d\s+()-]{7,20}$/.test(phone)) { markInvalid('mi-phone', 'Geçersiz telefon (sadece rakam, +, -, boşluk)'); errs++; }
   if (rateRaw !== '' && (isNaN(shareRate) || shareRate < 0 || shareRate > 100)) { markInvalid('mi-share-rate', 'Yüzdelik 0–100 arası olmalı'); errs++; }
   if (errs) { alert('Kırmızı ile işaretli alanları kontrol et.'); return; }
-  const data = { id: id||uid(), name, phone, note: document.getElementById('mi-note').value.trim(), shareRate };
-  { const __pe = document.getElementById('mi-partner'); if (__pe && __pe.checked) data.partner = true; } // v196 ADIM 2
-  if (id) { const i = state.instructors.findIndex(x=>x.id===id); state.instructors[i] = data; }
+  const __prev198 = id ? (state.instructors.find(x=>x.id===id) || null) : null; // v198: mevcut kayıt KORUNUR (sgkTam vb. silinmez)
+  const data = Object.assign({}, __prev198 || {}, { id: id||uid(), name, phone, note: document.getElementById('mi-note').value.trim(), shareRate });
+  { const __pe = document.getElementById('mi-partner'); if (__pe && __pe.checked) data.partner = true; else delete data.partner; } // v196 ADIM 2 · v198: kutu kalkınca alan da kalkar
+  if (id) { const i = state.instructors.findIndex(x=>x.id===id); if (i >= 0) state.instructors[i] = data; else state.instructors.push(data); }
   else state.instructors.push(data);
   save();
   closeModal('modal-instructor');
@@ -16114,6 +16150,13 @@ async function sbResync(reason) {
       catch(e) { __resyncOk = false; console.error('[sb] resync select', t, e); }
     }
     if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); try { setCloudDot && setCloudDot('offline'); if (typeof plToast === 'function') plToast('⚠️ Buluttan eksik çekim — veriler korundu, tekrar denenecek', 6000); } catch(e) {} return; }
+    // v198 YARIŞ KORUMASI (18.10 canlı gözlem): kilitler çekimden ÖNCE bakılıyordu; 1–2 sn süren çekim sırasında yapılan yerel kayıt,
+    // süren ya da yeni biten gönderim varsa bayat bulut hâli state'i EZMEZ — tazeleme 'after-push' ile ertelenir (yerel buluta gider, sonra hizalanır).
+    if ((typeof isDirty === 'function' && isDirty()) || __sbPushInFlight || (__sbLastPushAt && (Date.now() - __sbLastPushAt) < 6000)) {
+      __trace('RESYNC('+reason+'): çekim sırasında yerel değişiklik/gönderim → üzerine yazma YOK, tazeleme ertelendi');
+      clearTimeout(sbResync._afterPush); sbResync._afterPush = setTimeout(function(){ try { sbResync('after-push'); } catch(e){} }, (window.__sbAfterPushMs || 7000));
+      return;
+    }
     __trace('RESYNC('+reason+'): TAM TAZELE (sunucudan tüm veri)');
     __sbHarvestVer(all);
     // v115 KORUMA: ÜZERİNE YAZMADAN ÖNCE yerel anlık yedek. Günlük halka günde yalnız bir kez
@@ -17468,7 +17511,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.120';
+const APP_VERSION = '2026.10.18.121';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
