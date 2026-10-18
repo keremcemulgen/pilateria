@@ -36,13 +36,15 @@ setTimeout(async ()=>{ try {
     "  removeChannel:function(){} };"
   );
   // n uyeli + p odemeli yerel state kur ve 'pilateria' anahtarina yaz.
-  const seedLocal = (n,p)=> w.eval(
+  // v198: save() anında gönderim mikro-görevi kuyruğa alır; temel hazır olmadığından o görev kirli bayrağı YENİDEN diker.
+  // Testin konusu "temiz yerel ↔ eksik bulut" olduğu için mikro-görevler aktıktan SONRA temizlenir (v198 çekim-sonrası kilit
+  // aksi hâlde haklı olarak üzerine yazmayı erteler).
+  const seedLocal = async (n,p)=> { w.eval(
     "state.members=[]; state.groups=[]; state.lessons=[]; state.payments=[]; state.instructors=[];"+
     "for(let i=0;i<"+n+";i++) state.members.push({id:'M'+i,name:'U'+i,monthly:{}});"+
     "for(let i=0;i<"+p+";i++) state.payments.push({id:'P'+i,memberId:'M0',amount:100*(i+1),date:'2026-07-25'});"+
-    "save(); __sbShadow={}; __sbVer={}; __sbResyncBusy=false; __sbLastResync=0; __sbLastPushAt=0;"+
-    "localStorage.removeItem('pilateria_dirty');"
-  );
+    "save(); __sbShadow={}; __sbVer={}; __sbResyncBusy=false; __sbLastResync=0; __sbLastPushAt=0;"
+  ); await flush(30); w.eval("localStorage.removeItem('pilateria_dirty'); __sbLastPushAt=0; __sbResyncBusy=false; __sbLastResync=0;"); };
   const setCloud = (n,p)=> w.eval(
     "window.__cloud={}; SB_TABLES.forEach(t=>window.__cloud[t]=[]);"+
     "for(let i=0;i<"+n+";i++){ window.__cloud.members.push({id:'M'+i,data:{id:'M'+i,name:'U'+i,monthly:{}}}); window.__cloud.member_finance.push({id:'M'+i,data:{id:'M'+i}}); }"+
@@ -55,7 +57,7 @@ setTimeout(async ()=>{ try {
   t('gunluk halka gunde BIR KEZ yaziyor (bugunun girisleri orada yok)', /const key = 'pilateria_daily_' \+ day;\s*\n\s*if \(localStorage\.getItem\(key\)\) return;/.test(html));
 
   console.log('[1] AZALMA: bulut yerelden EKSIK -> uzerine yazmadan once yedek ALINIR');
-  mkClient(); seedLocal(114, 95); setCloud(114, 90);   // tam da bugunku olay: 95 -> 90 odeme
+  mkClient(); await seedLocal(114, 95); setCloud(114, 90);   // tam da bugunku olay: 95 -> 90 odeme
   w.eval("localStorage.removeItem('"+K+"');");
   await w.eval("sbResync('nabız')"); await flush(200);
   t('yedek anahtari OLUSTU', w.eval("localStorage.getItem('"+K+"')!==null"));
@@ -67,20 +69,20 @@ setTimeout(async ()=>{ try {
 
   console.log('[2] MALIYET: azalma YOKken (artis/esitlik) yedek YAZILMAZ — 5dk\'da bir 250KB yazma olmaz');
   w.eval("localStorage.removeItem('"+K+"');");
-  seedLocal(114, 90); setCloud(116, 92);  // bulut daha zengin: normal cok-cihaz yakalamasi
+  await seedLocal(114, 90); setCloud(116, 92);  // bulut daha zengin: normal cok-cihaz yakalamasi
   await w.eval("sbResync('nabız')"); await flush(200);
   t('artis halinde yedek YOK', w.eval("localStorage.getItem('"+K+"')")===null);
   w.eval("localStorage.removeItem('"+K+"');");
-  seedLocal(114, 90); setCloud(114, 90);  // birebir ayni
+  await seedLocal(114, 90); setCloud(114, 90);  // birebir ayni
   await w.eval("sbResync('nabız')"); await flush(200);
   t('esitlik halinde yedek YOK', w.eval("localStorage.getItem('"+K+"')")===null);
 
   console.log('[3] FAKIRLESTIRME KORUMASI: ikinci (daha fakir) azalma zengin yedegi EZMEZ');
   w.eval("localStorage.removeItem('"+K+"');");
-  seedLocal(114, 95); setCloud(114, 90);
+  await seedLocal(114, 95); setCloud(114, 90);
   await w.eval("sbResync('nabız')"); await flush(200);
   t('ilk yedek 95 odeme', cnt(K,'payments')===95, cnt(K,'payments'));
-  seedLocal(114, 90); setCloud(114, 88);   // simdi yerel zaten fakirlesmis; ikinci azalma
+  await seedLocal(114, 90); setCloud(114, 88);   // simdi yerel zaten fakirlesmis; ikinci azalma
   w.eval("__sbLastResync=0; __sbResyncBusy=false;");
   await w.eval("sbResync('nabız')"); await flush(200);
   t('zengin yedek KORUNDU (hala 95, 90 ile ezilmedi)', cnt(K,'payments')===95, cnt(K,'payments'));
@@ -91,7 +93,7 @@ setTimeout(async ()=>{ try {
          "localStorage.setItem('pilateria_pre_cloud_backup', JSON.stringify({members:[{id:'X'}],payments:[{id:'Y'}]}));"+
          "localStorage.setItem('pilateria_pre_pull_backup', JSON.stringify({members:[{id:'X'}],payments:[{id:'Y'}]}));"+
          "localStorage.removeItem('"+K+"');");
-  seedLocal(114, 95); setCloud(114, 80);
+  await seedLocal(114, 95); setCloud(114, 80);
   w.eval("__sbLastResync=0; __sbResyncBusy=false;");
   await w.eval("sbResync('nabız')"); await flush(200);
   t('pre_resync_backup DURUYOR', w.eval("localStorage.getItem('pilateria_pre_resync_backup')!==null"));
