@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.127">
+<meta name="app-version" content="2026.10.18.128">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -16513,6 +16513,17 @@ function __plzDecompress(z) {
   for (var q = 0; q < n; q += CH) parts.push(String.fromCharCode.apply(null, buf.subarray(q, Math.min(n, q + CH))));
   return parts.join('');
 }
+function __pilRepackBackups204() { // v205: cihazda duran HAM yedek kopyalarını bir kez sıkıştır (canlı anahtar hariç) → sıkıştırılan anahtar sayısı
+  try {
+    if (localStorage.getItem('pilateria_repack_v204') === '1') return 0;
+    const keys = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k !== 'pilateria' && /^pilateria_(pre_cloud_\d|pre_cloud_backup|daily_|pre_pull_backup|pre_overwrite_backup|pre_resync_backup|mass_delete_backup|undo$|corrupted_BACKUP_)/.test(k)) keys.push(k); }
+    let n = 0, saved = 0;
+    keys.forEach(function(k){ try { const v = localStorage.getItem(k); if (!v || v.length < 4096 || __plzIsPacked(v)) return; const z = __plzCompress(v); if (z.length < v.length && __plzDecompress(z) === v) { localStorage.setItem(k, z); n++; saved += v.length - z.length; } } catch(e) {} });
+    try { localStorage.setItem('pilateria_repack_v204', '1'); } catch(e) {}
+    if (n) { try { __trace('🗜 Eski yedekler sıkıştırıldı: ' + n + ' anahtar, ' + Math.round(saved / 1024) + 'K karakter kazanıldı'); } catch(e) {} }
+    return n;
+  } catch(e) { return 0; }
+}
 function __pilBackupSet(key, str) { // v204: yedek değerini sıkıştırıp yazar (bütçe v203: önce yer aç) → yazılan uzunluk
   const z = __plzCompress(String(str == null ? '' : str));
   try { const cur = (localStorage.getItem(key) || '').length; __pilLsMakeRoom203(Math.max(0, z.length - cur) + 16, key); } catch(e) {}
@@ -17781,7 +17792,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.127';
+const APP_VERSION = '2026.10.18.128';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
@@ -17887,6 +17898,7 @@ async function init() {
   }
 }
 __pilStoragePrune(false); // v125: acilis budamasi — bozuk-yedek 1, gunluk halka 3
+try { __pilRepackBackups204(); } catch(e) {} // v205: eski ham yedekleri bir kez sıkıştır (iPhone'da anında yer açar)
 __pilDailySnapshot(); // v104: gunun ilk acilisinda cihaz-ici gunluk yedek (bulut/giris beklemez)
 try { __undoLoad(); renderUndoBtn(); } catch(e) {} // v165: sayfa yenilense de son geri alma hakki
 init().catch(function(e){ console.error('[init] acilis hatasi', e); });   // v120 Y-2: init artik async
