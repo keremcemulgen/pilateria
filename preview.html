@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.123-onizleme">
+<meta name="app-version" content="2026.10.18.124-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -14578,9 +14578,15 @@ function finLearnRule196(desc, category, counterpartyId, business, scope) {
   if (!r) { r = { id: uid(), kind: 'rule', pattern: key, hits: 0, createdAt: new Date().toISOString() }; state.finRules.push(r); }
   r.category = category || 'Diğer'; r.counterpartyId = counterpartyId || ''; r.business = business !== false; r.scope = scope || (business === false ? 'hane' : 'studio'); r.hits = (r.hits || 0) + 1; r.updatedAt = new Date().toISOString(); // v200: kapsam öğrenilir
 }
-function finDupExpense200(accountId, date, amount, credit) { // v200: elle girilmiş aynı gider (hesap + tarih + tutar) → mükerrer
+function finDupExpense200(accountId, date, amount, credit) { // v200: elle girilmiş aynı gider (hesap + tarih + tutar) → mükerrer · v201: ekstre dışı kayıt için ±7 gün
   const amt = finR2_196(credit ? -amount : amount);
-  return (state.expenses || []).some(function(e){ return e && e.accountId === accountId && String(e.date || '').slice(0, 10) === date && Math.abs(finR2_196(e.amount) - amt) < 0.005; });
+  const t0 = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? new Date(date + 'T00:00:00').getTime() : NaN;
+  return (state.expenses || []).some(function(e){
+    if (!e || e.accountId !== accountId || Math.abs(finR2_196(e.amount) - amt) >= 0.005) return false;
+    const d = String(e.date || '').slice(0, 10); if (d === date) return true;
+    if (e.source === 'card-import' || !isFinite(t0) || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false; // ekstreden gelen kayıt yalnız aynı gün
+    return Math.abs(new Date(d + 'T00:00:00').getTime() - t0) <= 7 * 86400000; // elle girilen vergi/Bağ-Kur: aynı hesap + aynı tutar, 7 gün içinde
+  });
 }
 // pdf.js (kendi sunulan) — isteğe bağlı yükleme; worker da 'self'
 function finLoadPdfJs196() {
@@ -14631,7 +14637,7 @@ function openFinImportModal196() {
   __finImp196 = null;
   const mdl = document.createElement('div'); mdl.id = 'modal-fin-imp'; mdl.className = 'modal-bg open';
   mdl.innerHTML = '<div class="modal" style="max-width:900px;"><h3>📄 Kart Ekstresi Yükle</h3>' +
-    '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;"><div class="field" style="min-width:200px;"><label>Kart</label><select id="fi-acc">' + cards.map(function(a){ return '<option value="' + a.id + '">' + escapeHtml(finAccountLabel196(a.id)) + (a.owner ? ' · ' + escapeHtml(a.owner) : '') + (a.bank ? ' (' + escapeHtml(a.bank) + ')' : '') + '</option>'; }).join('') + '</select></div><div class="field"><label>Ekstre dönemi</label><input type="month" id="fi-period" value="' + currentMonth() + '"></div><div class="field"><label>Dosya (PDF / CSV / TXT)</label><input type="file" id="fi-file" accept=".pdf,.csv,.txt,application/pdf,text/plain,text/csv"></div></div>' +
+    '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;"><div class="field" style="min-width:200px;"><label>Kart</label><select id="fi-acc">' + cards.map(function(a){ return '<option value="' + a.id + '">' + escapeHtml(finAccountLabel196(a.id)) + (a.owner ? ' · ' + escapeHtml(a.owner) : '') + (a.bank ? ' (' + escapeHtml(a.bank) + ')' : '') + '</option>'; }).join('') + '</select></div><div class="field"><label>Ekstre dönemi</label><input type="month" id="fi-period" value="' + currentMonth() + '"></div><div class="field"><label style="display:flex;align-items:center;gap:6px;white-space:nowrap;" title="Ay dışı tarihli satırlar (önceki ayın sonu, taksit kökeni, kesim sonrası) ekstre ayının ilk/son gününe yazılır — Kerem: ekstre hangi aya aitse gider o aya. Mükerrer denetimi işlem tarihiyle yapılır."><input type="checkbox" id="fi-clamp" checked onchange="finImportRenderPreview196()"> Satırları ekstre ayına yaz</label></div><div class="field"><label>Dosya (PDF / CSV / TXT)</label><input type="file" id="fi-file" accept=".pdf,.csv,.txt,application/pdf,text/plain,text/csv"></div></div>' +
     '<div class="field"><label>…ya da ekstre metnini yapıştır (satırlar: tarih, açıklama, tutar)</label><textarea id="fi-text" rows="4" placeholder="05/10/2026  MİGROS KADIKÖY  1.240,50&#10;07.10.2026  DECATHLON  899,90"></textarea></div>' +
     '<div class="row" style="gap:8px;flex-wrap:wrap;"><button class="btn" onclick="finImportRead196()">Oku ve önizle</button><span class="fin-note">Hiçbir şey okuma aşamasında yazılmaz; önizlemede onaylayınca işlenir. Şifreli PDF\'te şifre o an sorulur, saklanmaz.</span></div>' +
     '<div id="fi-preview" style="margin-top:10px;"></div>' +
@@ -14656,17 +14662,24 @@ function finImportPreview196(text, accountId, period) {
   __finImp196 = { accountId: accountId, period: period, meta: parsed.meta, rows: rows, text: text };
   finImportRenderPreview196();
 }
+function finImportClampDate201(date, period) { // v201: ay dışı tarih → ekstre ayının ilk/son günü
+  if (!date || !period || !/^\d{4}-\d{2}$/.test(String(period))) return date;
+  const s0 = period + '-01', e0 = finMonthEnd196(period);
+  return date < s0 ? s0 : (date > e0 ? e0 : date);
+}
+function finImportClampOn201(opt) { if (opt && opt.clamp !== undefined) return !!opt.clamp; const el = document.getElementById('fi-clamp'); return el ? !!el.checked : false; }
 function finImportRenderPreview196() {
   const pv = document.getElementById('fi-preview'); const I = __finImp196; if (!pv || !I) return;
+  const clamp201 = finImportClampOn201(); const nMove = clamp201 ? I.rows.filter(function(r){ return !r.dup && r.kind !== 'payment' && r.scope !== 'skip' && finImportClampDate201(r.date, I.period) !== r.date; }).length : 0;
   const cats = EXPENSE_CATS; const cps = finCounterparties196();
   const nNew = I.rows.filter(function(r){ return !r.dup && r.kind !== 'payment' && r.scope !== 'skip'; }).length, nDup = I.rows.filter(function(r){ return r.dup; }).length, nPay = I.rows.filter(function(r){ return r.kind === 'payment'; }).length, nSkip = I.rows.filter(function(r){ return r.scope === 'skip' && r.kind !== 'payment' && !r.dup; }).length, nHane = I.rows.filter(function(r){ return r.scope === 'hane' && !r.dup; }).length;
-  const head = '<div class="fin-tot">' + (I.meta.bank ? '<b>' + escapeHtml(I.meta.bank) + '</b> · ' : '') + I.rows.length + ' satır okundu: <b>' + nNew + ' yeni</b>' + (nHane ? ' (' + nHane + ' hane)' : '') + (nSkip ? ' · ' + nSkip + ' atlanacak (işveren)' : '') + (nDup ? ' · ' + nDup + ' zaten işlenmiş' : '') + (nPay ? ' · ' + nPay + ' kart ödemesi (atlanır)' : '') + '</div>' +
+  const head = '<div class="fin-tot">' + (I.meta.bank ? '<b>' + escapeHtml(I.meta.bank) + '</b> · ' : '') + I.rows.length + ' satır okundu: <b>' + nNew + ' yeni</b>' + (nHane ? ' (' + nHane + ' hane)' : '') + (nSkip ? ' · ' + nSkip + ' atlanacak (işveren)' : '') + (nDup ? ' · ' + nDup + ' zaten işlenmiş' : '') + (nPay ? ' · ' + nPay + ' kart ödemesi (atlanır)' : '') + (nMove ? ' · <span title="ay dışı tarihli satırlar ekstre ayına yazılır">' + nMove + ' satır ekstre ayına çekilir</span>' : '') + '</div>' +
     (function(){ const sk = I.rows.filter(function(r){ return r.scope === 'skip' && r.kind !== 'payment' && !r.dup; }); const skSum = finR2_196(sk.reduce(function(a, r){ return a + (r.credit ? -r.amount : r.amount); }, 0)); const tot = (I.meta.toplam !== null && I.meta.toplam !== undefined) ? I.meta.toplam : null; const sug = tot !== null ? finR2_196(tot - skSum) : null; return '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;"><div class="field" style="max-width:180px;"><label>Dönem borcu (₺)</label><input type="number" id="fi-total" step="0.01" value="' + (sug !== null ? sug : '') + '" placeholder="ekstredeki toplam"></div><div class="field" style="max-width:180px;"><label>Son ödeme tarihi</label><input type="date" id="fi-due" value="' + escapeHtml(I.meta.sonOdeme || '') + '"></div><span class="fin-note">İkisi de doluysa Vadeler\'e "kart ekstresi ödemesi" kalemi düşer; bankadan ödeyince kapanır.' + (sk.length ? ' <b>Ekstre toplamı ' + money(tot || 0) + ' ₺ − atlanan ' + sk.length + ' satır ' + money(skSum) + ' ₺ = ' + money(sug || 0) + ' ₺</b> (işveren satırları karta da girmez).' : '') + '</span></div>'; })(); // v200
   if (!I.rows.length) { pv.innerHTML = head + '<div class="fin-warn">Satır bulunamadı. Metinde her satırda tarih (gg.aa.yyyy) ve tutar (1.234,56) olmalı. PDF taranmış görüntüyse okunamaz — bankanın metin PDF\'i ya da CSV gerekir.</div>'; const b0 = document.getElementById('fi-process'); if (b0) b0.style.display = 'none'; return; }
   const body = I.rows.map(function(r, i){
     const cls = r.dup ? 'dup' : (r.kind === 'payment' ? 'pay' : (r.scope === 'skip' ? 'pay' : ''));
     const st = r.dup ? '<span class="badge">zaten işlendi</span>' : (r.kind === 'payment' ? '<span class="badge">kart ödemesi</span>' : (r.kind === 'credit' ? '<span class="badge ok">iade</span>' : (r.fromRule ? '<span class="badge ok" title="öğrenilmiş kural">kural</span>' : '<span class="badge">yeni</span>')));
-    return '<tr class="' + cls + '"><td><input type="checkbox" ' + (r.checked ? 'checked' : '') + ' onchange="__finImp196.rows[' + i + '].checked=this.checked; finImportCount196()"></td><td data-label="Tarih">' + fmtDate(r.date) + '</td><td data-label="Açıklama" style="white-space:normal;max-width:260px;">' + escapeHtml(r.desc) + ' ' + st + '</td><td data-label="Tutar" style="text-align:right;white-space:nowrap;">' + (r.credit ? '−' : '') + money(r.amount) + ' ₺</td>' +
+    return '<tr class="' + cls + '"><td><input type="checkbox" ' + (r.checked ? 'checked' : '') + ' onchange="__finImp196.rows[' + i + '].checked=this.checked; finImportCount196()"></td><td data-label="Tarih" style="white-space:nowrap;">' + fmtDate(r.date) + (function(){ const t = clamp201 ? finImportClampDate201(r.date, I.period) : r.date; return (t !== r.date && !r.dup && r.kind !== 'payment' && r.scope !== 'skip') ? ' <span class="fin-note" title="ekstre ayına yazılır">→ ' + fmtDate(t) + '</span>' : ''; })() + '</td><td data-label="Açıklama" style="white-space:normal;max-width:260px;">' + escapeHtml(r.desc) + ' ' + st + '</td><td data-label="Tutar" style="text-align:right;white-space:nowrap;">' + (r.credit ? '−' : '') + money(r.amount) + ' ₺</td>' +
       '<td data-label="Kategori"><select onchange="__finImp196.rows[' + i + '].category=this.value">' + cats.map(function(c){ return '<option' + (c === r.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></td>' +
       '<td data-label="Cari"><select onchange="__finImp196.rows[' + i + '].counterpartyId=this.value"><option value="">—</option>' + cps.map(function(c){ return '<option value="' + c.id + '"' + (c.id === r.counterpartyId ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>'; }).join('') + '</select></td>' +
       '<td data-label="Kapsam"><select onchange="__finImp196.rows[' + i + '].scope=this.value; __finImp196.rows[' + i + '].business=(this.value!==\'hane\'); finImportRenderPreview196()" title="Stüdyo gideri / hane gideri / atla (işveren masrafı — hiç yazılmaz)">' + [['studio', 'Stüdyo'], ['hane', '🏠 Hane'], ['skip', '⛔ Atla (işveren)']].map(function(p){ return '<option value="' + p[0] + '"' + (p[0] === (r.scope || 'studio') ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') + '</select></td></tr>'; // v200
@@ -14682,12 +14695,13 @@ function finImportProcess196(opt) {
   const card = finAccount196(I.accountId); if (!card || card.type !== 'card') { alert('Kart hesabı seçilmedi.'); return null; }
   const sel = I.rows.filter(function(r){ return r.checked; }); if (!sel.length) { alert('İşlenecek satır seçilmedi.'); return null; }
   const totalRaw = opt.total !== undefined ? opt.total : (document.getElementById('fi-total') || {}).value; const dueRaw = opt.dueDate !== undefined ? opt.dueDate : (document.getElementById('fi-due') || {}).value;
+  const clamp201 = finImportClampOn201(opt); // v201: satırlar ekstre ayına
   __undoSnapshot('Kart ekstresi: ' + (card.name || '') + ' ' + I.period + ' (' + sel.length + ' satır)');
   __finNormalize196(state); state.expenses = state.expenses || [];
   let nExp = 0, nDraw = 0, nCredit = 0, nSkip = 0, nHane = 0; const fps = [];
   sel.forEach(function(r){
     const amt = finR2_196(r.amount); if (!amt) return;
-    const dateOk = r.date; // v200: işlem tarihi korunur (açılış öncesi satır bakiyeye girmez, rapora girer — Kerem: "ekstre hangi ayınsa o aya yaz")
+    const dateOk = clamp201 ? finImportClampDate201(r.date, I.period) : r.date; // v201: ekstre ayına (Kerem: "ekstre hangi aya aitse o"); kutu kapalıysa işlem tarihi
     const scope = r.scope === 'skip' ? 'skip' : (r.scope === 'hane' || r.business === false ? 'hane' : 'studio');
     if (scope === 'skip') { nSkip++; fps.push(r.fp); finLearnRule196(r.desc, r.category, r.counterpartyId, true, 'skip'); return; } // işveren masrafı: hiç yazılmaz, parmak izi tutulur
     state.expenses.push({ id: uid(), date: dateOk, paidDate: dateOk, category: r.category || 'Diğer', amount: r.credit ? -amt : amt, note: r.desc, resmi: false, kdvRate: 0, accountId: card.id, counterpartyId: r.counterpartyId || '', scope: scope, source: 'card-import', fingerprint: r.fp });
@@ -14702,7 +14716,7 @@ function finImportProcess196(opt) {
     if (!d) { d = { id: id, kind: 'due', dtype: 'card', status: 'open', createdAt: new Date().toISOString() }; state.finDues.push(d); }
     if (d.status === 'open') { d.title = finAccountLabel196(card.id) + (card.owner ? ' · ' + card.owner : '') + ' — ' + I.period + ' ekstresi'; d.amount = total; d.dueDate = due; d.period = I.period; d.accountId = card.id; d.category = 'Diğer'; dueMade = true; }
   }
-  state.finImports.push({ id: uid(), kind: 'import', accountId: card.id, period: I.period, bank: I.meta.bank || card.bank || '', at: new Date().toISOString(), n: sel.length, skipped: nSkip, hane: nHane, total: total || null, dueDate: due || '', fingerprints: fps }); // v200
+  state.finImports.push({ id: uid(), kind: 'import', accountId: card.id, period: I.period, bank: I.meta.bank || card.bank || '', at: new Date().toISOString(), n: sel.length, skipped: nSkip, hane: nHane, clamp: clamp201, total: total || null, dueDate: due || '', fingerprints: fps }); // v200 · v201 clamp
   save();
   const mdl = document.getElementById('modal-fin-imp'); if (mdl) mdl.remove(); __finImp196 = null;
   try { __refreshUIInPlace(); } catch(e) {}
@@ -17634,7 +17648,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.123-onizleme';
+const APP_VERSION = '2026.10.18.124-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
