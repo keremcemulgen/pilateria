@@ -50,7 +50,7 @@ setTimeout(async ()=>{ try {
     "for(let i=0;i<"+n+";i++){ window.__cloud.members.push({id:'M'+i,data:{id:'M'+i,name:'U'+i,monthly:{}}}); window.__cloud.member_finance.push({id:'M'+i,data:{id:'M'+i}}); }"+
     "for(let i=0;i<"+p+";i++) window.__cloud.payments.push({id:'P'+i,data:{id:'P'+i,memberId:'M0',amount:100*(i+1),date:'2026-07-25'}});"
   );
-  const cnt = (raw,f)=> w.eval("(function(){ try{ const r=localStorage.getItem('"+raw+"'); if(!r) return -1; return (JSON.parse(r)."+f+"||[]).length; }catch(e){ return -2; } })()");
+  const cnt = (raw,f)=> w.eval("(function(){ try{ let r=localStorage.getItem('"+raw+"'); if(!r) return -1; if (typeof __plzDecompress==='function') r=__plzDecompress(r); return (JSON.parse(r)."+f+"||[]).length; }catch(e){ return -2; } })()"); // v204: yedek paketli olabilir
 
   console.log('[0] ACIK KANITI: yamasiz surumde tazeleme SONRASI donus noktasi yok muydu?');
   t('v115 oncesi kod uzerine yazmadan once yedek ALMIYORDU (yama artik var)', /TAZELEME ÖNCESİ yerel yedek/.test(html));

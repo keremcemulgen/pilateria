@@ -68,7 +68,7 @@ setTimeout(async ()=>{ try {
   await w.sbLoadAll();
   t('birlestirme SORULDU (cihaz yeni algilandi)', w.__asked===true);
   t('red -> bulut hali yuklendi (1 odeme)', w.S().payments.length===1, w.S().payments.length);
-  const bk = w.localStorage.getItem('pilateria_pre_cloud_backup');
+  const bk = w.eval("(function(){ var v=localStorage.getItem('pilateria_pre_cloud_backup'); return (v && typeof __plzDecompress==='function') ? __plzDecompress(v) : v; })()"); // v204: yedek paketli olabilir
   t('pre_cloud_backup YAZILDI', !!bk);
   if (bk) { const b=JSON.parse(bk); const st=JSON.parse(b.state);
     t('yedek icinde 2 odeme + 21 Temmuz kaydi DURUYOR', st.payments.length===2 && st.payments.some(p=>p.date==='2026-07-21'), JSON.stringify(st.payments.map(p=>p.date))); }

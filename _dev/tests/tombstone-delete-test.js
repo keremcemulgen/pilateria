@@ -151,7 +151,7 @@ setTimeout(async ()=>{ try {
   const after7 = w.eval("(function(){var o={};for(var i=1;i<=5;i++)o[i]=(localStorage.getItem('pilateria_pre_cloud_'+i)||'').length;return JSON.stringify(o);})()");
   t('ayni icerik ikinci kez slot TUKETMEZ', before7===after7, before7+' vs '+after7);
   try{ w.eval("__pilPreCloudRing(JSON.stringify({members:[{id:'M8'}],lessons:[],payments:[],groups:[],settings:{}}));"); }catch(e){}
-  t('yeni icerik en ESKI slotu ezer (5 slot korunur)', ringKeys().length===5 && /M8/.test(w.eval("(function(){var s='';for(var i=1;i<=5;i++)s+=(localStorage.getItem('pilateria_pre_cloud_'+i)||'');return s;})()")));
+  t('yeni icerik en ESKI slotu ezer (5 slot korunur)', ringKeys().length===5 && /M8/.test(w.eval("(function(){var s='';for(var i=1;i<=5;i++){var v=localStorage.getItem('pilateria_pre_cloud_'+i)||''; s+=(typeof __plzDecompress==='function'?__plzDecompress(v):v);}return s;})()"))); // v204: slotlar paketli
 
   console.log('[8] KAYNAK: koruma kodu yerinde');
   t('mezar tasi deposu var', /pilateria_tomb/.test(html));

@@ -20,6 +20,8 @@ const tick=ms=>new Promise(r=>setTimeout(r,ms||80));
 const J=(w,e)=>w.eval('JSON.stringify('+e+')');
 const ls=(w,k)=>w.localStorage.getItem(k);
 const keys=(w)=>{ const o=[]; for(let i=0;i<w.localStorage.length;i++) o.push(w.localStorage.key(i)); return o.sort(); };
+// v204: yedekler sıkıştırıldığı için bütçe senaryoları SIKIŞTIRILAMAZ dolgu kullanır (rastgele 0x100–0x1FFF karakterleri; PLZ kazanç bulamaz → ham kalır)
+const noise=(n)=>{ const a=new Array(n); for(let i=0;i<n;i++) a[i]=0x100+Math.floor(Math.random()*0x1F00); let out=''; for(let i=0;i<n;i+=8192) out+=String.fromCharCode.apply(null,a.slice(i,i+8192)); return out; };
 setTimeout(async function(){try{
   console.log('[1] Bütçe: platforma göre (iPhone/iPad/Safari 2,3M; Chrome/Android/Edge 4,6M); test geçersiz kılma');
   { const w=boot(); await tick(1200);
@@ -88,7 +90,7 @@ setTimeout(async function(){try{
   console.log('[5] Açılış-öncesi halka bütçeli: sığan kadar slot; en yeni slot her zaman; eski tek slot yalnız sığıyorsa');
   { const w=boot(); await tick(1200); w.localStorage.clear();
     w.localStorage.setItem('pilateria', JSON.stringify({members:[]}));
-    const raw=i=>JSON.stringify({members:[], pad:'z'.repeat(50000), v:i});
+    const pads={}; const raw=i=>{ if(!pads[i]) pads[i]=noise(50000); return JSON.stringify({members:[], pad:pads[i], v:i}); };
     w.eval("window.__PIL_LS_BUDGET=130000"); // ~2 slot (50K+) + pilateria
     for (let i=1;i<=5;i++) w.eval("__pilPreCloudRing("+JSON.stringify(raw(i))+")");
     const ring=keys(w).filter(k=>/^pilateria_pre_cloud_\d$/.test(k));
@@ -102,9 +104,9 @@ setTimeout(async function(){try{
 
   console.log('[6] Günlük yedek bütçeli: sığmazsa en eski günlükler düşer, yine sığmazsa atlanır (iz), pilateria dokunulmaz');
   { const w=boot(); await tick(1200); w.localStorage.clear();
-    const cur=JSON.stringify({members:[{id:'a',name:'X'}], payments:[{id:'p',amount:1}], pad:'q'.repeat(30000)});
+    const cur=JSON.stringify({members:[{id:'a',name:'X'}], payments:[{id:'p',amount:1}], pad:noise(30000)});
     w.localStorage.setItem('pilateria', cur);
-    w.localStorage.setItem('pilateria_daily_2026-10-01','d'.repeat(30000)); w.localStorage.setItem('pilateria_daily_2026-10-02','d'.repeat(30000));
+    w.localStorage.setItem('pilateria_daily_2026-10-01',noise(30000)); w.localStorage.setItem('pilateria_daily_2026-10-02',noise(30000));
     w.eval("window.__PIL_LS_BUDGET="+(w.eval("__pilLsUsed203()")+5000));
     w.eval("__pilDailySnapshot()");
     const d=keys(w).filter(k=>k.indexOf('pilateria_daily_')===0);
