@@ -34,7 +34,7 @@ setTimeout(async function(){try{
   { const w=boot(); await tick(1200); w.eval(FX);
     t('acc-cash ve acc-bank var (normalize)', w.eval("!!finAccount196('acc-cash') && !!finAccount196('acc-bank')"));
     t('Kasa type cash, Banka type bank', w.eval("finAccount196('acc-cash').type")==='cash' && w.eval("finAccount196('acc-bank').type")==='bank');
-    t('settings.finance.partners [] / safetyMin 0', J(w,'state.settings.finance')===JSON.stringify({partners:[],safetyMin:0}), J(w,'state.settings.finance'));
+    t('settings.finance.partners [] / safetyMin 0 / startMonth 2026-07 (v197)', J(w,'state.settings.finance')===JSON.stringify({partners:[],safetyMin:0,startMonth:'2026-07'}), J(w,'state.settings.finance'));
     t('Nakit→Kasa, IBAN→Banka, Kredi Kartı→hesapsız', w.eval("finAccountForMethod196('Nakit')")==='acc-cash' && w.eval("finAccountForMethod196('IBAN')")==='acc-bank' && w.eval("finAccountForMethod196('Kredi Kartı')")==='');
     t('açılış girilmeden finans PASİF, bakiye null', w.eval('finActive196()')===false && w.eval("finBalance196('acc-cash')")===null);
     t('sekme adı 💰 Finans (üst + alt bar)', /💰 Finans/.test(w.document.querySelector('[data-page="payments"]').textContent) && /Finans/.test(w.document.querySelector('[data-bnav="payments"]').textContent));

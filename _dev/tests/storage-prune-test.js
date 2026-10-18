@@ -74,6 +74,7 @@ setTimeout(()=>{ try {
 
   console.log('[6] getOverduePayments esdegerlik');
   w.eval(`
+    if (state.settings && state.settings.finance) state.settings.finance.startMonth=''; // v197: fixture Haziran 2026 — finans başlangıç ayı sınırı (varsayılan 2026-07) bu testin konusu değil, kapat
     state.members=[
       {id:'m1',name:'BIR',joinDate:'2026-01-01',totalPrice:1000,monthly:{}},
       {id:'m3',name:'SOLO',joinDate:'2026-01-01',totalPrice:500,monthly:{}}
