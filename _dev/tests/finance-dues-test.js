@@ -76,9 +76,9 @@ setTimeout(async function(){try{
     await w.eval("finSkipDue196('due-T1-"+CUR+"')"); await tick(50);
     t('atla → skipped, listede değil', w.eval("state.finDues.find(d=>d.id==='due-T1-"+CUR+"').status")==='skipped' && !J(w,'finDueItems196().map(x=>x.id)').includes('due-T1-'+CUR));
     w.__msgs=[]; w.eval("finPayDue196('due-T1-"+NEXT+"-k1', {amount:10000, date:'"+addD(PREV+'-01',-1)+"', accountId:'card1'})");
-    t('kart hesabından ödeme kabul; açılıştan önceki tarih reddedilir', w.__msgs.some(m=>/açılış/.test(m)) && w.eval("state.finDues.find(d=>d.id==='due-T1-"+NEXT+"-k1').status")==='open');
-    w.eval("finPayDue196('due-T1-"+NEXT+"-k1', {amount:10000, date:'"+TODAY+"', accountId:'card1'})");
-    t('karttan ödenince kart borcu 2.800 → 12.800', w.eval("finBalance196('card1')")===-12800, w.eval("finBalance196('card1')"));
+    t('v199: karttan açılış ÖNCESİ tarihle ödeme KABUL (kayıt tutulur), kart borcu değişmez (−2.800)', w.eval("state.finDues.find(d=>d.id==='due-T1-"+NEXT+"-k1').status")==='paid' && w.eval("finBalance196('card1')")===-2800 && !w.__msgs.some(m=>/açılış tarihi yok/.test(m)), J(w,'window.__msgs')+' '+w.eval("finBalance196('card1')"));
+    w.eval("state.finDues.push({id:'D-kart',kind:'due',dtype:'expense',title:'Malzeme',amount:10000,dueDate:'"+TODAY+"',period:'"+CUR+"',category:'Malzeme/Ekipman',counterpartyId:'',accountId:'card1',resmi:false,kdvRate:0,status:'open',note:''}); finPayDue196('D-kart', {amount:10000, date:'"+TODAY+"', accountId:'card1'})");
+    t('karttan (açılış sonrası) ödenince kart borcu 2.800 → 12.800', w.eval("finBalance196('card1')")===-12800, w.eval("finBalance196('card1')"));
   }
 
   console.log('[3] Türetilmiş vadeler: hoca hakedişi (Ortak hariç), kart son ödeme, üye alacakları, yenileme tahmini');
