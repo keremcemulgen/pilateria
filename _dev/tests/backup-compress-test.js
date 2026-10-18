@@ -1,7 +1,7 @@
 // v204 (Kerem 18.10 "Küçültmeyi yap"): yedek kopyaları PLZ ile sıkıştırılır (LZ77, 15 bit/karakter, UTF-16 güvenli). CANLI 'pilateria'
 // anahtarı sıkıştırılmaz. Halka slotları, eski tek slot, günlük yedek, pre_pull, pre_overwrite, mass_delete, undo paketli yazılır;
 // okuyucular (undo yükleme, halka tekrar denetimi, yedek paneli, çekme-öncesi geri yükleme, recover.html, kurtar.html) çözer; işaretsiz
-// eski yedekler aynen okunur. Yamasız (v203) yapıda [1]–[6] BAŞARISIZ olmalı.
+// eski yedekler aynen okunur. v205: açılışta eski ham yedekler bir kez sıkıştırılır ([7]). Yamasız (v203) yapıda [1]–[7] BAŞARISIZ olmalı.
 const fs=require('fs'); const path=require('path'); const {JSDOM}=require('jsdom');
 const html=fs.readFileSync(process.argv[2],'utf-8');
 const DIR=path.dirname(path.resolve(process.argv[2]));
@@ -113,6 +113,23 @@ setTimeout(async function(){try{
       t(page+': sarmalı paket → at + state; çıplak paket → state; işaretsiz → state', r1 && r1.at==='2026-10-18T09:00:00' && r1.state.members.length===1 && r2 && r2.state.lessons.length===1 && r3 && r3.state.payments.length===1, JSON.stringify([r1&&r1.at, !!r2, !!r3]));
       t(page+': bozuk paket null (çökmez)', w.eval("parseState('PLZ1:zz:abc')")===null);
   } }
+
+  console.log('[7] v205: açılışta eski HAM yedekler bir kez sıkıştırılır; canlı anahtar ve küçük/ayar anahtarları dokunulmaz; bayrakla tekrar etmez; açılış akışında çağrılır');
+  { const w=boot(); await tick(1200); w.localStorage.clear();
+    const raw=JSON.stringify(bigState()); const pack=JSON.stringify({at:'2026-10-18T08:00:00.000Z',h:'abc',state:raw});
+    w.localStorage.setItem('pilateria', raw);
+    w.localStorage.setItem('pilateria_pre_cloud_1', pack); w.localStorage.setItem('pilateria_pre_cloud_2', pack.replace('abc','abd')); w.localStorage.setItem('pilateria_pre_cloud_backup', pack);
+    w.localStorage.setItem('pilateria_daily_2026-10-17', raw); w.localStorage.setItem('pilateria_pre_overwrite_backup', raw); w.localStorage.setItem('pilateria_undo', JSON.stringify({label:'x',at:'2026-10-18T08:00:00.000Z',ms:Date.now(),state:raw}));
+    w.localStorage.setItem('pilateria_sync', '{"a":1}'); w.localStorage.setItem('pilateria_tomb', '{}'); w.localStorage.setItem('pilateria_pre_cloud_ix','2');
+    const before=w.eval("__pilLsUsed203()");
+    const n=w.eval("__pilRepackBackups204()");
+    const after=w.eval("__pilLsUsed203()");
+    t('6 ham yedek sıkıştırıldı, toplam depo en az 4 kat küçüldü', n===6 && after*4<before, n+' '+before+'→'+after);
+    t('canlı anahtar ham kaldı; küçük anahtarlar dokunulmadı; bayrak yazıldı', ls(w,'pilateria')===raw && ls(w,'pilateria_sync')==='{"a":1}' && ls(w,'pilateria_pre_cloud_ix')==='2' && ls(w,'pilateria_repack_v204')==='1');
+    t('paketli yedekler çözülünce birebir (halka, günlük, pre_overwrite, undo)', w.eval("__pilBackupGet('pilateria_pre_cloud_1')")===pack && w.eval("__pilBackupGet('pilateria_daily_2026-10-17')")===raw && w.eval("__pilBackupGet('pilateria_pre_overwrite_backup')")===raw && JSON.parse(w.eval("__pilBackupGet('pilateria_undo')")).label==='x');
+    t('ikinci çağrı bayrak nedeniyle 0 (tekrar etmez)', w.eval("__pilRepackBackups204()")===0);
+    t('açılış akışı çağırıyor (kaynakta __pilDailySnapshot öncesi)', /__pilRepackBackups204\(\); \} catch\(e\) \{\} \/\/ v205[^\n]*\n__pilDailySnapshot\(\);/.test(html));
+  }
 
   console.log('\nSONUC: '+pass+' gecti, '+fail+' kaldi');
   process.exit(fail?1:0);
