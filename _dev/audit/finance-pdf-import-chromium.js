@@ -14,13 +14,13 @@ const path = require('path');
     window.__PL_DLG_AUTO__ = (o) => { window.__dlg=(window.__dlg||[]).concat([String(o.msg||'')]); if (o && o.input) return '12345678901'; return true; };
     switchPage('payments'); finSwitchTab196('moves'); openFinImportModal196(); });
   let ok = 0, fail = 0; const t = (n, c, x) => { if (c) { ok++; console.log('  OK ', n); } else { fail++; console.log('  FAIL', n, x !== undefined ? '-> ' + x : ''); } };
-  for (const [file, period, expRows, expBank] of [['garanti.pdf','2026-10',6,'Garanti BBVA'], ['tf.pdf','2026-10',3,'Türkiye Finans'], ['vakif.pdf','2026-10',2,'VakıfBank']]) {
+  for (const [file, period, expRows, expBank, expTotal] of [['garanti-real.pdf','2026-10',10,'Garanti BBVA',5733.59], ['vakif-real.pdf','2026-09',7,'VakıfBank',4875.4], ['garanti.pdf','2026-10',6,'Garanti BBVA',3245.4], ['tf.pdf','2026-10',3,'Türkiye Finans',700], ['vakif.pdf','2026-10',2,'VakıfBank',2000]]) { // v200: gerçek biçimleri taklit eden anonim ekstreler önce
     await p.setInputFiles('#fi-file', path.join(process.env.FIN_PDF_DIR || (process.env.SP + '/pdfs'), file));
     await p.fill('#fi-period', period);
     await p.click('text=Oku ve önizle');
     await p.waitForFunction(() => { const pv = document.getElementById('fi-preview'); return pv && (pv.querySelectorAll('tbody tr').length > 0 || /Satır bulunamadı|okunamadı/.test(pv.textContent)); }, null, { timeout: 20000 });
     const info = await p.evaluate(() => { const pv = document.getElementById('fi-preview'); return { n: pv.querySelectorAll('tbody tr').length, txt: pv.textContent.slice(0, 160), meta: __finImp196 ? __finImp196.meta : null, rows: __finImp196 ? __finImp196.rows.map(r => [r.date, r.desc, r.amount, r.kind]) : null, pdfjs: !!window.pdfjsLib }; });
-    t(file + ': pdf.js yüklendi, ' + expRows + ' satır, banka ' + expBank, info.pdfjs && info.n === expRows && info.meta && info.meta.bank === expBank, JSON.stringify(info));
+    t(file + ': pdf.js yüklendi, ' + expRows + ' satır, banka ' + expBank + ', dönem borcu ' + expTotal, info.pdfjs && info.n === expRows && info.meta && info.meta.bank === expBank && Math.abs((info.meta.toplam || 0) - expTotal) < 0.01, JSON.stringify(info));
     console.log('     rows:', JSON.stringify(info.rows));
     if (file === 'vakif.pdf') { const dlg = await p.evaluate(() => (window.__dlg||[]).some(m => /şifre/i.test(m))); t('şifreli PDF: şifre soruldu ve çözüldü', dlg && info.n === 2); }
   }
