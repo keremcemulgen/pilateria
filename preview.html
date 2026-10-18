@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.121-onizleme">
+<meta name="app-version" content="2026.10.18.122-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -14021,17 +14021,18 @@ function finRenewals196() {
 function finPayDueModal196(id) {
   const d = (state.finDues || []).find(function(x){ return x && x.id === id; }); if (!d || d.status !== 'open') return;
   if (!finCloudReady196()) { alert('Finans bulut tablosu henüz kurulmamış.'); return; }
-  if (!finActive196()) { alert('Önce 🏦 Hesaplar sekmesinden Kasa/Banka başlangıcını gir.'); return; }
-  const old = document.getElementById('modal-fin-pay'); if (old) old.remove();
+  const old = document.getElementById('modal-fin-pay'); if (old) old.remove(); // v199: hesap açılmamışken de açılır (açılış-öncesi notu)
   const mdl = document.createElement('div'); mdl.id = 'modal-fin-pay'; mdl.className = 'modal-bg open';
   mdl.innerHTML = '<div class="modal" style="max-width:440px;"><h3>✓ Ödendi: ' + escapeHtml(d.title) + '</h3><div class="fin-note">Vade ' + fmtDate(d.dueDate) + ' · ' + escapeHtml(d.category || '') + (d.counterpartyId ? ' · ' + escapeHtml(finCounterpartyName196(d.counterpartyId)) : '') + '</div>' +
     '<div class="field"><label>Tutar (₺)</label><input type="number" id="fp-amount" step="0.01" min="0" value="' + d.amount + '"><div class="fin-note">Eksik girersen kalan tutar için yeni bir açık kalem oluşur.</div></div>' +
-    '<div class="field"><label>Ödeme günü</label><input type="date" id="fp-date" value="' + todayISO() + '"></div>' +
-    '<div class="field"><label>Hesap</label><select id="fp-acc"></select></div>' +
+    '<div class="field"><label>Ödeme günü</label><input type="date" id="fp-date" value="' + todayISO() + '" onchange="finPayPreNote199()" oninput="finPayPreNote199()"></div>' +
+    '<div class="field"><label>Hesap</label><select id="fp-acc" onchange="finPayPreNote199()"></select></div>' +
+    '<div class="fin-note" id="fp-pre-note" style="display:none;color:#7a4a00;"></div>' +
     '<div class="field"><label>Not</label><input id="fp-note" value=""></div>' +
     '<div class="row" style="justify-content:flex-end;gap:8px;"><button class="btn secondary" onclick="document.getElementById(\'modal-fin-pay\').remove()">Vazgeç</button><button class="btn" onclick="finPayDue196(\'' + d.id + '\')">Kaydet</button></div></div>';
   document.body.appendChild(mdl);
   finFillAccountSelect196(document.getElementById('fp-acc'), '', d.accountId || undefined);
+  finPayPreNote199(); // v199
 }
 function finPayDue196(id, opt) {
   const d = (state.finDues || []).find(function(x){ return x && x.id === id; }); if (!d || d.status !== 'open') return null;
@@ -14042,7 +14043,8 @@ function finPayDue196(id, opt) {
   const note = (opt.note !== undefined ? opt.note : ((document.getElementById('fp-note') || {}).value || '')).trim();
   if (amount <= 0) { alert('Tutar 0\'dan büyük olmalı.'); return null; }
   if (!acc) { alert('Hesap seç.'); return null; }
-  const a = finAccount196(acc); if (!a || !a.openingDate || date < a.openingDate) { alert('Hesabın açılış tarihi yok ya da ödeme günü açılıştan önce.'); return null; }
+  const a = finAccount196(acc); if (!a) { alert('Hesap bulunamadı.'); return null; }
+  const __pre199 = !a.openingDate || date < a.openingDate; // v199: açılış öncesi → kayıt tutulur, bakiyeye girmez (açılış penceresi dışı)
   __undoSnapshot('Vade ödendi: ' + d.title + ' ' + money(amount) + ' ₺');
   const e = { id: uid(), date: date, paidDate: date, category: d.category || 'Diğer', amount: amount, note: d.title + (note ? ' — ' + note : ''), resmi: !!d.resmi, kdvRate: d.resmi ? (+d.kdvRate || 0) : 0, accountId: acc, counterpartyId: d.counterpartyId || '', dueId: d.id, source: 'due' };
   state.expenses = state.expenses || []; state.expenses.push(e);
@@ -14051,8 +14053,19 @@ function finPayDue196(id, opt) {
   if (kalan > 0.05) { let n = 1; while (state.finDues.some(function(x){ return x && x.id === d.id + '-k' + n; })) n++; state.finDues.push(Object.assign({}, d, { id: d.id + '-k' + n, amount: kalan, status: 'open', note: 'kalan (' + fmtDate(date) + ' ' + money(amount) + ' ₺ ödendi)', paidRef: undefined, paidDate: undefined, paidAmount: undefined, createdAt: new Date().toISOString() })); }
   const mdl = document.getElementById('modal-fin-pay'); if (mdl) mdl.remove();
   save(); try { __refreshUIInPlace(); } catch(err) {}
-  if (window.plToast) plToast('✓ ' + d.title + ' ödendi' + (kalan > 0.05 ? ' · kalan ' + money(kalan) + ' ₺ açık' : ''));
+  if (window.plToast) plToast('✓ ' + d.title + ' ödendi' + (kalan > 0.05 ? ' · kalan ' + money(kalan) + ' ₺ açık' : '') + (__pre199 ? ' · açılış öncesi, bakiyeye girmedi' : ''));
   return e;
+}
+// v199: ödeme penceresinde seçilen gün hesabın açılışından önceyse (ya da hesap açılmamışsa) not göster
+function finPayPreNote199() {
+  try {
+    const n = document.getElementById('fp-pre-note'); if (!n) return;
+    const acc = (document.getElementById('fp-acc') || {}).value || ''; const date = (document.getElementById('fp-date') || {}).value || '';
+    const a = acc ? finAccount196(acc) : null;
+    const pre = !a || !a.openingDate || (date && date < a.openingDate);
+    n.style.display = pre ? '' : 'none';
+    n.textContent = a && a.openingDate ? ('⚠️ Seçilen gün hesabın açılışından (' + fmtDate(a.openingDate) + ') önce — kayıt tutulur, cari ve raporlara girer, bakiyeye girmez.') : '⚠️ Hesap henüz açılmadı — kayıt tutulur, cari ve raporlara girer; bakiye hesap açılınca açılış tarihinden itibaren işler.';
+  } catch(e) {}
 }
 async function finSkipDue196(id) {
   const d = (state.finDues || []).find(function(x){ return x && x.id === id; }); if (!d || d.status !== 'open') return;
@@ -14136,7 +14149,7 @@ function renderFinDues196() {
   const winSel = '<select onchange="finSetDueWin196(this.value)" style="max-width:140px;">' + [30, 60, 90].map(function(v){ return '<option value="' + v + '"' + (v === __finDueWin196 ? ' selected' : '') + '>' + v + ' gün</option>'; }).join('') + '</select>';
   const tpls = (state.finTemplates || []).filter(Boolean).slice().sort(function(a, b){ return String(a.title).localeCompare(String(b.title), 'tr'); });
   el.innerHTML = '<div class="row between" style="flex-wrap:wrap;gap:8px;align-items:center;"><h2 style="margin:0;">⏰ Vadeler</h2><div class="row" style="gap:8px;align-items:center;">' + winSel + '<button class="btn small" onclick="openFinDueModal196(\'\')">+ Vadeli kalem</button><button class="btn small secondary" onclick="openFinTemplateModal196(\'\')">+ Şablon</button></div></div>' +
-    (!finActive196() ? '<div class="fin-warn">Hesaplar henüz açılmadı — ödeme tikleri hesap ister. 🏦 Hesaplar sekmesinden başlangıcı gir.</div>' : '') +
+    (!finActive196() ? '<div class="fin-warn">Hesaplar henüz açılmadı — ödeme tikleri kayıt tutar ama bakiyeye girmez. 🏦 Hesaplar sekmesinden başlangıcı gir.</div>' : '') +
     '<div class="fin-cols" style="margin-top:8px;">' +
     '<div class="fin-col"><h3>📤 Yaklaşan Ödemeler</h3><div class="fin-tot">' + __finDueWin196 + ' gün: <b>' + money(sum(pay)) + ' ₺</b> (' + pay.length + ' kalem)' + (payOver.length ? ' · <b style="color:var(--bad)">gecikti ' + money(sum(payOver)) + ' ₺</b>' : '') + '</div>' + (pay.length ? pay.map(function(it){ return finDueRow196(it, 'pay'); }).join('') : '<div class="empty">Bu pencerede ödeme yok.</div>') + '</div>' +
     '<div class="fin-col"><h3>📥 Yaklaşan Tahsilatlar</h3><div class="fin-tot">' + __finDueWin196 + ' gün: <b>' + money(sum(rec)) + ' ₺</b> (' + rec.length + ' kalem)' + (recOver.length ? ' · <b style="color:var(--bad)">gecikti ' + money(sum(recOver)) + ' ₺</b>' : '') + (ren.length ? ' · beklenen yenileme <b>' + money(sum(ren)) + ' ₺</b> (' + ren.length + ', tahmin)' : '') + '</div>' + (rec.length || ren.length ? rec.map(function(it){ return finDueRow196(it, 'rec'); }).join('') + ren.map(function(it){ return finDueRow196(it, 'rec'); }).join('') : '<div class="empty">Bu pencerede tahsilat yok.</div>') + '</div>' +
@@ -17523,7 +17536,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.121-onizleme';
+const APP_VERSION = '2026.10.18.122-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
