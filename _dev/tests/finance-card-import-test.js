@@ -69,7 +69,7 @@ setTimeout(async function(){try{
 
   console.log('[3] Kategori ipuçları + öğrenen kurallar');
   { const w=boot(); await tick(1200); w.eval(FX);
-    t('MİGROS → Temizlik, DECATHLON → Malzeme/Ekipman, İSKİ → Elektrik/Su/Doğalgaz, STARBUCKS → Diğer', w.eval("finGuessCategory196('MİGROS KADIKÖY').category")==='Temizlik' && w.eval("finGuessCategory196('DECATHLON ATAŞEHİR').category")==='Malzeme/Ekipman' && w.eval("finGuessCategory196('İSKİ SU FATURASI').category")==='Elektrik/Su/Doğalgaz' && w.eval("finGuessCategory196('STARBUCKS MODA').category")==='Diğer');
+    t('MİGROS → Market/Yemek (v200), DECATHLON → Malzeme/Ekipman, İSKİ → Elektrik/Su/Doğalgaz, STARBUCKS → Market/Yemek (v200)', w.eval("finGuessCategory196('MİGROS KADIKÖY').category")==='Market/Yemek' && w.eval("finGuessCategory196('DECATHLON ATAŞEHİR').category")==='Malzeme/Ekipman' && w.eval("finGuessCategory196('İSKİ SU FATURASI').category")==='Elektrik/Su/Doğalgaz' && w.eval("finGuessCategory196('STARBUCKS MODA').category")==='Market/Yemek', w.eval("finGuessCategory196('MİGROS KADIKÖY').category")+' '+w.eval("finGuessCategory196('STARBUCKS MODA').category"));
     w.eval("finLearnRule196('STARBUCKS MODA','Pazarlama','',false); finLearnRule196('MİGROS KADIKÖY İSTANBUL','Malzeme/Ekipman','CP1',true);");
     const g=JSON.parse(J(w,"finGuessCategory196('STARBUCKS MODA KADIKÖY')"));
     t('kural öğrenildi: STARBUCKS → Pazarlama, işletme dışı, kuraldan', g.category==='Pazarlama' && g.business===false && g.fromRule===true, JSON.stringify(g));
@@ -78,17 +78,17 @@ setTimeout(async function(){try{
     t('aynı anahtar güncellenir (tek kural, hits 2)', w.eval("state.finRules.filter(r=>r.pattern==='STARBUCKS MODA').length")===1 && w.eval("state.finRules.find(r=>r.pattern==='STARBUCKS MODA').hits")===2 && w.eval("state.finRules.find(r=>r.pattern==='STARBUCKS MODA').business")===true);
   }
 
-  console.log('[4] İşleme: gider / iade / şahsi (ortak çekimi) / kart ödemesi atlanır; parmak izi; kart vade kalemi; Geri Al');
+  console.log('[4] İşleme: gider / iade / şahsi → v200: HANE GİDERİ (ortak çekimi değil) / kart ödemesi atlanır; parmak izi; kart vade kalemi; Geri Al');
   { const w=boot(); await tick(1200); w.eval(FX);
     w.eval("finImportPreview196("+JSON.stringify(GARANTI)+",'card1','2026-10')");
     const rows=JSON.parse(J(w,'__finImp196.rows'));
     t('önizleme: 7 satır; kart ödemesi işaretsiz, diğerleri işaretli; hiçbiri çift değil', rows.length===7 && rows.filter(r=>r.checked).length===6 && !rows.find(r=>r.kind==='payment').checked && rows.every(r=>!r.dup), JSON.stringify(rows.map(r=>r.checked)));
     w.eval("__finImp196.rows.forEach(function(r){ if (/STARBUCKS/.test(r.desc)) { r.business=false; } if (/DECATHLON/.test(r.desc)) { r.counterpartyId='CP1'; } });");
     const res=JSON.parse(J(w,"finImportProcess196({total:3245.4, dueDate:'2026-10-25'})"));
-    t('sonuç: 4 gider + 1 iade + 1 şahsi, kalem eklendi', res && res.expenses===4 && res.credits===1 && res.draws===1 && res.due===true, JSON.stringify(res));
-    t('giderler: kart hesabı, parmak izi, kaynak card-import, DECATHLON cari CP1', w.eval("state.expenses.length")===5 && w.eval("state.expenses.every(e=>e.accountId==='card1' && e.fingerprint && e.source==='card-import')") && w.eval("state.expenses.find(e=>/DECATHLON/.test(e.note)).counterpartyId")==='CP1');
+    t('sonuç (v200): 5 gider (1 hane) + 1 iade, çekim YOK, kalem eklendi', res && res.expenses===5 && res.credits===1 && res.draws===0 && res.hane===1 && res.skipped===0 && res.due===true, JSON.stringify(res));
+    t('giderler: kart hesabı, parmak izi, kaynak card-import, DECATHLON cari CP1', w.eval("state.expenses.length")===6 && w.eval("state.expenses.every(e=>e.accountId==='card1' && e.fingerprint && e.source==='card-import')") && w.eval("state.expenses.find(e=>/DECATHLON/.test(e.note)).counterpartyId")==='CP1');
     t('iade negatif gider', w.eval("state.expenses.find(e=>/TRENDYOL/.test(e.note)).amount")===-120);
-    t('STARBUCKS → ortak çekimi (Kerem), karttan', w.eval("state.finMoves.length")===1 && w.eval("state.finMoves[0].op")==='draw' && w.eval("state.finMoves[0].partner")==='Kerem' && w.eval("state.finMoves[0].fromAccountId")==='card1' && w.eval("state.finMoves[0].amount")===120);
+    t('STARBUCKS → v200: HANE kapsamlı gider (karttan), ortak çekimi hareketi yok', w.eval("state.finMoves.length")===0 && w.eval("state.expenses.filter(e=>finExpScope200(e)==='hane').length")===1 && w.eval("state.expenses.find(e=>/STARBUCKS/.test(e.note)).scope")==='hane' && w.eval("state.expenses.find(e=>/STARBUCKS/.test(e.note)).amount")===120 && w.eval("state.expenses.filter(e=>finExpScope200(e)==='studio').length")===5, J(w,'state.expenses.map(e=>[e.note,e.amount,e.scope])'));
     t('kart bakiyesi: −1.000 − 3.805,90 + 120 = −4.685,90', w.eval("finBalance196('card1')")===-4685.9, w.eval("finBalance196('card1')"));
     t('kart vade kalemi: cdue-card1-2026-10, 3.245,40, 25.10, açık; türetilmiş hatırlatıcı YOK', w.eval("state.finDues.find(d=>d.id==='cdue-card1-2026-10').amount")===3245.4 && w.eval("state.finDues[0].dueDate")==='2026-10-25' && w.eval("state.finDues[0].status")==='open' && w.eval('finCardReminders196().length')===0 && w.eval("finDueItems196().some(d=>d.dtype==='card' && d.amount===3245.4)"));
     t('ekstre kaydı: 6 parmak izi, banka, dönem', w.eval("state.finImports.length")===1 && w.eval("state.finImports[0].fingerprints.length")===6 && w.eval("state.finImports[0].bank")==='Garanti BBVA' && w.eval("state.finImports[0].period")==='2026-10');
@@ -97,12 +97,12 @@ setTimeout(async function(){try{
     // çift kayıt koruması
     w.eval("finImportPreview196("+JSON.stringify(GARANTI)+",'card1','2026-10')");
     const rows2=JSON.parse(J(w,'__finImp196.rows'));
-    t('aynı ekstre tekrar: 6 satır "zaten işlendi" + işaretsiz; işle → seçim yok', rows2.filter(r=>r.dup).length===6 && rows2.every(r=>!r.checked) && w.eval("finImportProcess196({total:3245.4,dueDate:'2026-10-25'})")===null && w.eval("state.expenses.length")===5);
+    t('aynı ekstre tekrar: 6 satır "zaten işlendi" + işaretsiz; işle → seçim yok', rows2.filter(r=>r.dup).length===6 && rows2.every(r=>!r.checked) && w.eval("finImportProcess196({total:3245.4,dueDate:'2026-10-25'})")===null && w.eval("state.expenses.length")===6, JSON.stringify(rows2.map(r=>[r.dup,r.checked]))+' '+w.eval("state.expenses.length"));
     // üst üste binen ekstre: yalnız yeni satır işlenir
     w.eval("finImportPreview196("+JSON.stringify(GARANTI+'\n16/10/2026  YENİ MAĞAZA  50,00 TL')+",'card1','2026-10')");
     t('binişen ekstre: yalnız 1 yeni satır işaretli', w.eval("__finImp196.rows.filter(r=>r.checked).length")===1 && w.eval("__finImp196.rows.find(r=>r.checked).desc")==='YENİ MAĞAZA');
     const r3=JSON.parse(J(w,"finImportProcess196({total:3245.4,dueDate:'2026-10-25'})"));
-    t('ikinci işleme: 1 gider, kalem güncellendi (tek kalem)', r3.expenses===1 && w.eval("state.expenses.length")===6 && w.eval("state.finDues.filter(d=>d.dtype==='card').length")===1);
+    t('ikinci işleme: 1 gider, kalem güncellendi (tek kalem)', r3.expenses===1 && w.eval("state.expenses.length")===7 && w.eval("state.finDues.filter(d=>d.dtype==='card').length")===1, JSON.stringify(r3)+' '+w.eval("state.expenses.length"));
   }
 
   console.log('[5] Kart borcu ödemesi ekstre kalemini kapatır; kısmi azaltır; hareket silinince yeniden açılır');
@@ -126,7 +126,7 @@ setTimeout(async function(){try{
     await w.eval('finImportRead196()'); await tick(100);
     const pv=w.document.getElementById('fi-preview');
     t('önizleme: 3 satır, Türkiye Finans, dönem borcu 700 ve son ödeme dolu, İşle (3 satır)', pv.querySelectorAll('tbody tr').length===3 && /Türkiye Finans/.test(pv.textContent) && w.document.getElementById('fi-total').value==='700' && w.document.getElementById('fi-due').value==='2026-10-28' && /İşle \(3 satır\)/.test(w.document.getElementById('fi-process').textContent));
-    t('iade satırı rozeti, kategori seçicileri', /iade/.test(pv.textContent) && pv.querySelectorAll('tbody select').length===6);
+    t('iade satırı rozeti, kategori + cari + kapsam seçicileri (v200: 3×3)', /iade/.test(pv.textContent) && pv.querySelectorAll('tbody select').length===9 && /Kapsam/.test(pv.textContent), pv.querySelectorAll('tbody select').length);
     w.eval('finImportProcess196()'); await tick(50);
     t('İşle → pencere kapandı, 3 gider (biri iade), kart kalemi 700 / 28.10', !w.document.getElementById('modal-fin-imp') && w.eval("state.expenses.length")===3 && w.eval("state.expenses.filter(e=>e.amount<0).length")===1 && w.eval("state.finDues.find(d=>d.dtype==='card').amount")===700);
     w.eval("state.finAccounts=state.finAccounts.filter(a=>a.type!=='card'); __msgs=[];"); w.eval("openFinImportModal196()");

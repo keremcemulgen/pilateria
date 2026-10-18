@@ -90,8 +90,8 @@ setTimeout(async function(){try{
     const get=l=>rows.find(r=>r.label===l);
     const revCur = (DM3.slice(0,7)===CUR) ? 9000 : 4500; // BERNA'nın paket ayı bugüne göre
     t('gelir–gider: tahsilat (paket ayı), hoca −1.000, Kira −3.000/−3.000, Temizlik −200', get('Üye tahsilatları (paket ayı)').vals[1]===revCur && get('Hoca ödemeleri').vals[1]===-1000 && get('Gider · Kira').vals[0]===-3000 && get('Gider · Kira').vals[1]===-3000 && get('Gider · Temizlik').vals[1]===-200, JSON.stringify(rows));
-    t('net = toplam', get('Net').vals[1]===revCur-1000-3000-200);
-    const cd=get('Nakit değişimi (Kasa+Banka, gerçekleşen)').vals[1];
+    t('net = toplam (v200: "Stüdyo net"; hane gideri yok → Hane net = Stüdyo net)', get('Stüdyo net').vals[1]===revCur-1000-3000-200 && get('Hane net').vals[1]===revCur-1000-3000-200 && !get('Net'), JSON.stringify(rows.map(r=>r.label)));
+    const cd=get('Nakit değişimi (tüm nakit/banka hesapları, gerçekleşen)').vals[1]; // v200 etiket
     const expectCd = (DM3.slice(0,7)===CUR ? 4500 : 0) + 4500 - 3000 - 200 - 1000; // BERNA (bu ay ise) + AYSE − giderler − hoca (virman hariç)
     t('gerçekleşen nakit değişimi (virman hariç)', cd===expectCd, cd+' vs '+expectCd);
     const st=JSON.parse(J(w,"finAccountStatement196('acc-bank',['"+CUR+"'])"));
@@ -104,7 +104,7 @@ setTimeout(async function(){try{
     t('cari ekstre: Kira (açık) 3.000 → bakiye 3.000', cp.rows.length===1 && cp.balance===3000);
     w.eval("switchPage('payments'); finSwitchTab196('reports')"); await tick(150);
     const body=w.document.getElementById('fin-reports-body');
-    t('rapor ekranı: gelir–gider tablosu, ay başlıkları, Net satırı', /Gelir–Gider/.test(body.textContent) && body.querySelectorAll('table.fin-rep-table th').length>=3 && /Net/.test(body.textContent) && new RegExp(CUR).test(body.textContent));
+    t('rapor ekranı: gelir–gider tablosu, ay başlıkları, Stüdyo net + Hane net satırları (v200)', /Gelir–Gider/.test(body.textContent) && body.querySelectorAll('table.fin-rep-table th').length>=3 && /Stüdyo net/.test(body.textContent) && /Hane net/.test(body.textContent) && new RegExp(CUR).test(body.textContent), body.textContent.slice(0,300));
     w.eval("finRepSet196('kind','acc')"); await tick(50);
     t('hesap ekstresi görünümü: Banka seçili, kapanış', w.document.getElementById('fin-rep-acc').value==='acc-bank' && /kapanış/.test(w.document.getElementById('fin-reports-body').textContent));
     w.eval("finRepSet196('kind','cf')"); await tick(50);
