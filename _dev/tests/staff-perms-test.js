@@ -46,7 +46,7 @@ setTimeout(function(){ try {
   w.eval("delete state.settings.staffPerms; renderStaffPerms();");
   var lb=d.getElementById('staff-perms-list').innerHTML;
   t("7 toggle butonu üretildi", (lb.match(/toggleStaffPerm\(/g)||[]).length===7, (lb.match(/toggleStaffPerm\(/g)||[]).length);
-  t("payments satırı 'Kapalı' (varsayılan)", /💳 Ödemeler[\s\S]*?Kapalı/.test(lb));
+  t("payments satırı 'Kapalı' (varsayılan)", /💰 Finans[\s\S]*?Kapalı/.test(lb)); // v196: Ödemeler → Finans
   t("dashboard satırı '✓ Açık' (varsayılan)", /📊 Panel[\s\S]*?✓ Açık/.test(lb));
   t("para bölümleri (para) etiketli", /\(para\)/.test(lb));
 
