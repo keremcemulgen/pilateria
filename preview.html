@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.124-onizleme">
+<meta name="app-version" content="2026.10.18.126-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -2657,7 +2657,9 @@ function save() {
     sanitizeStateText(state); // v21 GÜVENLİK: her kalici yazimdan once metinleri temizle
     __pilTombRecord();        // v118: buluttan silme YALNIZ burada doğan açık niyetle yapılır
     try { __undoTrack(__pilLastRows); __pilLastRows = null; } catch(e) {} // v165: geri alma — baska cihazdan gelen degisiklik damgasi
-    localStorage.setItem('pilateria_preview', JSON.stringify(state));
+    const __json203 = JSON.stringify(state);
+    try { const __old203 = (localStorage.getItem('pilateria_preview') || '').length; if (__json203.length > __old203) __pilLsMakeRoom203(__json203.length - __old203, 'pilateria'); } catch(e) {} // v203: yazımdan ÖNCE bütçeye göre yer aç (kota hatasına hiç düşmesin)
+    localStorage.setItem('pilateria_preview', __json203);
     markDirtyAndSchedulePush(); // v27 OTOMATİK SENKRON
     if (SUPABASE_MODE) sbSchedulePush(); // v33: Supabase anlık senkron
     if (SUPABASE_MODE && !window.__pilSuppressDirty && !__sbApplying) __trace('✎ YEREL değişiklik kaydedildi');
@@ -2671,6 +2673,7 @@ function save() {
         window.__pilQuotaRetry = true;
         try {
           __pilStoragePrune(true);
+          try { const __j = JSON.stringify(state); __pilLsMakeRoom203(__j.length, 'pilateria'); } catch(_) {} // v203: halka dahil her yedeği feda et — CANLI hâl her zaman yazılır
           localStorage.setItem('pilateria_preview', JSON.stringify(state));
           window.__pilQuotaRetry = false;
           try { if (typeof __trace === 'function') __trace('🧹 DEPO DOLDU — eski yedekler budandi, kayit kurtarildi'); } catch(_) {}
@@ -2680,13 +2683,16 @@ function save() {
           return true;
         } catch(e2) { window.__pilQuotaRetry = false; }
       }
+      // v203: yerel kopya yazılamadı ama değişiklik BELLEKTE ve BULUTA GİDİYOR — gönderim mutlaka planlanır (eski davranış: planlanmıyordu → yeniden açılışta kayıp)
+      window.__pilLocalWriteFailed = Date.now();
+      try { markDirtyAndSchedulePush(); } catch(_) {}
+      try { if (SUPABASE_MODE) sbSchedulePush(); } catch(_) {}
+      try { if (typeof __trace === 'function') __trace('⚠️ YEREL DEPO DOLU — yerel kopya yazılamadı; değişiklik buluta gönderiliyor'); } catch(_) {}
       alert(
         '⚠️ YEREL DEPO DOLU\n\n' +
-        'Tarayıcı yerel deposu (~5MB) doldu, yeni değişiklik kaydedilemedi.\n\n' +
-        'Yapılacaklar:\n' +
-        '1. Otomatik budama da yetmedi — sayfayı tam yenile (Ctrl+Shift+R), sorun sürerse Claude\'a bildir\n' +
-        '2. Eski ödeme/ders kayıtlarını arşivle (gelecekte arşivleme özelliği gelecek)\n' +
-        '3. Verilerin bulutta güvende (otomatik senkron) — bu uyarı yalnız yerel depoyla ilgilidir'
+        'Bu cihazın tarayıcı deposu (~5MB) doldu; değişikliğin yerel kopyası yazılamadı.\n' +
+        'Değişiklik BULUTA GÖNDERİLİYOR — veri kaybı yok. Bulut noktası yeşil olmadan sayfayı kapatma/yenileme.\n\n' +
+        'Sonra sayfayı yenile (yerel yedekler budanır). Sorun sürerse Claude\'a bildir.'
       );
     } else {
       alert('⚠️ Kayıt sırasında hata: ' + (e && e.message || e));
@@ -14550,8 +14556,8 @@ function finParseStatementText196(text, opts) {
   return { meta: meta, rows: rows };
 }
 function finKnownFingerprints196(accountId) { const set = {}; (state.finImports || []).forEach(function(im){ if (!im || im.accountId !== accountId) return; (im.fingerprints || []).forEach(function(f){ set[f] = 1; }); }); (state.expenses || []).forEach(function(e){ if (e && e.accountId === accountId && e.fingerprint) set[e.fingerprint] = 1; }); return set; }
-function finDefaultScope200(desc, card, guess) { // v200: satırın kapsamı — kural > işveren ipucu (employerSkip kartta) > stüdyo ipucu > kartın varsayılanı
-  if (guess && guess.fromRule && guess.scope) return guess.scope;
+function finDefaultScope200(desc, card, guess) { // v200: satırın kapsamı — kural > işveren ipucu (employerSkip kartta) > stüdyo ipucu > kartın varsayılanı · v202: kural kapsamı kart bazında
+  const rs202 = (guess && guess.fromRule) ? finRuleScope202(guess.rule, card) : ''; if (rs202) return rs202;
   const UD = finTrUpper196(desc);
   if (card && card.employerSkip && FIN_EMPLOYER_HINT_RX200.test(UD)) return 'skip';
   if (card && card.scopeDefault === 'hane') return FIN_STUDIO_HINT_RX200.test(UD) ? 'studio' : 'hane';
@@ -14565,18 +14571,30 @@ function finRuleFor196(desc) {
 }
 function finGuessCategory196(desc, opt) {
   opt = opt || {};
-  const r = finRuleFor196(desc); if (r) return { category: r.category || 'Diğer', counterpartyId: r.counterpartyId || '', business: r.business !== false, scope: r.scope || (r.business === false ? 'hane' : ''), fromRule: true };
+  const r = finRuleFor196(desc); if (r) return { category: r.category || 'Diğer', counterpartyId: r.counterpartyId || '', business: r.business !== false, scope: r.scope || (r.business === false ? 'hane' : ''), fromRule: true, rule: r }; // v202: rule → kapsam kart bazında (finRuleScope202)
   const UD = finTrUpper196(desc) + ' ';
   if (/SGK|SOSYAL GÜVENLİK|SOSYAL GUVENLIK|BAĞ-KUR|BAGKUR/.test(UD) && opt.amount && FIN_BAGKUR_AMOUNTS200.some(function(a){ return Math.abs(a - (+opt.amount)) < 0.01; })) return { category: 'Bağkur', counterpartyId: '', business: true, scope: '', fromRule: false }; // v200: taban prim tutarı
   for (let i = 0; i < FIN_CAT_HINTS196.length; i++) { if (FIN_CAT_HINTS196[i][0].test(UD)) return { category: FIN_CAT_HINTS196[i][1], counterpartyId: '', business: true, scope: '', fromRule: false }; }
   return { category: 'Diğer', counterpartyId: '', business: true, scope: '', fromRule: false };
 }
-function finLearnRule196(desc, category, counterpartyId, business, scope) {
+function finLearnRule196(desc, category, counterpartyId, business, scope, card) {
   const key = finMerchantKey196(desc); if (!key || key.length < 3) return;
   __finNormalize196(state);
   let r = state.finRules.find(function(x){ return x && x.pattern === key; });
   if (!r) { r = { id: uid(), kind: 'rule', pattern: key, hits: 0, createdAt: new Date().toISOString() }; state.finRules.push(r); }
-  r.category = category || 'Diğer'; r.counterpartyId = counterpartyId || ''; r.business = business !== false; r.scope = scope || (business === false ? 'hane' : 'studio'); r.hits = (r.hits || 0) + 1; r.updatedAt = new Date().toISOString(); // v200: kapsam öğrenilir
+  r.category = category || 'Diğer'; r.counterpartyId = counterpartyId || ''; r.business = business !== false; r.hits = (r.hits || 0) + 1; r.updatedAt = new Date().toISOString();
+  if (card) { // v202: kapsam KARTA BAĞLI öğrenilir — yalnız kartın varsayılanından sapma saklanır (Kerem: "benim kartımdaysa hane, Derya'nın kartındaysa stüdyo")
+    const def = card.scopeDefault || 'studio', sc = scope || 'studio';
+    if (sc === 'skip') { r.scope = 'skip'; r.scopeAcc = ''; }
+    else if (sc !== def) { r.scope = sc; r.scopeAcc = card.id; }
+    else if (r.scope === 'skip' ? !!card.employerSkip : (!r.scopeAcc || r.scopeAcc === card.id)) { r.scope = ''; r.scopeAcc = ''; } // varsayılana dönüş: yalnız bu kartın (ya da kartsız eski) sapması silinir; başka kartın sapması ve işveren-dışı kartta 'atla' korunur
+  } else { r.scope = scope || (business === false ? 'hane' : 'studio'); } // v200 (kartsız çağrı)
+}
+function finRuleScope202(rule, card) { // v202: öğrenilen kapsam ne zaman uygulanır — 'atla' yalnız işveren kartında; diğer sapmalar yalnız öğrenildiği kartta
+  if (!rule || !rule.scope) return '';
+  if (rule.scope === 'skip') return (card && card.employerSkip) ? 'skip' : '';
+  if (card && rule.scopeAcc && rule.scopeAcc === card.id) return rule.scope;
+  return '';
 }
 function finDupExpense200(accountId, date, amount, credit) { // v200: elle girilmiş aynı gider (hesap + tarih + tutar) → mükerrer · v201: ekstre dışı kayıt için ±7 gün
   const amt = finR2_196(credit ? -amount : amount);
@@ -14703,11 +14721,11 @@ function finImportProcess196(opt) {
     const amt = finR2_196(r.amount); if (!amt) return;
     const dateOk = clamp201 ? finImportClampDate201(r.date, I.period) : r.date; // v201: ekstre ayına (Kerem: "ekstre hangi aya aitse o"); kutu kapalıysa işlem tarihi
     const scope = r.scope === 'skip' ? 'skip' : (r.scope === 'hane' || r.business === false ? 'hane' : 'studio');
-    if (scope === 'skip') { nSkip++; fps.push(r.fp); finLearnRule196(r.desc, r.category, r.counterpartyId, true, 'skip'); return; } // işveren masrafı: hiç yazılmaz, parmak izi tutulur
+    if (scope === 'skip') { nSkip++; fps.push(r.fp); finLearnRule196(r.desc, r.category, r.counterpartyId, true, 'skip', card); return; } // işveren masrafı: hiç yazılmaz, parmak izi tutulur
     state.expenses.push({ id: uid(), date: dateOk, paidDate: dateOk, category: r.category || 'Diğer', amount: r.credit ? -amt : amt, note: r.desc, resmi: false, kdvRate: 0, accountId: card.id, counterpartyId: r.counterpartyId || '', scope: scope, source: 'card-import', fingerprint: r.fp });
     if (r.credit) nCredit++; else nExp++; if (scope === 'hane') nHane++;
     fps.push(r.fp);
-    finLearnRule196(r.desc, r.category, r.counterpartyId, scope !== 'hane', scope);
+    finLearnRule196(r.desc, r.category, r.counterpartyId, scope !== 'hane', scope, card); // v202: kart bazında
   });
   const total = finR2_196(totalRaw); const due = String(dueRaw || '');
   let dueMade = false;
@@ -16027,7 +16045,7 @@ async function pullFromCloud(silent) {
     // v30 GÜVENLİK: buluttaki hali yazmadan önce CİHAZDAKİ hali yedekle (tek slot)
     try {
       const __cur = localStorage.getItem('pilateria_preview');
-      if (__cur) localStorage.setItem('pilateria_preview_pre_pull_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur }));
+      if (__cur) { const __pk = JSON.stringify({ at: new Date().toISOString(), state: __cur }); __pilLsMakeRoom203(__pk.length, 'pilateria_preview_pre_pull_backup'); localStorage.setItem('pilateria_preview_pre_pull_backup', __pk); } // v203: bütçe
     } catch(e){}
     state = { ...structuredClone(DEFAULT_STATE), ...record };
     delete state._updatedAt;
@@ -16317,6 +16335,7 @@ async function sbResync(reason) {
           const __daily = [];
           for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_daily_') === 0) __daily.push(k); }
           __daily.sort();
+          try { __pilLsMakeRoom203(__cur.length, 'pilateria_pre_overwrite_backup'); } catch(e) {} // v203: bütçe
           for (;;) {
             try { localStorage.setItem('pilateria_pre_overwrite_backup', __cur); __ok = true; break; }
             catch(e) { if (!__daily.length) break; try { localStorage.removeItem(__daily.shift()); } catch(e2) { break; } } // KOTA: en eski günlükten başla
@@ -16405,6 +16424,7 @@ function __pilPreCloudRing(raw) {
     const next = (ix % 5) + 1;
     const pack = JSON.stringify({ at: new Date().toISOString(), h: h, state: raw });
     let ok = false;
+    try { const __cur = (localStorage.getItem('pilateria_pre_cloud_' + next) || '').length; __pilLsMakeRoom203(Math.max(0, pack.length - __cur) + 64, 'pilateria_pre_cloud_' + next); } catch(e) {} // v203: bütçe
     for (let tryN = 0; tryN < 7 && !ok; tryN++) {
       try { localStorage.setItem('pilateria_pre_cloud_' + next, pack); ok = true; }
       catch(e) {
@@ -16425,7 +16445,7 @@ function __pilPreCloudRing(raw) {
       }
     }
     if (ok) { try { localStorage.setItem('pilateria_pre_cloud_ix', String(next)); } catch(e) {} }
-    try { localStorage.setItem('pilateria_preview_pre_cloud_backup', pack); } catch(e) {}   // eski kurtarma konsollarıyla uyum
+    try { const __curB = (localStorage.getItem('pilateria_preview_pre_cloud_backup') || '').length; if (__pilLsUsed203() - __curB + pack.length <= __pilLsBudget203()) localStorage.setItem('pilateria_preview_pre_cloud_backup', pack); else { try { localStorage.removeItem('pilateria_preview_pre_cloud_backup'); } catch(_) {} } } catch(e) {}   // eski kurtarma konsollarıyla uyum · v203: yalnız bütçeye sığıyorsa (halka zaten tutuyor)
   } catch(e) {}
 }
 
@@ -16435,6 +16455,50 @@ function __pilLsKeys(prefix) {
   const out = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(prefix) === 0) out.push(k); } } catch(e) {}
   return out.sort();
+}
+// ═══════ v203 YEREL DEPO BÜTÇESİ ═══════
+function __pilLsBudgetForUA203(ua, platform, maxTouch) { // WebKit (iPhone/iPad/Safari) ~5 MB → 2,3M karakter; diğerleri ~10 MB → 4,6M
+  ua = String(ua || '');
+  const ios = /iP(hone|ad|od)/.test(ua) || (platform === 'MacIntel' && (+maxTouch || 0) > 1);
+  const webkitOnly = /AppleWebKit/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Android|SamsungBrowser/.test(ua);
+  return (ios || webkitOnly) ? 2300000 : 4600000;
+}
+function __pilLsBudget203() {
+  try { if (window.__PIL_LS_BUDGET > 0) return +window.__PIL_LS_BUDGET; } catch(e) {}
+  try { return __pilLsBudgetForUA203(navigator.userAgent, navigator.platform, navigator.maxTouchPoints); } catch(e) { return 2300000; }
+}
+function __pilLsUsed203() { let n = 0; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); n += (k || '').length + (localStorage.getItem(k) || '').length; } } catch(e) {} return n; }
+function __pilLsRingOrder203() { // halka slotları EN ESKİDEN en yeniye (ix = en son yazılan)
+  let ix = 0; try { ix = parseInt(localStorage.getItem('pilateria_pre_cloud_ix') || '0', 10) || 0; } catch(e) {}
+  const out = []; for (let k = 1; k <= 5; k++) { const sN = ((ix + k - 1) % 5) + 1; try { if (localStorage.getItem('pilateria_pre_cloud_' + sN) !== null) out.push('pilateria_pre_cloud_' + sN); } catch(e) {} }
+  return out;
+}
+function __pilLsVictims203(protect) { // feda sırası: değeri en düşük yedekten en değerliye; 'pilateria' ve ayar anahtarları ASLA
+  const has = function(k){ try { return localStorage.getItem(k) !== null; } catch(e) { return false; } };
+  const v = [];
+  __pilLsKeys('pilateria_preview_corrupted_BACKUP_').forEach(function(k){ v.push(k); });
+  ['pilateria_undo', 'pilateria_undo_meta', 'pilateria_preview_mass_delete_backup', 'pilateria_preview_pre_pull_backup', 'pilateria_pre_resync_backup'].forEach(function(k){ if (has(k)) v.push(k); });
+  const d = __pilLsKeys('pilateria_preview_daily_'); const ring = __pilLsRingOrder203().filter(function(k){ return k !== protect; });
+  d.slice(0, Math.max(0, d.length - 1)).forEach(function(k){ v.push(k); });          // eski günlükler (sonuncu kalır)
+  ring.slice(0, Math.max(0, ring.length - 1)).forEach(function(k){ v.push(k); });    // eski halka slotları (en yenisi kalır)
+  if (has('pilateria_preview_pre_cloud_backup') && protect !== 'pilateria_preview_pre_cloud_backup') v.push('pilateria_preview_pre_cloud_backup');
+  if (has('pilateria_pre_overwrite_backup') && protect !== 'pilateria_pre_overwrite_backup') v.push('pilateria_pre_overwrite_backup');
+  if (d.length) v.push(d[d.length - 1]);
+  if (ring.length) v.push(ring[ring.length - 1]);
+  return v.filter(function(k){ return k !== protect && k !== 'pilateria'; });
+}
+function __pilLsMakeRoom203(need, protect) { // 'need' karakter yazılabilsin diye bütçeye göre yer aç → sığıyorsa true
+  try {
+    const budget = __pilLsBudget203();
+    if (__pilLsUsed203() + (+need || 0) <= budget) return true;
+    const victims = __pilLsVictims203(protect); const gone = [];
+    for (let i = 0; i < victims.length; i++) {
+      try { localStorage.removeItem(victims[i]); gone.push(victims[i].replace('pilateria_', '')); } catch(e) {}
+      if (__pilLsUsed203() + (+need || 0) <= budget) break;
+    }
+    if (gone.length) { try { __trace('🧹 Yerel depo bütçesi: ' + gone.length + ' yedek düşürüldü (' + gone.join(', ').slice(0, 160) + ')'); } catch(e) {} }
+    return __pilLsUsed203() + (+need || 0) <= budget;
+  } catch(e) { return false; }
 }
 function __pilStoragePrune(aggressive) {
   try {
@@ -16463,6 +16527,7 @@ function __pilDailySnapshot() {
     for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('pilateria_preview_daily_') === 0) mine.push(k); }
     mine.sort();
     while (mine.length >= 3) localStorage.removeItem(mine.shift()); // v125: en fazla 3 gun (sunucuda saatlik+gecelik+aybasi yedek var)
+    if (!__pilLsMakeRoom203(cur.length + key.length, key)) { try { __trace('📅 Cihaz günlük yedeği ATLANDI (yerel depo bütçesi)'); } catch(e) {} return; } // v203
     try { localStorage.setItem(key, cur); }
     catch(e) { while (mine.length) localStorage.removeItem(mine.shift()); try { localStorage.setItem(key, cur); } catch(e2) {} } // kota korumasi
     try { __trace('📅 Cihaz günlük yedeği alındı: ' + day); } catch(e) {}
@@ -16806,7 +16871,7 @@ async function sbDiffPush() {
   const __resetOk = window.__pilAllowMassDelete && (Date.now() - window.__pilAllowMassDelete) < 300000;
   const __massDelete = !__resetOk && ((__delTotal > 15 && __delTotal > __shadowTotal * 0.3) || __wipeTables.length > 0);
   if (__massDelete) {
-    try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) localStorage.setItem('pilateria_preview_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {}
+    try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) { const __pk = JSON.stringify({ at: new Date().toISOString(), state: __cur }); __pilLsMakeRoom203(__pk.length, 'pilateria_preview_mass_delete_backup'); localStorage.setItem('pilateria_preview_mass_delete_backup', __pk); } } catch(e) {} // v203: bütçe
     __trace('⛔ SİLME SİGORTASI (push): ' + __delTotal + ' kayıt silme girişimi ENGELLENDİ' + (__wipeTables.length ? ' (tablo boşaltma: ' + __wipeTables.join(',') + ')' : '') + ' — bulut KORUNDU, yerel sunucudan tazelenecek');
     try { if (window.plToast) plToast('⛔ Toplu silme engellendi — bulut verileri KORUNDU'); } catch(e) {}
   }
@@ -16946,7 +17011,7 @@ function sbSubscribeAll() {
           window.__rtDelWin.push(__dnow);
           if (window.__rtDelWin.length > 25) { // v112: 12 -> 25 (mesru toplu islemler 12'yi asabiliyor; wipe yuzlercedir)
             window.__rtDelTripped = true;
-            try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) localStorage.setItem('pilateria_preview_mass_delete_backup', JSON.stringify({ at: new Date().toISOString(), state: __cur })); } catch(e) {}
+            try { const __cur = localStorage.getItem('pilateria_preview'); if (__cur) { const __pk = JSON.stringify({ at: new Date().toISOString(), state: __cur }); __pilLsMakeRoom203(__pk.length, 'pilateria_preview_mass_delete_backup'); localStorage.setItem('pilateria_preview_mass_delete_backup', __pk); } } catch(e) {} // v203: bütçe
             __trace('⛔ REALTIME SİLME SİGORTASI ATTI: buluttan toplu silme algılandı — bu cihazdaki veriler KORUNDU (recover.html ile geri yüklenebilir)');
             try { if (window.plToast) plToast('⛔ Toplu silme algılandı — bu cihazdaki veriler KORUNDU!'); } catch(e) {}
             try { setCloudDot && setCloudDot('offline'); } catch(e) {}
@@ -17648,7 +17713,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.124-onizleme';
+const APP_VERSION = '2026.10.18.126-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
