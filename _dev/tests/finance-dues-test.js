@@ -128,7 +128,7 @@ setTimeout(async function(){try{
     t('hoca kalemi "Öde" → Hocalar maaş penceresi', !!w.document.getElementById('modal-inst-pay'));
     w.document.getElementById('modal-inst-pay').remove();
     const cid=w.eval("finDueItems196().find(x=>x.dtype==='card').id"); w.eval("finPayItem196('"+cid+"')"); await tick();
-    t('kart kalemi "Öde" → kart borcu ödemesi penceresi (kart + tutar hazır)', !!w.document.getElementById('modal-fin-move') && w.document.getElementById('fm-op').value==='cardpay' && w.document.getElementById('fm-to').value==='card1' && w.document.getElementById('fm-amount').value==='2800');
+    t('kart kalemi "Öde" → v206 kart ödemesi penceresi (kart başlıkta, tutar hazır, kaynakta kart yok)', !!w.document.getElementById('modal-fin-cardpay') && /Garanti|card1|Kart/.test(w.document.getElementById('modal-fin-cardpay').textContent) && w.document.getElementById('fcp-amount').value==='2800' && ![...w.document.querySelectorAll('#fcp-from option')].some(o=>o.value==='card1'), w.document.getElementById('modal-fin-cardpay') ? w.document.getElementById('modal-fin-cardpay').textContent.slice(0,120) : 'yok');
   }
 
   console.log('[5] Cari ekranı: üç blok, ekstreler, dış cari CRUD, hoca "Ortak" bayrağı');
