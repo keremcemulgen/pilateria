@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.18.128">
+<meta name="app-version" content="2026.10.19.129">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -13763,6 +13763,14 @@ async function removeFinMove196(id) {
   if (!ok) return;
   __undoSnapshot('Hareket sil: ' + (FIN_MOVE_OPS196[mv.op] || '') + ' ' + money(Math.abs(+mv.amount || 0)) + ' ₺');
   (state.finDues || []).forEach(function(d){ if (d && d.paidRef && d.paidRef.type === 'move' && d.paidRef.id === id) { d.status = 'open'; delete d.paidRef; delete d.paidDate; delete d.paidAmount; } }); // v196 adım 4
+  if (mv.dueId && +mv.dueReduced > 0) { // v206: kısmi kart ödemesi silindi → kalemin tutarı geri gelir (kalem bu arada kapandıysa silinen kadar yeni açık kalem)
+    const dd = (state.finDues || []).find(function(x){ return x && x.id === mv.dueId; });
+    if (dd) {
+      const frag = fmtDate(mv.date) + ' ' + money(+mv.dueReduced) + ' ₺ ödendi';
+      if (dd.status === 'open') { dd.amount = finR2_196((+dd.amount || 0) + (+mv.dueReduced)); dd.note = String(dd.note || '').replace(' · ' + frag, '').replace(frag, '').trim(); }
+      else { let n = 1; while (state.finDues.some(function(x){ return x && x.id === dd.id + '-r' + n; })) n++; state.finDues.push(Object.assign({}, dd, { id: dd.id + '-r' + n, amount: finR2_196(+mv.dueReduced), status: 'open', note: 'silinen kısmi ödeme (' + fmtDate(mv.date) + ')', paidRef: undefined, paidDate: undefined, paidAmount: undefined, createdAt: new Date().toISOString() })); }
+    }
+  }
   state.finMoves = (state.finMoves || []).filter(function(x){ return !(x && x.id === id); });
   save(); try { __refreshUIInPlace(); } catch(e) {}
 }
@@ -14038,14 +14046,88 @@ function finRenewals196() {
   return out.sort(function(a, b){ return String(a.dueDate).localeCompare(String(b.dueDate)); });
 }
 // ─────────── VADE ÖDEME / ATLAMA / DÜZENLEME ───────────
+// ═══════ v206 KART ÖDEMESİ (ekstre kalemi / kart borcu) → bankadan karta geçiş; GİDER DEĞİL ═══════
+function finPayDefaultDate206(dueDate) { const t = todayISO(); return (dueDate && /^\d{4}-\d{2}-\d{2}$/.test(String(dueDate)) && String(dueDate) < t) ? String(dueDate) : t; } // gecikmiş kalemde vade günü
+function finCardPaySources206(card) { // ödemenin ÇIKACAĞI hesaplar: kart dışı (banka/kasa); varsayılan kart sahibinin bankası, yoksa Banka
+  const list = finAccounts196().filter(function(a){ return a && a.type !== 'card'; });
+  let def = '';
+  if (card && card.owner) { const own = list.find(function(a){ return a.type === 'bank' && a.owner && a.owner === card.owner; }); if (own) def = own.id; }
+  if (!def && list.some(function(a){ return a.id === FIN_ACC_BANK; })) def = FIN_ACC_BANK;
+  if (!def && list.length) def = list[0].id;
+  return { list: list, def: def };
+}
+function finCardPayItem206(id) { return finDueItems196().find(function(x){ return x && x.id === id && x.dtype === 'card'; }) || null; }
+function finPayCardDueModal206(id) {
+  const it = finCardPayItem206(id); if (!it) return;
+  if (!finCloudReady196()) { alert('Finans bulut tablosu henüz kurulmamış.'); return; }
+  const card = finAccount196(it.accountId); if (!card) { alert('Kart hesabı bulunamadı.'); return; }
+  const src = finCardPaySources206(card);
+  if (!src.list.length) { alert('Ödemenin çıkacağı banka/kasa hesabı yok — 🏦 Hesaplar sekmesinden ekle.'); return; }
+  const old = document.getElementById('modal-fin-cardpay'); if (old) old.remove();
+  const dflt = finPayDefaultDate206(it.dueDate);
+  const mdl = document.createElement('div'); mdl.id = 'modal-fin-cardpay'; mdl.className = 'modal-bg open'; mdl.dataset.dueId = it.id;
+  mdl.innerHTML = '<div class="modal" style="max-width:440px;"><h3>💳 Kart ödemesi: ' + escapeHtml(finAccountLabel196(card.id)) + '</h3>' +
+    '<div class="fin-note">' + escapeHtml(it.title) + ' · son ödeme ' + fmtDate(it.dueDate) + '. Bankadan karta geçiş olarak kaydedilir — <b>gider değildir</b> (kart harcamaları ekstreden zaten gider olarak işlendi).</div>' +
+    '<div class="field"><label>Tutar (₺)</label><input type="number" id="fcp-amount" step="0.01" min="0" value="' + it.amount + '"><div class="fin-note">Eksik ödersen kalan tutar kalemde açık kalır.</div></div>' +
+    '<div class="field"><label>Ödeme günü</label><input type="date" id="fcp-date" value="' + dflt + '" onchange="finCardPayNote206()" oninput="finCardPayNote206()">' + (dflt !== todayISO() ? '<div class="fin-note">Gecikmiş kalem — tarih vade günüyle geldi; başka gün ödendiyse değiştir.</div>' : '') + '</div>' +
+    '<div class="field"><label>Hangi hesaptan ödendi</label><select id="fcp-from" onchange="finCardPayNote206()">' + src.list.map(function(a){ return '<option value="' + a.id + '"' + (a.id === src.def ? ' selected' : '') + '>' + escapeHtml(finAccountLabel196(a.id)) + (a.owner ? ' · ' + escapeHtml(a.owner) : '') + '</option>'; }).join('') + '</select></div>' +
+    '<div class="fin-note" id="fcp-pre-note" style="display:none;color:#7a4a00;"></div>' +
+    '<div class="field"><label>Not</label><input id="fcp-note" value=""></div>' +
+    '<div class="row" style="justify-content:flex-end;gap:8px;"><button class="btn secondary" onclick="document.getElementById(\'modal-fin-cardpay\').remove()">Vazgeç</button><button class="btn" id="fcp-save">Kaydet</button></div></div>';
+  document.body.appendChild(mdl);
+  const sv = document.getElementById('fcp-save'); if (sv) sv.onclick = function(){ finPayCardDue206(it.id); };
+  finCardPayNote206();
+}
+function finCardPayNote206() {
+  try {
+    const n = document.getElementById('fcp-pre-note'); if (!n) return;
+    const mdl = document.getElementById('modal-fin-cardpay'); const it = mdl ? finCardPayItem206(mdl.dataset.dueId) : null; const card = it ? finAccount196(it.accountId) : null;
+    const a = finAccount196((document.getElementById('fcp-from') || {}).value || ''); const date = (document.getElementById('fcp-date') || {}).value || '';
+    const msgs = [];
+    if (!a || !a.openingDate) msgs.push('⚠️ Çıkan hesap henüz açılmadı — ödeme kaydedilir, hesap açılınca açılış tarihinden itibaren bakiyesine işler.');
+    else if (date && date < a.openingDate) msgs.push('⚠️ Seçilen gün çıkan hesabın açılışından (' + fmtDate(a.openingDate) + ') önce — kaydedilir, o hesabın bakiyesine girmez.');
+    if (card && card.openingDate && date && date < card.openingDate) msgs.push('⚠️ Seçilen gün kartın açılışından (' + fmtDate(card.openingDate) + ') önce — kart bakiyesine girmez.');
+    n.style.display = msgs.length ? '' : 'none'; n.textContent = msgs.join(' ');
+  } catch(e) {}
+}
+function finPayCardDue206(id, opt) { // kart kalemi ödemesi → finMoves 'cardpay' (çıkan banka/kasa → giren kart); saklı kalem kapanır; GİDER YAZILMAZ
+  opt = opt || {};
+  const it = finCardPayItem206(id); if (!it) return null;
+  const card = finAccount196(it.accountId); if (!card || card.type !== 'card') { alert('Kart hesabı bulunamadı.'); return null; }
+  const amount = finR2_196(opt.amount !== undefined ? opt.amount : (document.getElementById('fcp-amount') || {}).value);
+  const date = opt.date || (document.getElementById('fcp-date') || {}).value || finPayDefaultDate206(it.dueDate);
+  const from = opt.fromAccountId || opt.accountId || (document.getElementById('fcp-from') || {}).value || '';
+  const note = (opt.note !== undefined ? String(opt.note) : ((document.getElementById('fcp-note') || {}).value || '')).trim();
+  if (amount <= 0) { alert('Tutar 0\'dan büyük olmalı.'); return null; }
+  const a = finAccount196(from); if (!a) { alert('Ödemenin çıktığı hesabı seç.'); return null; }
+  if (a.type === 'card') { alert('Kart borcu bir kart hesabından ödenemez — banka ya da kasa seç.'); return null; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) { alert('Tarih seç.'); return null; }
+  if (!finCloudReady196()) { alert('Finans bulut tablosu henüz kurulmamış.'); return null; }
+  __undoSnapshot('Kart ödemesi: ' + (card.name || '') + ' ' + money(amount) + ' ₺');
+  state.finMoves = state.finMoves || [];
+  const mv = { id: uid(), kind: 'move', op: 'cardpay', date: date, amount: amount, fromAccountId: a.id, toAccountId: card.id, note: note, at: new Date().toISOString() };
+  const d = it.derived ? null : (state.finDues || []).find(function(x){ return x && x.id === it.id && x.status === 'open'; });
+  if (d) {
+    mv.dueId = d.id;
+    if (amount >= finR2_196(d.amount) - 0.5) { d.status = 'paid'; d.paidRef = { type: 'move', id: mv.id }; d.paidDate = date; d.paidAmount = amount; }
+    else { mv.dueReduced = amount; d.amount = finR2_196(d.amount - amount); d.note = (d.note ? d.note + ' · ' : '') + fmtDate(date) + ' ' + money(amount) + ' ₺ ödendi'; }
+  }
+  state.finMoves.push(mv);
+  const pre = !a.openingDate || date < a.openingDate;
+  const mdl = document.getElementById('modal-fin-cardpay'); if (mdl) mdl.remove();
+  save(); try { __refreshUIInPlace(); } catch(e) {}
+  if (window.plToast) plToast('✓ ' + (card.name || 'Kart') + ' ödemesi kaydedildi' + (d && d.status === 'open' ? ' · kalan ' + money(d.amount) + ' ₺ açık' : '') + (pre ? ' · ' + (a.name || 'hesap') + ' açılış öncesi, bakiyesine girmedi' : ''));
+  return mv;
+}
 function finPayDueModal196(id) {
   const d = (state.finDues || []).find(function(x){ return x && x.id === id; }); if (!d || d.status !== 'open') return;
+  if (d.dtype === 'card') { finPayCardDueModal206(id); return; } // v206: ekstre kalemi gider yoluna DÜŞMEZ
   if (!finCloudReady196()) { alert('Finans bulut tablosu henüz kurulmamış.'); return; }
   const old = document.getElementById('modal-fin-pay'); if (old) old.remove(); // v199: hesap açılmamışken de açılır (açılış-öncesi notu)
   const mdl = document.createElement('div'); mdl.id = 'modal-fin-pay'; mdl.className = 'modal-bg open';
   mdl.innerHTML = '<div class="modal" style="max-width:440px;"><h3>' + (d.dtype === 'income' ? '✓ Alındı: ' : '✓ Ödendi: ') + escapeHtml(d.title) + '</h3><div class="fin-note">Vade ' + fmtDate(d.dueDate) + ' · ' + escapeHtml(d.category || '') + (d.counterpartyId ? ' · ' + escapeHtml(finCounterpartyName196(d.counterpartyId)) : '') + (d.scope === 'hane' ? ' · 🏠 hane' : '') + '</div>' +
     '<div class="field"><label>Tutar (₺)</label><input type="number" id="fp-amount" step="0.01" min="0" value="' + d.amount + '"><div class="fin-note">Eksik girersen kalan tutar için yeni bir açık kalem oluşur.</div></div>' +
-    '<div class="field"><label>' + (d.dtype === 'income' ? 'Alındığı gün' : 'Ödeme günü') + '</label><input type="date" id="fp-date" value="' + todayISO() + '" onchange="finPayPreNote199()" oninput="finPayPreNote199()"></div>' +
+    '<div class="field"><label>' + (d.dtype === 'income' ? 'Alındığı gün' : 'Ödeme günü') + '</label><input type="date" id="fp-date" value="' + finPayDefaultDate206(d.dueDate) + '" onchange="finPayPreNote199()" oninput="finPayPreNote199()">' + (finPayDefaultDate206(d.dueDate) !== todayISO() ? '<div class="fin-note">Gecikmiş kalem — tarih vade günüyle geldi; başka gün ' + (d.dtype === 'income' ? 'alındıysa' : 'ödendiyse') + ' değiştir.</div>' : '') + '</div>' + // v206
     '<div class="field"><label>' + (d.dtype === 'income' ? 'Hangi hesaba girdi' : 'Hesap') + '</label><select id="fp-acc" onchange="finPayPreNote199()"></select></div>' +
     '<div class="fin-note" id="fp-pre-note" style="display:none;color:#7a4a00;"></div>' +
     '<div class="field"><label>Not</label><input id="fp-note" value=""></div>' +
@@ -14057,6 +14139,7 @@ function finPayDueModal196(id) {
 function finPayDue196(id, opt) {
   const d = (state.finDues || []).find(function(x){ return x && x.id === id; }); if (!d || d.status !== 'open') return null;
   opt = opt || {};
+  if (d.dtype === 'card') return finPayCardDue206(id, opt); // v206: kart kalemi → bankadan karta ödeme (gider yazılmaz; kaynak kart olamaz)
   const amount = finR2_196(opt.amount !== undefined ? opt.amount : (document.getElementById('fp-amount') || {}).value);
   const date = opt.date || (document.getElementById('fp-date') || {}).value || todayISO();
   const acc = opt.accountId || (document.getElementById('fp-acc') || {}).value || '';
@@ -14150,7 +14233,7 @@ async function removeFinDue196(id) {
 function finPayItem196(id) { // vade listesindeki tik — türüne göre doğru akış
   const it = finDueItems196().find(function(x){ return x.id === id; }); if (!it) return;
   if (it.dtype === 'instructor') { payInstructor(it.instructorId, it.ay, it.hak); return; }
-  if (it.dtype === 'card' && it.derived) { openFinMoveModal196('cardpay'); try { const to = document.getElementById('fm-to'); if (to) to.value = it.accountId; const am = document.getElementById('fm-amount'); if (am) am.value = it.amount; __finMoveFields196(); } catch(e) {} return; }
+  if (it.dtype === 'card') { finPayCardDueModal206(it.id); return; } // v206: ekstre kalemi de türetilmiş kart borcu da → kart ödemesi penceresi (gider DEĞİL)
   finPayDueModal196(id);
 }
 // ─────────── EKRAN: VADELER ───────────
@@ -14162,7 +14245,7 @@ function finDueRow196(it, side) {
   let act = '';
   if (side === 'pay') {
     if (it.dtype === 'instructor') act = '<button class="btn small ok" onclick="finPayItem196(\'' + it.id + '\')">💸 Öde</button>';
-    else if (it.dtype === 'card') act = '<button class="btn small ok" onclick="finPayItem196(\'' + it.id + '\')">🏦 Öde</button>';
+    else if (it.dtype === 'card') act = '<button class="btn small ok" onclick="finPayItem196(\'' + it.id + '\')" title="Bankadan karta ödeme — gider yazmaz">🏦 Öde</button>'; // v206
     else act = '<button class="btn small ok" onclick="finPayItem196(\'' + it.id + '\')" title="Ödendi — hesap sorar, gider yazar">✓ Öde</button> <button class="btn small secondary" onclick="openFinDueModal196(\'' + it.id + '\')" title="Düzenle">✎</button> <button class="btn small secondary" onclick="finSkipDue196(\'' + it.id + '\')" title="Bu dönem atla">Atla</button>';
   } else {
     if (it.dtype === 'member') act = '<button class="btn small ok" onclick="openPaymentModal(\'' + it.memberId + '\',null,\'' + (it.groupId || '') + '\',\'' + it.ay + '\')">+ Ödeme</button>';
@@ -14739,8 +14822,9 @@ function finCloseCardDue196(mv) {
   const open = (state.finDues || []).filter(function(d){ return d && d.dtype === 'card' && d.accountId === mv.toAccountId && d.status === 'open'; }).sort(function(a, b){ return String(a.dueDate).localeCompare(String(b.dueDate)); });
   if (!open.length) return;
   const d = open[0]; const paid = finR2_196(mv.amount);
+  mv.dueId = d.id; // v206
   if (paid >= d.amount - 0.5) { d.status = 'paid'; d.paidRef = { type: 'move', id: mv.id }; d.paidDate = mv.date; d.paidAmount = paid; }
-  else { d.amount = finR2_196(d.amount - paid); d.note = (d.note ? d.note + ' · ' : '') + fmtDate(mv.date) + ' ' + money(paid) + ' ₺ ödendi'; }
+  else { mv.dueReduced = paid; d.amount = finR2_196(d.amount - paid); d.note = (d.note ? d.note + ' · ' : '') + fmtDate(mv.date) + ' ' + money(paid) + ' ₺ ödendi'; } // v206: silinirse tutar geri gelir
 }
 function renderPayments() {
   try { __renderPaymentRecords196(); } catch(e) { if (typeof __pilLogErr === 'function') __pilLogErr('renderPayments', (e && e.stack) || e); }
@@ -17792,7 +17876,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.18.128';
+const APP_VERSION = '2026.10.19.129';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
