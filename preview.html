@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.20.132-onizleme">
+<meta name="app-version" content="2026.10.21.133-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -5963,6 +5963,7 @@ function __dropPartialIfBackInRoster176(memberId, monthISO) {
   } catch(e) {}
 }
 function addMemberToMonth(memberId, monthISO) {
+  { const __am210 = state.members.find(x => x.id === memberId); __undoSnapshot('Aya ekle: ' + ((__am210 && __am210.name) || 'Üye') + ' — ' + monthISO); } // v210
   setMemberMonthly(memberId, monthISO, { enrolled: true });
   __dropPartialIfBackInRoster176(memberId, monthISO); // v176 (F6)
   { const __rm = state.members.find(x=>x.id===memberId); if (__rm) __closeArchivePeriodAt(__rm, monthISO); } // v45: carry-forward pasif donemi kapanir
@@ -6288,14 +6289,36 @@ function __undoTrack(rows) {
     if (__undoPrevRows) {
       var ext = !!(window.__pilSuppressDirty || (typeof __sbApplying !== 'undefined' && __sbApplying));
       if (ext) {
-        var now = Date.now(), n = 0, k;
-        for (k in cur) if (__undoPrevRows[k] !== cur[k]) { __undoExt[k] = now; n++; }
-        for (k in __undoPrevRows) if (!(k in cur)) { __undoExt[k] = now; n++; }
+        var now = Date.now(), n = 0, k, sc = window.__undoScope210 || null; // v210: realtime yalniz UYGULANAN kaydi damgalar (kaydedilmemis yerel degisiklik 'dis' sayilmaz)
+        for (k in cur) if (__undoPrevRows[k] !== cur[k] && (!sc || sc[k])) { __undoExt[k] = now; n++; }
+        for (k in __undoPrevRows) if (!(k in cur) && (!sc || sc[k])) { __undoExt[k] = now; n++; }
         if (n) { __undoMetaSave(); try { __trace('↩️ Geri Al: ' + n + ' kayıt başka cihazdan değişti — geri almada korunacak'); } catch(e) {} }
       }
     }
     __undoPrevRows = cur;
   } catch(e) {}
+}
+// v210: islemin hemen ardindan (dialog cevabiyla) gelen degisiklik, o islemin Geri Al adimina katilir.
+// Soru kuyruga alinirken ust yedek o an (ayni islemde) alinmissa kimligi saklanir; cevap geldiginde yigin ustu hala o yedekse
+// yeni yedek ACILMAZ (etiket genisler) — boylece tek Geri Al islemin tamamini geri alir.
+function __undoFlowSnap210() { try { var s = __undoStack[__undoStack.length - 1]; return (s && (Date.now() - (+s.ms || 0)) < 3000) ? s.ms : 0; } catch(e) { return 0; } }
+function __undoFollow210(it, label) {
+  try {
+    var s = __undoStack[__undoStack.length - 1];
+    if (it && it.psnap && s && s.ms === it.psnap) {
+      var L = String(s.label || 'İşlem'), add = String(label || '');
+      if (add && L.indexOf(add) === -1 && L.length < 160) s.label = L + ' + ' + add;
+      try { __pilBackupSet(__UNDO_LS, JSON.stringify(s)); } catch(e) {}
+      renderUndoBtn();
+      return;
+    }
+  } catch(e) {}
+  __undoSnapshot(label);
+}
+// v210: realtime'da uygulanan kaydin Geri Al anahtarlari (bolunmus kayitta iki yarisi)
+function __undoScopeFor210(t, id) {
+  var P = { members: 'member_finance', member_finance: 'members', groups: 'group_finance', group_finance: 'groups', instructors: 'instructor_finance', instructor_finance: 'instructors' };
+  var o = {}; o[t + '/' + id] = 1; if (P[t]) o[P[t] + '/' + id] = 1; return o;
 }
 function __undoSnapshot(label) {
   try {
@@ -8046,7 +8069,7 @@ function __queuePartialOffer(g, memberId, ay) {
     if (partialShareFor(g.id, memberId, ay)) return;
     if (!__lessonsTakenInGroup(memberId, g.id, ay)) return;
     if (__partialOfferQueue.some(function(q){ return q.kind === 'leave' && q.gid === g.id && q.mid === memberId && q.ay === ay; })) return;
-    __partialOfferQueue.push({ kind: 'leave', gid: g.id, mid: memberId, ay: ay });
+    __partialOfferQueue.push({ kind: 'leave', gid: g.id, mid: memberId, ay: ay, psnap: __undoFlowSnap210() });
     clearTimeout(__partialOfferQueue._t); __partialOfferQueue._t = setTimeout(__runPartialOffers, 0);
   } catch(e) {}
 }
@@ -8055,7 +8078,7 @@ function __queueLeaveUnit186(g, memberId, ay) {
   try {
     if (!g || !memberId || !ay) return;
     if (__partialOfferQueue.some(function(q){ return q.kind === 'leaveunit186' && q.mid === memberId && q.ay === ay; })) return;
-    __partialOfferQueue.push({ kind: 'leaveunit186', gid: g.id, mid: memberId, ay: ay });
+    __partialOfferQueue.push({ kind: 'leaveunit186', gid: g.id, mid: memberId, ay: ay, psnap: __undoFlowSnap210() });
     clearTimeout(__partialOfferQueue._t); __partialOfferQueue._t = setTimeout(__runPartialOffers, 0);
   } catch(e) {}
 }
@@ -8085,7 +8108,7 @@ function __queueJoinOffer(g, memberId, ay) {
     const ov = getMemberMonthlyOverride(memberId, ay) || {};
     if (ov.totalPrice !== undefined && ov.totalPrice !== null && ov.totalPrice !== '') return; // bu aya ozel fiyat zaten var
     if (__partialOfferQueue.some(function(q){ return q.kind === 'join' && q.gid === g.id && q.mid === memberId && q.ay === ay; })) return;
-    __partialOfferQueue.push({ kind: 'join', gid: g.id, mid: memberId, ay: ay });
+    __partialOfferQueue.push({ kind: 'join', gid: g.id, mid: memberId, ay: ay, psnap: __undoFlowSnap210() });
     clearTimeout(__partialOfferQueue._t); __partialOfferQueue._t = setTimeout(__runPartialOffers, 0);
   } catch(e) {}
 }
@@ -8130,7 +8153,7 @@ async function __runPartialOffers() {
         __spillJoinRecord195(g, it.mid, S, __yes ? 'yes' : 'no');
         changed = true;
         if (!__yes) { try { __trace('SARKAN PAKET: ' + m.name + ' — ' + S + ' paketine girmedi (kullanıcı: yalnız ' + it.ay + ')'); } catch(e) {} continue; }
-        __undoSnapshot(__lblS + ' paketine katıl: ' + m.name);
+        __undoFollow210(it, __lblS + ' paketine katıl: ' + m.name);
         __joinSpilledPackageDo195(g, it.mid, it.ay, S);
         if (typeof plToast === 'function') { try { plToast('✓ ' + m.name + ' — ' + __lblS + ' paketinin kalan ' + __pl.length + ' dersine de yazıldı'); } catch(e) {} }
         continue;
@@ -8151,7 +8174,7 @@ async function __runPartialOffers() {
           escValue: null
         });
         if (ansU !== 'passive') continue; // varsayilan/Vazgec: eski davranis (listede kalir)
-        __undoSnapshot('Pasife al: ' + m.name + ' — ' + it.ay);
+        __undoFollow210(it, 'Pasife al: ' + m.name + ' — ' + it.ay);
         __removeMemberFromMonthCore(it.mid, it.ay);
         changed = true;
         if (typeof plToast === 'function') { try { plToast('⏸ ' + m.name + ' — ' + __lbl + ' ayından itibaren pasif'); } catch(e) {} }
@@ -8165,7 +8188,7 @@ async function __runPartialOffers() {
         if (__staff) { // F16: personel para gormez — pay yalniz ders sayisiyla kaydedilir, ucretini yonetici girer
           const okS = await plConfirm(m.name + ' ' + pkgMonthLabel(it.ay) + ' ayında «' + gName + '» grubunda ' + taken + ' ders aldı.\n\nBu dersler grupta payı olarak kaydedilsin mi? (Ücretini yönetici girer)', 'Evet, kaydet');
           if (!okS) continue;
-          __undoSnapshot('Pay kaydı: ' + m.name + ' — ' + it.ay);
+          __undoFollow210(it, 'Pay kaydı: ' + m.name + ' — ' + it.ay);
           setPartialShare(g.id, it.mid, it.ay, taken, undefined, '');
           changed = true;
           if (typeof plToast === 'function') { try { plToast('📎 ' + m.name + ' — «' + gName + '» payı: ' + taken + ' ders (ücret: yönetici)'); } catch(e) {} }
@@ -8182,7 +8205,7 @@ async function __runPartialOffers() {
           '\n\nVazgeç = kayıt açılmaz', String(sug), { type: 'number', placeholder: '₺' });
         const price = __parseTL(ans);
         if (price === null) continue;
-        __undoSnapshot('Pay kaydı: ' + m.name + ' — ' + it.ay); // yanlis "Evet" → Geri Al yalniz payi kaldirir
+        __undoFollow210(it, 'Pay kaydı: ' + m.name + ' — ' + it.ay); // v210: Geri Al islemin TAMAMINI (ayrilma + pay) geri alir
         setPartialShare(g.id, it.mid, it.ay, taken, price, '');
         changed = true;
         if (typeof plToast === 'function') { try { plToast('📎 ' + m.name + ' — «' + gName + '» payı: ' + taken + ' ders · ' + money(price) + ' ₺'); } catch(e) {} }
@@ -8197,7 +8220,7 @@ async function __runPartialOffers() {
           if (memberSessionsOverride(it.mid, it.ay) !== null) continue;
           const okS = await plConfirm('«' + gName + '» ' + pkgMonthLabel(it.ay) + ' paketinde ' + takenG + ' ders yapıldı, ' + kalan + ' ders kaldı.\n\n' + m.name + ' için bu ayın ders hakkı ' + kalan + ' olsun mu? (Ücreti yönetici belirler)', 'Evet');
           if (!okS) continue;
-          __undoSnapshot('Ders hakkı: ' + m.name + ' — ' + it.ay);
+          __undoFollow210(it, 'Ders hakkı: ' + m.name + ' — ' + it.ay);
           setMemberMonthly(it.mid, it.ay, { sessionsOverride: kalan });
           __dropOwnHakFromPlanned187(g, it.mid, it.ay); // v187
           changed = true;
@@ -8212,7 +8235,7 @@ async function __runPartialOffers() {
           '\n\nVazgeç = fiyat ve hak değişmez (tam ücret, tam hak)', String(sug), { type: 'number', placeholder: '₺' });
         const price = __parseTL(ans);
         if (price === null) continue;
-        __undoSnapshot('Orantılı ücret: ' + m.name + ' — ' + it.ay);
+        __undoFollow210(it, 'Orantılı ücret: ' + m.name + ' — ' + it.ay);
         setMemberMonthly(it.mid, it.ay, { totalPrice: price, __prorata: true, sessionsOverride: kalan });
         __dropOwnHakFromPlanned187(g, it.mid, it.ay); // v187: kalan derse gore hak → derslerini Kerem secer // F15: ucret + DERS HAKKI kalan derse gore; fiyat sonraki aya KOPYALANMAZ (hak zaten ay-bazli)
         changed = true;
@@ -8341,17 +8364,19 @@ async function __moveExcessToCurrentUnit177(groupId, memberId, ay) {
   save(); try { __refreshUIInPlace(); refreshGroupDetailIfOpen(); refreshMemberDetailIfOpen(); } catch(e) {}
   if (typeof plToast === 'function') { try { plToast('↔ ' + money(r.moved) + ' ₺ ' + toName + ' taşındı'); } catch(e) {} }
 }
-function __undoSnapshotIfMove177(memberId, keepGroupId, ay) {
+function __moveLabel210(memberId, keepGroupId, ay) { // v210: v177 taşınma kararı + Geri Al etiketi ('' = taşınma değil)
   try {
-    const m = state.members.find(x => x && x.id === memberId); if (!m || !ay) return;
+    const m = state.members.find(x => x && x.id === memberId); if (!m || !ay) return '';
     const from = state.groups.filter(g => g && g.id !== keepGroupId && !isGroupInactiveInMonth(g, ay) && (activeGroupRosterForMonth(g, ay).includes(memberId) || __spillPackageMonth179(g, memberId, ay)) && (memberPaidTowardsMonth(memberId, g.id, ay) > 0 || __lessonsTakenInGroup(memberId, g.id, ay) > 0 || __spillPackageMonth179(g, memberId, ay)));
     const pmOf = x => x.packageMonth || String(x.date || '').slice(0, 7);
     const soloTrace = !!keepGroupId && !from.length && !memberActiveGroupForMonth(memberId, ay) && isMemberEnrolledInMonth(memberId, ay) && ((state.lessons || []).some(l => l && !l.groupId && (l.memberIds || []).includes(memberId) && pmOf(l) === ay && (l.status === 'completed' || l.status === 'missed')) || (state.payments || []).some(p => p && p.memberId === memberId && !p.groupId && pmOf(p) === ay)); // v179 (U5)
-    if (!from.length && !soloTrace) return;
+    if (!from.length && !soloTrace) return '';
     const keepG = keepGroupId ? state.groups.find(x => x && x.id === keepGroupId) : null;
-    __undoSnapshot('Taşınma: ' + (m.name || 'Üye') + ' — ' + (from.length ? from.map(g => '«' + (groupDisplayName(g, ay) || g.name || 'Grup') + '»').join(', ') : 'bireysel') + ' → ' + (keepGroupId ? ('«' + ((keepG && (groupDisplayName(keepG, ay) || keepG.name)) || 'yeni grup') + '»') : 'bireysel'));
+    return ('Taşınma: ' + (m.name || 'Üye') + ' — ' + (from.length ? from.map(g => '«' + (groupDisplayName(g, ay) || g.name || 'Grup') + '»').join(', ') : 'bireysel') + ' → ' + (keepGroupId ? ('«' + ((keepG && (groupDisplayName(keepG, ay) || keepG.name)) || 'yeni grup') + '»') : 'bireysel'));
   } catch(e) {}
+  return '';
 }
+function __undoSnapshotIfMove177(memberId, keepGroupId, ay) { try { const l = __moveLabel210(memberId, keepGroupId, ay); if (l) __undoSnapshot(l); } catch(e) {} }
 // v179 (U4): SARKAN PAKET — baglam ayindan ONCEKI paketin bu aya (ve sonrasina) sarkan PLANLI dersinde uye varsa,
 // ayrilma o paketin ayindan uygulanir (pay = o paketteki alinan ders). Yoksa '' doner.
 function __spillPackageMonth179(g, memberId, ctxAy) {
@@ -8410,7 +8435,7 @@ function __joinSpilledPackage186(g, mid, ctxAy) {
     const __act = __spillOccupancy195(g, S, ctxAy, mid);
     if (+g.size > 0 && __act >= +g.size) { try { __trace('SARKAN PAKET: ' + (m.name || mid) + ' — ' + S + ' paketinin kalan dersleri dolu (' + __act + '/' + g.size + '), yalnız ' + ctxAy); } catch(e) {} if (typeof plToast === 'function') { try { plToast('ℹ️ ' + (m.name || 'Üye') + ' — ' + pkgMonthLabel(S) + ' paketinin kalan dersleri dolu (' + __act + '/' + g.size + '); yalnız ' + pkgMonthLabel(ctxAy) + ' paketinden itibaren', 6000); } catch(e) {} } return ''; }
     if (__partialOfferQueue.some(function(q){ return q.kind === 'spilljoin195' && q.gid === g.id && q.mid === mid && q.S === S; })) return '';
-    __partialOfferQueue.push({ kind: 'spilljoin195', gid: g.id, mid: mid, ay: ctxAy, S: S });
+    __partialOfferQueue.push({ kind: 'spilljoin195', gid: g.id, mid: mid, ay: ctxAy, S: S, psnap: __undoFlowSnap210() });
     clearTimeout(__partialOfferQueue._t); __partialOfferQueue._t = setTimeout(__runPartialOffers, 0);
     return '';
   } catch(e) { return ''; }
@@ -8739,11 +8764,12 @@ function syncGroupLessonsToRoster(groupId, fromMonth) {
   });
   return { updated, over };
 }
-function assignMemberToSlot(memberId, groupId, slotIndex) {
+function assignMemberToSlot(memberId, groupId, slotIndex, __opts210) {
   const g = state.groups.find(x=>x.id===groupId);
   if (!g) return;
   const __ctxAy = __groupOpsCtxMonth(); // v34: ekleme, ISLEM YAPILAN SAYFANIN AYINA yapilir
   if (resolveGroupMembersForMonth(g, __ctxAy).includes(memberId) && isMemberEnrolledInMonth(memberId, __ctxAy)) { alert('Bu üye zaten bu grupta.'); return; }
+  if (!(__opts210 && __opts210.noUndo)) { try { if (!__moveLabel210(memberId, groupId, __ctxAy)) { const __m210 = state.members.find(x => x && x.id === memberId); __undoSnapshot('Gruba ekle: ' + ((__m210 && __m210.name) || 'Üye') + ' → «' + (groupDisplayName(g, __ctxAy) || g.name || 'Grup') + '»'); } } catch(e) {} } // v210 (taşınmada v177 'Taşınma' yedeği alınır)
   const __wasAutoName = __isAutoGroupName(g.name, g.memberIds);
   const removed = removeMemberFromOtherContexts(memberId, groupId, __ctxAy);
   applyRosterChange(g, __ctxAy, mids => {
@@ -8902,6 +8928,7 @@ function saveMember() {
     totalPrice: (__ctxM && __prevM) ? (__prevM.totalPrice !== undefined ? __prevM.totalPrice : '') : (totalPrice === null ? '' : totalPrice),
     defaultPackageId: (document.getElementById('mm-package')||{}).value || '',
   };
+  __undoSnapshot((__prevM ? 'Üye düzenle: ' : 'Yeni üye: ') + name); // v210 (Kerem): ekleme/düzenleme de Geri Al ile geri alınır
   if (__ctxM && __prevM) {
     // v176 (F22): varsayilan paket degisiyorsa GECMIS (dersi/odemesi/kaydi olan) aylar eski paketiyle dondurulur —
     // fiyat/hak gecmise dogru degismez (v22/v25: "onceki/sonraki aylar etkilenmez; paket de AY bazli").
@@ -8946,7 +8973,7 @@ function saveMember() {
     if (_pendingEmptySlot) {
       const __slot = _pendingEmptySlot; _pendingEmptySlot = null;
       const g = state.groups.find(x=>x.id===__slot.groupId);
-      if (g) { try { assignMemberToSlot(data.id, g.id, __slot.slotIndex); } catch(e) { console.error('assignMemberToSlot', e); } }
+      if (g) { try { assignMemberToSlot(data.id, g.id, __slot.slotIndex, { noUndo: true }); } catch(e) { console.error('assignMemberToSlot', e); } } // v210: 'Yeni üye' yedeği bu adımı da kapsar
     }
   }
   save();
@@ -17604,12 +17631,15 @@ async function sbDiffPush() {
     }
     if (ups.length) __pushedSummary.push(t+'['+ups.map(u=>u.id).slice(0,5).join(',')+(ups.length>5?'+':'')+']');
     if (dels.length) __pushedSummary.push('SİL '+t+'['+dels.slice(0,5).join(',')+']');
+    const __inf210 = {}; // v210: yoldaki upsert içeriği (kendi yankımızı tanımak için)
+    try { __sbInflight210[t] = __sbInflight210[t] || {}; ups.forEach(u => { const c = __sbCanon210(rows[t][u.id]); __inf210[u.id] = c; __sbInflight210[t][u.id] = c; }); if (dels.length) { __sbOwnDel210[t] = __sbOwnDel210[t] || {}; const __nw = Date.now(); dels.forEach(id => { __sbOwnDel210[t][id] = __nw; }); } } catch(e) {}
     try {
       if (ups.length) { const r = await sbClient.from(t).upsert(ups); if (r.error) { okAll = false; __pushErrors.push(t+': '+(r.error.message||r.error.code||JSON.stringify(r.error))); console.error('[sb] upsert', t, r.error); continue; } }
       if (dels.length) { const r2 = await sbClient.from(t).delete().in('id', dels); if (r2.error) { okAll = false; __pushErrors.push('SİL '+t+': '+(r2.error.message||r2.error.code||'?')); console.error('[sb] delete', t, r2.error); continue; } }
       ups.forEach(u => { __sbShadow[t] = __sbShadow[t] || {}; __sbShadow[t][u.id] = upJson[u.id]; });
       dels.forEach(id => { delete __sbShadow[t][id]; if (__sbVer[t]) delete __sbVer[t][id]; });
     } catch(e) { okAll = false; console.error('[sb] push', t, e); }
+    finally { try { for (const __id in __inf210) { if (__sbInflight210[t] && __sbInflight210[t][__id] === __inf210[__id]) delete __sbInflight210[t][__id]; } } catch(e) {} } // v210
   }
   if (__ghostAll.length) {
     // v118: burada VERİ KAYBI olurdu. Artık olmuyor — kayıtlar bulutta duruyor, yerel tazelenecek.
@@ -17660,6 +17690,30 @@ async function sbTestWrite() {
     } else { __trace('🔬 ✅ YAZMA BAŞARILI (settings) — sorun yazmada DEĞİL.'); alert('✅ Yazma başarılı. Sorun yazmada değil; başka nedene bakalım.'); }
   } catch(e) { const m = 'YAZMA İSTİSNA » ' + (e && (e.message||e.toString())); __trace('🔬 '+m); alert('❌ '+m); }
 }
+// v210 KENDİ YANKIMIZ: sunucu jsonb'nin anahtar SIRASINI değiştirir → gölgeyle METİN eşitliği tutmaz. İçerik (sırasız) gölgeyle
+// ya da o an GÖNDERİLMEKTE olanla aynıysa olay bizim yazımımızın yankısıdır: yeniden uygulanmaz (daha yeni yerel düzenleme
+// geri sarılmaz, Geri Al onu "başka cihaz" sanmaz). Bu cihazın sildiği kaydın silme yankısı da uygulanmaz.
+var __sbInflight210 = {};   // tablo → { id → sırasız içerik } (upsert yolda)
+var __sbOwnDel210 = {};     // tablo → { id → ms } (bu cihazın sildiği; yankısı bekleniyor)
+function __sbCanon210(v) { try { return __undoStable(v); } catch(e) { try { return JSON.stringify(v); } catch(_) { return ''; } } }
+function __sbIsOwnEcho210(t, id, meta) {
+  try {
+    const c = __sbCanon210(meta);
+    const inf = __sbInflight210[t] && __sbInflight210[t][id];
+    if (inf !== undefined && inf === c) return true;
+    const sh = __sbShadow[t] && __sbShadow[t][id];
+    if (sh != null && __sbCanon210(JSON.parse(sh)) === c) return true;
+  } catch(e) {}
+  return false;
+}
+function __sbIsOwnDelete210(t, id) {
+  try {
+    const m = __sbOwnDel210[t]; const ts = m && m[id];
+    if (!ts) return false;
+    delete m[id];
+    return (Date.now() - ts) < 120000;
+  } catch(e) { return false; }
+}
 function sbApplyOne(t, id, __src) {
   if (!state || id == null) return;
   const S = (tab) => __src ? ((__src[tab] && __src[tab][id] != null) ? JSON.parse(JSON.stringify(__src[tab][id])) : null)
@@ -17669,16 +17723,25 @@ function sbApplyOne(t, id, __src) {
     if (obj == null) { if (i >= 0) arr.splice(i, 1); }
     else if (i >= 0) arr[i] = obj; else arr.push(obj);
   };
+  // v210 BÖLÜNMÜŞ KAYIT (temel + finans yarısı): GELEN yarı kaynaktan (gölge / Geri Al'da korunan hal), DİĞER yarı YEREL
+  // kayıttan — gölgedeki diğer yarı bayat olabilir (o yarının gönderimi yolda / Geri Al'da o yarı geri alındı). Yerel kayıt
+  // yoksa (uzaktan yeni kayıt) diğer yarı eskisi gibi kaynaktan/gölgeden gelir.
+  const __pair210 = (arr, bt, ft, split, merge) => {
+    const loc = (arr || []).find(x => String(x && x.id) === String(id));
+    const sp = loc ? split(loc) : null;
+    const b = (t === bt || !sp) ? S(bt) : sp.base;
+    return b ? merge(b, (t === ft || !sp) ? S(ft) : sp.fin) : null;
+  };
   if (t === 'members' || t === 'member_finance') {
     state.members = state.members || [];
-    const b = S('members'); const nu = b ? sbMergeMember(b, S('member_finance')) : null;
+    const nu = __pair210(state.members, 'members', 'member_finance', sbSplitMember, sbMergeMember);
     const prev = state.members.find(x=>String(x.id)===String(id));
     if (prev && nu && (String(prev.totalPrice)!==String(nu.totalPrice) || prev.name!==nu.name)) __trace('◀ UZAKTAN geldi '+(nu.name||id)+': fiyat '+prev.totalPrice+'→'+nu.totalPrice);
     else if (prev && !nu) __trace('◀ UZAKTAN SİL '+(prev.name||id));
     upsert(state.members, nu);
   }
-  else if (t === 'groups' || t === 'group_finance') { state.groups = state.groups || []; const b = S('groups'); upsert(state.groups, b ? sbMergeGroup(b, S('group_finance')) : null); }
-  else if (t === 'instructors' || t === 'instructor_finance') { state.instructors = state.instructors || []; const b = S('instructors'); upsert(state.instructors, b ? sbMergeInstructor(b, S('instructor_finance')) : null); }
+  else if (t === 'groups' || t === 'group_finance') { state.groups = state.groups || []; upsert(state.groups, __pair210(state.groups, 'groups', 'group_finance', sbSplitGroup, sbMergeGroup)); }
+  else if (t === 'instructors' || t === 'instructor_finance') { state.instructors = state.instructors || []; upsert(state.instructors, __pair210(state.instructors, 'instructors', 'instructor_finance', sbSplitInstructor, sbMergeInstructor)); }
   else if (t === 'lessons') { state.lessons = state.lessons || []; upsert(state.lessons, S('lessons')); }
   else if (t === 'payments') { state.payments = state.payments || []; upsert(state.payments, S('payments')); }
   else if (t === 'instructor_payouts') { state.instructorPayouts = state.instructorPayouts || []; upsert(state.instructorPayouts, S('instructor_payouts')); }
@@ -17696,6 +17759,7 @@ function sbApplyOne(t, id, __src) {
 function sbSubscribeAll() {
   if (!sbClient || __sbChannel) return;
   try {
+    __sbOwnDel210 = {}; // v210
     __sbChannel = sbClient.channel('pilateria-rt');
     __sbChannel.on('postgres_changes', { event: '*', schema: 'public' }, payload => {
       try {
@@ -17738,12 +17802,14 @@ function sbSubscribeAll() {
             }, (window.__rtFuseVerifyMs || 20000));
             return;
           }
+          if (oldId && __sbIsOwnDelete210(t, oldId)) return; // v210: kendi silme yankımız (gölgeyi gönderim düzenler)
           if (oldId) { delete __sbShadow[t][oldId]; delete __sbVer[t][oldId]; __applyId = oldId; }
         } else if (row) {
           const __meta = Object.assign({}, row.data); const __inV = __meta._v || 0; delete __meta._v;
           const j = JSON.stringify(__meta);
           const __knownV = __sbVer[t][row.id] || 0;
           if (__sbShadow[t][row.id] === j) { if (__inV > __knownV) __sbVer[t][row.id] = __inV; return; } // echo/yansıma
+          if (__sbIsOwnEcho210(t, row.id, __meta)) { if (__inV > __knownV) __sbVer[t][row.id] = __inV; return; } // v210: kendi yankımız (anahtar sırası farklı)
           if (__inV && __inV < __knownV) return; // v.20 LWW: eski uzaktaki yazım yerel yeniyi ezmesin
           __sbVer[t][row.id] = Math.max(__inV, __knownV);
           __sbShadow[t][row.id] = j;
@@ -17751,9 +17817,9 @@ function sbSubscribeAll() {
         }
         if (__applyId == null) return;
         // v52 PER-RECORD APPLY: YALNIZ gelen kaydi guncelle — tum state'i yeniden KURMA (in-flight/yerel baska kaydi EZMEZ).
-        __sbApplying = true; window.__pilSuppressDirty = true;
+        __sbApplying = true; window.__pilSuppressDirty = true; window.__undoScope210 = __undoScopeFor210(t, __applyId); // v210
         try { sbApplyOne(t, __applyId); save(); } catch(e) { console.error('[sb] applyOne', e); }
-        window.__pilSuppressDirty = false; __sbApplying = false;
+        window.__undoScope210 = null; window.__pilSuppressDirty = false; __sbApplying = false;
         // yeniden-render'i topakla (60ms) — art arda gelen olaylarda tek render
         clearTimeout(__sbRtTimer);
         __sbRtTimer = setTimeout(function __rtRender(){ try { if (__uiBusyForPull()) { __sbRtTimer = setTimeout(__rtRender, 1500); return; } __refreshUIInPlace(); if (window.plToast) plToast('☁️ Güncellendi'); } catch(e){} }, 60);
@@ -18420,7 +18486,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.20.132-onizleme';
+const APP_VERSION = '2026.10.21.133-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
