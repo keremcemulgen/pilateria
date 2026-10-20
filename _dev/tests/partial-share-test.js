@@ -169,9 +169,11 @@ setTimeout(async ()=>{ try {
   // v177: tasinma butunuyle geri alinir (kadro + pay + odeme) — v165'in "yalniz pay" kapsami tasinma icin genisledi
   t('geri al → pay silindi, AYSE G1 kadrosuna dondu, G2 de degil', w.eval(`partialShareFor('G1','A','${CM}')`)===null && !w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G2'),'${CM}').includes('A')`) && w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('A')`));
   fixture(); w.eval("assignMemberToSlot('D','G1',0)"); await tick();
-  t('orantili ucret kabulu de Geri Al kaydi acar', w.eval("(__undoStack[__undoStack.length-1]||{}).label||''").indexOf('Orantılı ücret')===0, w.eval("(__undoStack[__undoStack.length-1]||{}).label||''"));
+  // v210 (Kerem: "üye ekledim, geri al dedim, üye olduğu yerde kaldı"): orantılı ücret cevabı, gruba ekleme işleminin
+  // Geri Al adımına KATILIR — tek Geri Al eklemeyi ve cevabı birlikte geri alır (eskiden yalnız fiyatı kaldırıyordu).
+  t('orantili ucret kabulu, gruba ekleme ile TEK Geri Al adimi ("Gruba ekle: … + Orantılı ücret: …")', /^Gruba ekle: DENIZ/.test(w.eval("(__undoStack[__undoStack.length-1]||{}).label||''")) && w.eval("(__undoStack[__undoStack.length-1]||{}).label||''").indexOf('Orantılı ücret')!==-1 && w.eval("__undoStack.length")===1, w.eval("JSON.stringify(__undoStack.map(s=>s.label))"));
   w.undoLast();
-  t('geri al → DENIZ orantili fiyati kalkti, kadroda kaldi', w.eval(`((state.members.find(m=>m.id==='D').monthly||{})['${CM}']||{}).totalPrice`)===undefined && w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('D')`));
+  t('geri al → DENIZ orantili fiyati kalkti VE kadrodan cikti (ekleme geri alindi)', w.eval(`((state.members.find(m=>m.id==='D').monthly||{})['${CM}']||{}).totalPrice`)===undefined && !w.eval(`activeGroupRosterForMonth(state.groups.find(g=>g.id==='G1'),'${CM}').includes('D')`));
   fixture(); w.eval("assignMemberToSlot('A','G2',1)"); await tick();
   DLG_INPUT = (o) => /ÜCRET/.test(o.msg) ? '3000' : (o.input && o.input.value !== undefined ? String(o.input.value) : 'not');
   await w.editPartialShare('G1','A',CM);

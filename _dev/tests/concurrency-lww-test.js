@@ -18,11 +18,10 @@ let pass=0,fail=0;
 function t(n,c,x){ if(c){pass++;console.log('  OK ',n);} else {fail++;console.log('  FAIL',n,x!==undefined?'-> '+x:'');} }
 
 setTimeout(function(){ try {
-  console.log('[1] sbPickWinner — yüksek _v kazanır, eşitlikte uzak (b) gelir');
-  t("a yeni (a5>b3) -> a kazanır", w.eval("sbPickWinner({_v:5,x:'a'},{_v:3,x:'b'}).x")==='a');
-  t("b yeni (a3<b5) -> b kazanır", w.eval("sbPickWinner({_v:3,x:'a'},{_v:5,x:'b'}).x")==='b');
-  t("eşitlik -> b (uzak/son gelen)", w.eval("sbPickWinner({_v:5,x:'a'},{_v:5,x:'b'}).x")==='b');
-  t("_v yoksa 0 sayılır -> b(5) kazanır", w.eval("sbPickWinner({x:'a'},{_v:5,x:'b'}).x")==='b');
+  // v210 test bakımı: sbPickWinner v131'de OLU KOD olarak kaldırıldı (hiç çağrılmıyordu) — bu test o günden beri
+  // "HATA" ile çöküyor ve takım bunu yakalayamıyordu. LWW kuralı realtime'da __inV < __knownV kapısıyla yaşar ([4]).
+  console.log('[1] v131: sbPickWinner ölü kodu kaldırıldı (LWW realtime kapısında)');
+  t("sbPickWinner artık tanımlı değil (v131)", w.eval("typeof sbPickWinner")==='undefined');
 
   console.log('[2] __sbHarvestVer — _v damgası __sbVer\'e alınır, veriden silinir');
   w.eval("__sbVer={}; var all={members:{m1:{name:'A',_v:100},m2:{name:'B',_v:50}},payments:{}}; __sbHarvestVer(all); window.__hv=all;");
@@ -37,7 +36,6 @@ setTimeout(function(){ try {
 
   console.log('[3] Altyapı mevcut (resync + reconnect + dinleyici kancaları)');
   t("sbResync fonksiyonu var", w.eval("typeof sbResync")==='function');
-  t("sbPickWinner fonksiyonu var", w.eval("typeof sbPickWinner")==='function');
   t("__sbHarvestVer fonksiyonu var", w.eval("typeof __sbHarvestVer")==='function');
   t("__sbWasDropped tanımlı", w.eval("typeof __sbWasDropped")!=='undefined');
   t("subscribe status callback (SUBSCRIBED/rt-recover) kodda", /rt-recover/.test(html) && /'SUBSCRIBED'/.test(html));
@@ -54,4 +52,4 @@ setTimeout(function(){ try {
 
   console.log("\n=== concurrency-lww: "+pass+" OK, "+fail+" FAIL ===");
   process.exit(fail?1:0);
-} catch(e){ console.error('HATA', e); process.exit(1); } }, 800);
+} catch(e){ console.log('TEST COKTU', e && e.stack || e); process.exit(1); } }, 800);
