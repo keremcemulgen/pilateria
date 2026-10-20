@@ -1,4 +1,4 @@
-// v196 — FİNANS AKIŞ DENETİMİ (Chromium): 6 alt sekme × 3 görünüm (telefon 390, tablet 768, masaüstü 1366) → yatay taşma yok,
+// v196 — FİNANS AKIŞ DENETİMİ (Chromium): 7 alt sekme (v208: + 📊 Özet) × 3 görünüm (telefon 390, tablet 768, masaüstü 1366) → yatay taşma yok,
 // sekme panelleri görünür; pencereler (nakit hareketi, hesap, cari, vade, şablon, ekstre, ödeme) açılır/kapanır; sayfa hatası yok.
 // Kullanım: NODE_PATH=$(npm root -g) SHOTS=<klasör> node _dev/audit/finance-flows-chromium.js http://127.0.0.1:8765/pilateria.html
 const { chromium } = require('playwright');
@@ -30,7 +30,7 @@ const FX = () => { sbHideAuth(); document.body.classList.remove('pl-authlock','p
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
   let ok = 0, fail = 0; const t = (n, c, x) => { if (c) { ok++; console.log('  OK ', n); } else { fail++; console.log('  FAIL', n, x !== undefined ? '-> ' + x : ''); } };
   const VIEWS = [['telefon', { width: 390, height: 844 }], ['tablet', { width: 768, height: 1024 }], ['masaustu', { width: 1366, height: 900 }]];
-  const TABS = ['cash', 'moves', 'cari', 'dues', 'reports', 'accounts'];
+  const TABS = ['ozet', 'cash', 'moves', 'cari', 'dues', 'reports', 'accounts'];
   for (const [vname, vp] of VIEWS) {
     const ctx = await b.newContext({ viewport: vp, deviceScaleFactor: 1 }); const p = await ctx.newPage();
     const errs = []; p.on('pageerror', e => errs.push(String(e)));
@@ -42,7 +42,7 @@ const FX = () => { sbHideAuth(); document.body.classList.remove('pl-authlock','p
       if (SHOTS) await p.screenshot({ path: SHOTS + '/fin-' + vname + '-' + tab + '.png', fullPage: vname !== 'telefon' });
     }
     // pencereler
-    const modals = [['nakit hareketi', "openFinMoveModal196('transfer')", 'modal-fin-move'], ['hesap', "openFinAccountModal196('')", 'modal-fin-acc'], ['cari', "openFinCpModal196('')", 'modal-fin-cp'], ['vade', "openFinDueModal196('')", 'modal-fin-due'], ['şablon', "openFinTemplateModal196('')", 'modal-fin-tpl'], ['ekstre', 'openFinImportModal196()', 'modal-fin-imp'], ['kart ödemesi (v206)', "finPayItem196((finDueItems196().find(x=>x.dtype==='card')||{}).id)", 'modal-fin-cardpay'], ['ekstre (üye)', "openFinStatement196('member','T')", 'modal-fin-stm'], ['vade öde', "finPayDueModal196(state.finDues.find(d=>d.status==='open').id)", 'modal-fin-pay']];
+    const modals = [['nakit hareketi', "openFinMoveModal196('transfer')", 'modal-fin-move'], ['hesap', "openFinAccountModal196('')", 'modal-fin-acc'], ['cari', "openFinCpModal196('')", 'modal-fin-cp'], ['vade', "openFinDueModal196('')", 'modal-fin-due'], ['şablon', "openFinTemplateModal196('')", 'modal-fin-tpl'], ['ekstre', 'openFinImportModal196()', 'modal-fin-imp'], ['kart ödemesi (v206)', "finPayItem196((finDueItems196().find(x=>x.dtype==='card')||{}).id)", 'modal-fin-cardpay'], ['ekstre (üye)', "openFinStatement196('member','T')", 'modal-fin-stm'], ['vade öde', "finPayDueModal196(state.finDues.find(d=>d.status==='open').id)", 'modal-fin-pay'], ['kur (v208)', 'openFinFxModal208()', 'modal-fin-fx']];
     for (const [name, call, id] of modals) {
       const r = await p.evaluate(([call, id]) => { try { eval(call); } catch(e) { return { err: String(e) }; } const m = document.getElementById(id); const de = document.documentElement; const r = { open: !!m, overflow: de.scrollWidth > de.clientWidth + 1, w: m ? m.querySelector('.modal').getBoundingClientRect().width : 0, vw: window.innerWidth }; if (m) m.remove(); return r; }, [call, id]);
       t(vname + ' / pencere ' + name + ': açıldı, ekrana sığdı', r.open && !r.overflow && r.w <= r.vw, JSON.stringify(r));

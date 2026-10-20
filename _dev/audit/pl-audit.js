@@ -18,6 +18,10 @@ window.__plAudit = function(ay, opts) {
   const pays = (state.payments || []).filter(p => p && payMonth(p) === M);
   const sumPay = Math.round(pays.reduce((a, p) => a + (+p.amount || 0), 0) * 100) / 100;
   R.counts.payments = pays.length; R.counts.paySum = sumPay;
+  // v208 (Kerem 20.10) PARA ESASI: Panel ve Raporlar tahsilatı ÖDEME GÜNÜNE göre (paket ayı yalnız Üyeler/Ödemeler listesinde)
+  const paysCash = (state.payments || []).filter(p => p && String(p.date || '').slice(0, 7) === M);
+  const sumCash = Math.round(paysCash.reduce((a, p) => a + (+p.amount || 0), 0) * 100) / 100;
+  R.counts.paymentsCash = paysCash.length; R.counts.cashSum = sumCash;
 
   // ---- 1) ÜYELER SATIRLARI ↔ MOTOR ↔ HAM KAYITLAR ----
   const rows = buildMemberRows(M);
@@ -93,7 +97,8 @@ window.__plAudit = function(ay, opts) {
     if (dm) { dm.value = M; window.__dashMonthUserSet = true; }
     renderDashboard();
     const rev = parseTL(document.getElementById('s-revenue').textContent);
-    R.checks++; if (!eq(rev, sumPay)) bad('UI_DASH_REVENUE≠Σpayments', rev + '≠' + sumPay);
+    R.checks++; if (!eq(rev, sumCash)) bad('UI_DASH_REVENUE≠Σpayments(ödeme günü)', rev + '≠' + sumCash);
+    if (typeof finSummary208 === 'function') { const np = parseTL(document.getElementById('s-netprofit').textContent); R.checks++; if (!eq(np, finSummary208(M).studio.net)) bad('UI_DASH_NET≠finSummary208', np + '≠' + finSummary208(M).studio.net); }
     if (dm && prevD !== null) { dm.value = prevD; window.__dashMonthUserSet = prevSet; }
   } catch (e) { bad('UI_DASH_ERR', e.message); }
   try {
@@ -110,8 +115,8 @@ window.__plAudit = function(ay, opts) {
     if (rm) rm.value = M;
     renderReports();
     const rs = statsOf('#report-content .stat');
-    R.checks++; if (!eq(parseTL(pick(rs, 'Gelir')), sumPay)) bad('UI_REPORT_REVENUE≠Σpayments', pick(rs, 'Gelir'));
-    R.checks++; if (+pick(rs, 'Ödeme Sayısı') !== pays.length) bad('UI_REPORT_PAYCOUNT', pick(rs, 'Ödeme Sayısı'));
+    R.checks++; if (!eq(parseTL(pick(rs, 'Gelir')), sumCash)) bad('UI_REPORT_REVENUE≠Σpayments(ödeme günü)', pick(rs, 'Gelir'));
+    R.checks++; if (+pick(rs, 'Ödeme Sayısı') !== paysCash.length) bad('UI_REPORT_PAYCOUNT(ödeme günü)', pick(rs, 'Ödeme Sayısı'));
     const lesByDate = (state.lessons || []).filter(l => l && l.date && l.date.startsWith(M)).length;
     R.checks++; if (+pick(rs, 'Toplam Ders') !== lesByDate) bad('UI_REPORT_LESSONS(by date)', pick(rs, 'Toplam Ders'));
     (state.instructors || []).forEach(inst => {
