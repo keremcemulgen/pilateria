@@ -88,9 +88,9 @@ setTimeout(function(){ try {
   var defM=w.eval("var d=document.getElementById('dash-month'); d.value=''; renderDashboard(); d.value;");
   t("panel varsayilan ay -> 2026-07 (v208 para esasi: en son ODEME GUNU ayi)", defM==='2026-07', defM);
   // Raporlar: Haziran paketi Temmuz'da odendi -> Haziran raporunda
-  var repJun=w.eval("document.getElementById('rep-month').value='2026-06'; renderReports(); document.getElementById('rep-revenue')?document.getElementById('rep-revenue').textContent:''; (function(){try{return [...document.querySelectorAll('#page-reports .stat .value')].map(function(x){return x.textContent;}).join('|');}catch(e){return 'err';}})();");
+  var repJun=w.eval("document.getElementById('rep-month').value='2026-06'; renderReports(); document.getElementById('rep-revenue')?document.getElementById('rep-revenue').textContent:''; (function(){try{return [...document.querySelectorAll('#report-content .stat .value')].map(function(x){return x.textContent;}).join('|');}catch(e){return 'err';}})();");
   t("Raporlar Haziran tahsilati 0 (v208 para esasi: Haziran paketi Temmuz'da odendi -> Temmuz'da)", String(repJun).indexOf('5000')===-1 && String(repJun).indexOf('5.000')===-1, repJun);
-  var repJul=w.eval("document.getElementById('rep-month').value='2026-07'; renderReports(); (function(){try{return [...document.querySelectorAll('#page-reports .stat .value')].map(function(x){return x.textContent;}).join('|');}catch(e){return 'err';}})();");
+  var repJul=w.eval("document.getElementById('rep-month').value='2026-07'; renderReports(); (function(){try{return [...document.querySelectorAll('#report-content .stat .value')].map(function(x){return x.textContent;}).join('|');}catch(e){return 'err';}})();");
   t("Raporlar Temmuz tahsilati 5000 (v208 para esasi: odeme gunu)", /5[.,]?000/.test(String(repJul)), repJul);
 
   console.log('[10] Cihazlar arasi TUTARLILIK: bireysel uyeler alfabetik deterministik sira');

@@ -38,7 +38,7 @@ setTimeout(async function(){try{
     t('Nakit→Kasa, IBAN→Banka, Kredi Kartı→hesapsız', w.eval("finAccountForMethod196('Nakit')")==='acc-cash' && w.eval("finAccountForMethod196('IBAN')")==='acc-bank' && w.eval("finAccountForMethod196('Kredi Kartı')")==='');
     t('açılış girilmeden finans PASİF, bakiye null', w.eval('finActive196()')===false && w.eval("finBalance196('acc-cash')")===null);
     t('sekme adı 💰 Finans (üst + alt bar)', /💰 Finans/.test(w.document.querySelector('[data-page="payments"]').textContent) && /Finans/.test(w.document.querySelector('[data-bnav="payments"]').textContent));
-    t('Finans alt sekmeleri var (v208: 7 sekme + ⋯ Diğer düğmesi)', w.document.querySelectorAll('#fin-tabs .fin-tab').length===8 && w.document.querySelectorAll('#fin-tabs .fin-tab[data-fin]').length===7);
+    t('Finans alt sekmeleri (v209: 4 sekme — Özet · Gelir & Gider · Raporlar · Hesaplar)', w.document.querySelectorAll('#fin-tabs .fin-tab').length===4 && [...w.document.querySelectorAll('#fin-tabs .fin-tab[data-fin]')].map(b=>b.dataset.fin).join(',')==='ozet,moves,rapor,accounts');
     t('yeni ödeme penceresinde Kredi Kartı / Diğer YOK', [...w.document.querySelectorAll('#mp-method option')].map(o=>o.value).join(',')==='Nakit,IBAN', [...w.document.querySelectorAll('#mp-method option')].map(o=>o.value).join(','));
     w.eval("state.payments.push({id:'PK',memberId:'A',groupId:'',date:'2026-09-05',packageMonth:'2026-09',pkgName:'BIREYSEL',sessions:8,amount:4500,listPrice:4500,method:'Kredi Kartı',note:''})");
     w.eval("openPaymentModal('A','PK')"); await tick();
@@ -102,7 +102,7 @@ setTimeout(async function(){try{
     w.document.getElementById('fm-amount').value='250'; w.document.getElementById('fm-partner').value='Kerem'; w.document.getElementById('fm-date').value='2026-10-11';
     w.eval('saveFinMove196()'); await tick(100);
     t('çekim kaydedildi: Kasa 4.950, pencere kapandı', w.eval("finBalance196('acc-cash')")===4950 && !w.document.getElementById('modal-fin-move'), w.eval("finBalance196('acc-cash')"));
-    t('Geri Al yedeği: "Ortak çekimi"', w.eval("(__undoStack||[]).some(s=>/Ortak çekimi/.test(s.label))"));
+    t('Geri Al yedeği: "Kişisel çekim" (v209 sade ad; eski "Ortak çekimi")', w.eval("(__undoStack||[]).some(s=>/Kişisel çekim/.test(s.label))"));
     const id = w.eval("state.finMoves.find(m=>m.op==='draw').id");
     await w.eval("removeFinMove196('"+id+"')"); await tick(100);
     t('çekim silindi: Kasa tekrar 5.200', w.eval("finBalance196('acc-cash')")===5200, w.eval("finBalance196('acc-cash')"));

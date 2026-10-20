@@ -107,8 +107,7 @@ setTimeout(async function(){try{
     w.eval("localStorage.removeItem('pilateria_fin_tab'); __finTab196=''; switchPage('payments');"); await tick(120);
     t('finans etkin + ilk açılış → varsayılan sekme Özet', d.getElementById('fin-panel-ozet') && d.getElementById('fin-panel-ozet').classList.contains('active'), w.eval('__finTab196'));
     const tabs=[...d.querySelectorAll('#fin-tabs .fin-tab[data-fin]')].map(b=>b.dataset.fin).join(',');
-    t('sekmeler: ozet,moves,dues,accounts + ⋯ Diğer altında cash,cari,reports', tabs==='ozet,moves,dues,accounts,cash,cari,reports' && d.querySelectorAll('#fin-tabs .fin-tab-more').length===3 && !!d.querySelector('#fin-tabs .fin-more-btn'), tabs);
-    w.eval('finToggleMore208()'); t('⋯ Diğer açılır (sınıf more)', d.getElementById('fin-tabs').classList.contains('more'));
+    t('sekmeler (v209, Kerem "başlıkları azalt"): ozet,moves,rapor,accounts — Cari/Vadeler/Nakit Akışı/Tablolar/⋯ Diğer yok', tabs==='ozet,moves,rapor,accounts' && !d.querySelector('#fin-tabs .fin-more-btn'), tabs);
     w.eval("finSwitchTab196('ozet')"); await tick(80);
     const tx=(d.getElementById('fin-ozet-body')||{}).textContent||'';
     t('Param: toplam 139.500 (Kasa 10.000 + Banka 19.500 + Kerem Banka 110.000), kart borcu 4.000, net varlık 135.500', /Toplam param/.test(tx) && /139\.500/.test(tx) && /Kart borcu/.test(tx) && /4\.000/.test(tx) && /Net varlık/.test(tx) && /135\.500/.test(tx), tx.replace(/\s+/g,' ').slice(0,400));
@@ -216,7 +215,7 @@ setTimeout(async function(){try{
     t('moves korunur', w.eval('__finTab196')==='moves');
   }
   { const w=boot({pilateria_fin_tab:'cash',pilateria_fin_ozet208:'1'}); await tick(1200);
-    t('bayrak varsa cash korunur', w.eval('__finTab196')==='cash');
+    t('v209: Nakit Akışı sekmesi arayüzden kalktı → v208 bayrağı olsa da bir kez Özet', w.eval('__finTab196')==='ozet' && w.localStorage.getItem('pilateria_fin_v209')==='1');
   }
 
   console.log('[10] Açık düzenli kalem elle ödenmişse "olası ödeme" + Bağla: yeni gider yazılmaz, kalem kapanır; farklı kapsam önerilmez');
