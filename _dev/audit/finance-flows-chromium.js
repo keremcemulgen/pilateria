@@ -1,4 +1,4 @@
-// v196 — FİNANS AKIŞ DENETİMİ (Chromium): 7 alt sekme (v208: + 📊 Özet) × 3 görünüm (telefon 390, tablet 768, masaüstü 1366) → yatay taşma yok,
+// v196 — FİNANS AKIŞ DENETİMİ (Chromium): v209 4 alt sekme (Özet · Gelir & Gider · Raporlar · Hesaplar) × 3 görünüm (telefon 390, tablet 768, masaüstü 1366) → yatay taşma yok,
 // sekme panelleri görünür; pencereler (nakit hareketi, hesap, cari, vade, şablon, ekstre, ödeme) açılır/kapanır; sayfa hatası yok.
 // Kullanım: NODE_PATH=$(npm root -g) SHOTS=<klasör> node _dev/audit/finance-flows-chromium.js http://127.0.0.1:8765/pilateria.html
 const { chromium } = require('playwright');
@@ -30,7 +30,7 @@ const FX = () => { sbHideAuth(); document.body.classList.remove('pl-authlock','p
   const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
   let ok = 0, fail = 0; const t = (n, c, x) => { if (c) { ok++; console.log('  OK ', n); } else { fail++; console.log('  FAIL', n, x !== undefined ? '-> ' + x : ''); } };
   const VIEWS = [['telefon', { width: 390, height: 844 }], ['tablet', { width: 768, height: 1024 }], ['masaustu', { width: 1366, height: 900 }]];
-  const TABS = ['ozet', 'cash', 'moves', 'cari', 'dues', 'reports', 'accounts'];
+  const TABS = ['ozet', 'moves', 'rapor', 'accounts']; // v209: 4 sekme (Kerem "başlıkları azalt")
   for (const [vname, vp] of VIEWS) {
     const ctx = await b.newContext({ viewport: vp, deviceScaleFactor: 1 }); const p = await ctx.newPage();
     const errs = []; p.on('pageerror', e => errs.push(String(e)));
