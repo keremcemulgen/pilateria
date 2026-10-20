@@ -83,15 +83,15 @@ setTimeout(function(){ try {
   var slPm=w.eval("window.__lessonCtxMonth='2026-06'; var groupId='G',date='2026-07-20',pm; if(groupId)pm=(window.__lessonCtxMonth||resolvePackageMonthForDate('group',groupId,date)); window.__lessonCtxMonth=''; pm;");
   t("saveLesson mantigi: __lessonCtxMonth=Haziran -> 2026-06", slPm==='2026-06', slPm);
 
-  console.log('[9] Panel varsayilan ay = en son odeme ayi (bos ay degil) + Raporlar geliri paket ayina gore');
+  console.log('[9] Panel varsayilan ay = en son odeme ayi (bos ay degil) + Raporlar tahsilati ODEME GUNUNE gore (v208 para esasi)');
   w.eval("window.__dashMonthUserSet=false; state.payments=[{id:'pJ',groupId:'G',memberId:'A',amount:5000,packageMonth:'2026-06',date:'2026-07-10',sessions:8}];");
   var defM=w.eval("var d=document.getElementById('dash-month'); d.value=''; renderDashboard(); d.value;");
-  t("panel varsayilan ay -> 2026-06 (odeme olan ay, bugun Temmuz olsa da)", defM==='2026-06', defM);
+  t("panel varsayilan ay -> 2026-07 (v208 para esasi: en son ODEME GUNU ayi)", defM==='2026-07', defM);
   // Raporlar: Haziran paketi Temmuz'da odendi -> Haziran raporunda
   var repJun=w.eval("document.getElementById('rep-month').value='2026-06'; renderReports(); document.getElementById('rep-revenue')?document.getElementById('rep-revenue').textContent:''; (function(){try{return [...document.querySelectorAll('#page-reports .stat .value')].map(function(x){return x.textContent;}).join('|');}catch(e){return 'err';}})();");
-  t("Raporlar Haziran geliri 5000 icerir (Temmuz'da odense de)", /5[.,]?000/.test(String(repJun)), repJun);
+  t("Raporlar Haziran tahsilati 0 (v208 para esasi: Haziran paketi Temmuz'da odendi -> Temmuz'da)", String(repJun).indexOf('5000')===-1 && String(repJun).indexOf('5.000')===-1, repJun);
   var repJul=w.eval("document.getElementById('rep-month').value='2026-07'; renderReports(); (function(){try{return [...document.querySelectorAll('#page-reports .stat .value')].map(function(x){return x.textContent;}).join('|');}catch(e){return 'err';}})();");
-  t("Raporlar Temmuz geliri 0 (Haziran paketi Temmuz'da odendi ama Haziran'a yazilir)", /(^|\|)0( |\||$)/.test(String(repJul).replace(/[^0-9|]/g,'')) || String(repJul).indexOf('5000')===-1 && String(repJul).indexOf('5.000')===-1, repJul);
+  t("Raporlar Temmuz tahsilati 5000 (v208 para esasi: odeme gunu)", /5[.,]?000/.test(String(repJul)), repJul);
 
   console.log('[10] Cihazlar arasi TUTARLILIK: bireysel uyeler alfabetik deterministik sira');
   w.eval("state.groups=[]; state.members=[{id:'z9',name:'ZEHRA',joinDate:'2026-06-01',monthly:{}},{id:'a1',name:'AYSE',joinDate:'2026-06-01',monthly:{}},{id:'m5',name:'MELIS',joinDate:'2026-06-01',monthly:{}}]; state.payments=[];");

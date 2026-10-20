@@ -217,7 +217,7 @@ setTimeout(async function(){try{
     t('Kerem Banka bakiyesi 10.000 + 100.000 − 22.000 − 1.500 = 86.500', w.eval("finBalance196('"+kb.id+"')")===86500, w.eval("finBalance196('"+kb.id+"')"));
     w.eval("finSwitchTab196('reports')"); await tick(60);
     const rep=w.document.getElementById('fin-reports-body').textContent;
-    t('rapor ekranında Stüdyo net ve Hane net görünür', /Stüdyo net/.test(rep) && /Hane net/.test(rep));
+    t('rapor ekranında Stüdyo net, Ev net ve Toplam net görünür (v208 para esası; Hane net = eski adı)', /Stüdyo net/.test(rep) && /Ev net/.test(rep) && /Toplam net/.test(rep));
     w.eval("switchPage('payments'); renderExpenses('"+CUR+"')"); await tick(40);
     const ex=w.document.getElementById('expenses-list').textContent;
     t('Giderler listesinde hane rozeti', /hane/i.test(ex), ex.slice(0,200));

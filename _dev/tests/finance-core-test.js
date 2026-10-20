@@ -38,7 +38,7 @@ setTimeout(async function(){try{
     t('Nakit→Kasa, IBAN→Banka, Kredi Kartı→hesapsız', w.eval("finAccountForMethod196('Nakit')")==='acc-cash' && w.eval("finAccountForMethod196('IBAN')")==='acc-bank' && w.eval("finAccountForMethod196('Kredi Kartı')")==='');
     t('açılış girilmeden finans PASİF, bakiye null', w.eval('finActive196()')===false && w.eval("finBalance196('acc-cash')")===null);
     t('sekme adı 💰 Finans (üst + alt bar)', /💰 Finans/.test(w.document.querySelector('[data-page="payments"]').textContent) && /Finans/.test(w.document.querySelector('[data-bnav="payments"]').textContent));
-    t('Finans alt sekmeleri var (6)', w.document.querySelectorAll('#fin-tabs .fin-tab').length===6);
+    t('Finans alt sekmeleri var (v208: 7 sekme + ⋯ Diğer düğmesi)', w.document.querySelectorAll('#fin-tabs .fin-tab').length===8 && w.document.querySelectorAll('#fin-tabs .fin-tab[data-fin]').length===7);
     t('yeni ödeme penceresinde Kredi Kartı / Diğer YOK', [...w.document.querySelectorAll('#mp-method option')].map(o=>o.value).join(',')==='Nakit,IBAN', [...w.document.querySelectorAll('#mp-method option')].map(o=>o.value).join(','));
     w.eval("state.payments.push({id:'PK',memberId:'A',groupId:'',date:'2026-09-05',packageMonth:'2026-09',pkgName:'BIREYSEL',sessions:8,amount:4500,listPrice:4500,method:'Kredi Kartı',note:''})");
     w.eval("openPaymentModal('A','PK')"); await tick();

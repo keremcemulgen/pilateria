@@ -67,7 +67,8 @@ setTimeout(async function(){try{
   console.log('[2] Nakit Akışı ekranı: kutular, grafik, uyarı cümlesi, günlük akış; pasifken yönlendirme');
   { const w=boot(); await tick(1200); w.eval(FX); w.eval("state.settings.finance.safetyMin=8000; localStorage.removeItem('pilateria_fin_tab'); __finTab196='';");
     w.eval("switchPage('payments')"); await tick(200);
-    t('finans etkin + ilk açılış → varsayılan sekme Nakit Akışı', w.document.getElementById('fin-panel-cash').classList.contains('active'));
+    t('finans etkin + ilk açılış → varsayılan sekme Özet (v208, Kerem 20.10)', w.document.getElementById('fin-panel-ozet').classList.contains('active'));
+    w.eval("finSwitchTab196('cash')"); await tick(150); // v208: Nakit Akışı "⋯ Diğer" altında, elle açılır
     const body=w.document.getElementById('fin-cash-body'); const txt=body.textContent;
     t('kutular: Kasa 4.000 · Banka 6.000 · Σ 10.000 · bize borçlu 4.500 · biz borçluyuz 3.000', /Kasa[\s\S]*?4\.000/.test(txt) && /Banka[\s\S]*?6\.000/.test(txt) && /Σ Nakit[\s\S]*?10\.000/.test(txt) && /Bize borçlu[\s\S]*?4\.500/.test(txt) && /Biz borçluyuz[\s\S]*?3\.000/.test(txt), txt.slice(0,400));
     t('SVG grafik var (iki çizgi + güvenlik çizgisi)', body.querySelectorAll('svg.fin-chart path').length===2 && /güvenlik payı 8\.000/.test(body.querySelector('svg').textContent));
@@ -104,7 +105,7 @@ setTimeout(async function(){try{
     t('cari ekstre: Kira (açık) 3.000 → bakiye 3.000', cp.rows.length===1 && cp.balance===3000);
     w.eval("switchPage('payments'); finSwitchTab196('reports')"); await tick(150);
     const body=w.document.getElementById('fin-reports-body');
-    t('rapor ekranı: gelir–gider tablosu, ay başlıkları, Stüdyo net + Hane net satırları (v200)', /Gelir–Gider/.test(body.textContent) && body.querySelectorAll('table.fin-rep-table th').length>=3 && /Stüdyo net/.test(body.textContent) && /Hane net/.test(body.textContent) && new RegExp(CUR).test(body.textContent), body.textContent.slice(0,300));
+    t('rapor ekranı: gelir–gider tablosu, ay başlıkları, Stüdyo net + Ev net + Toplam net satırları (v208 para esası)', /Gelir–Gider/.test(body.textContent) && body.querySelectorAll('table.fin-rep-table th').length>=3 && /Stüdyo net/.test(body.textContent) && /Ev net/.test(body.textContent) && /Toplam net/.test(body.textContent) && new RegExp(CUR).test(body.textContent), body.textContent.slice(0,300));
     w.eval("finRepSet196('kind','acc')"); await tick(50);
     t('hesap ekstresi görünümü: Banka seçili, kapanış', w.document.getElementById('fin-rep-acc').value==='acc-bank' && /kapanış/.test(w.document.getElementById('fin-reports-body').textContent));
     w.eval("finRepSet196('kind','cf')"); await tick(50);

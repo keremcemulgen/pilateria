@@ -72,16 +72,17 @@ setTimeout(()=>{ try {
   const salary = w.instructorEarningsForMonth('hA','2026-06').total;
   t('iki sayfa ayni toplam ('+(__gaPer*2)+')', approx(bucketTotal, salary) && approx(salary, __gaPer*2), bucketTotal+' vs '+salary);
 
-  console.log('[6] PANEL geliri = PAKET AYI kanonu');
+  console.log('[6] PANEL tahsilati = ODEME GUNU (v208 para esasi, Kerem 20.10; paket ayi kanonu yalniz Uyeler/Odemeler listesinde)');
   const cm = w.currentMonth();
   w.eval(`state.payments.push(
-    {id:'pp1',memberId:'mA',groupId:'gA',date:'2026-05-31',packageMonth:'${'${cm}'}',pkgName:'G',sessions:8,amount:8000,listPrice:8000,method:'Nakit',partial:false,note:''},
-    {id:'pp3',memberId:'mA',groupId:'',date:'${'${cm}'}-15',packageMonth:'2099-01',pkgName:'G',sessions:8,amount:999,listPrice:999,method:'Nakit',partial:false,note:''}
+    {id:'pp1',memberId:'mA',groupId:'gA',date:'2026-05-31',packageMonth:'${cm}',pkgName:'G',sessions:8,amount:8000,listPrice:8000,method:'Nakit',partial:false,note:''},
+    {id:'pp3',memberId:'mA',groupId:'',date:'${cm}-15',packageMonth:'2099-01',pkgName:'G',sessions:8,amount:999,listPrice:999,method:'Nakit',partial:false,note:''}
   );`);
-  const expectedRev = w.S().payments.filter(p => (p.packageMonth || (p.date?String(p.date).slice(0,7):'')) === cm).reduce((a,b)=>a+(+b.amount||0),0);
+  const expectedRev = w.S().payments.filter(p => String(p.date||'').slice(0,7) === cm).reduce((a,b)=>a+(+b.amount||0),0);
+  w.eval("window.__dashMonthUserSet=true; document.getElementById('dash-month').value='"+cm+"';"); // v208: ay açıkça seçilir (varsayılan ay seçimi ayrı testte)
   w.renderDashboard();
   const shown = d.getElementById('s-revenue').textContent.replace(/[^0-9]/g,'');
-  t('Panel = packageMonth toplami; baska ayin odemesi karismaz', shown === String(Math.round(expectedRev)), shown + ' vs ' + expectedRev);
+  t('Panel = odeme gunu toplami (v208): bu ay alinan 999 (2099 paketi) sayilir, 31 Mayis\'ta alinan bu ayin paketi (8.000) sayilmaz', shown === String(Math.round(expectedRev)) && expectedRev === 999, shown + ' vs ' + expectedRev);
 
   console.log('[7] BIREYSEL derste uye isaretlenince HOCASI otomatik');
   w.openLessonModal(null, '2026-06-20', '11:00');
