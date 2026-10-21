@@ -32,13 +32,20 @@ for f in _dev/tests/*.js; do
   if [ "$base" = "smoke-real-data" ] && [ ! -f /tmp/piltest/state.json ]; then
     echo "  ATLA smoke-real-data (gerçek veri fixture'i /tmp/piltest/state.json yok)"; continue
   fi
-  out="$(node "$f" "$file" 2>&1)"
+  out="$(node "$f" "$file" 2>&1)"; rc=$?
   ok="$(echo "$out" | grep -oE '[0-9]+ (gecti|OK)' | grep -oE '[0-9]+' | tail -1)"
   kaldi="$(echo "$out" | grep -oE '[0-9]+ (kaldi|FAIL)' | grep -oE '[0-9]+' | tail -1)"
   crash="$(echo "$out" | grep -cE 'COKTU|TEST HATASI|throw err|ERR_')"
+  nfl="$(echo "$out" | grep -cE '^ *FAIL')"   # v211: ozetsiz cokmede de FAIL satirlari sayilir
   NF=$((NF+1)); [ -n "$ok" ] && TOTOK=$((TOTOK+ok))
-  if { [ -n "$kaldi" ] && [ "$kaldi" -gt 0 ]; } || { [ "$crash" -gt 0 ] && [ -z "$kaldi" ]; }; then
-    TOTFAIL=$((TOTFAIL+${kaldi:-1})); PROB="$PROB\n  [$file] $base FAIL=${kaldi:-CRASH}"
+  # v211: month-fixes-test v54'ten beri 'HATA' basip ozetsiz cokuyordu (cikis kodu 1) ve TEMIZ sayiliyordu →
+  # sifir olmayan cikis kodu ve ozetsiz FAIL satirlari da SORUNLU sayilir.
+  bad=0
+  if [ -n "$kaldi" ] && [ "$kaldi" -gt 0 ]; then bad=$kaldi; fi
+  if [ "$nfl" -gt "$bad" ]; then bad=$nfl; fi
+  if [ "$bad" -eq 0 ] && { [ "$rc" -ne 0 ] || { [ "$crash" -gt 0 ] && [ -z "$kaldi" ]; }; }; then bad=1; fi
+  if [ "$bad" -gt 0 ]; then
+    TOTFAIL=$((TOTFAIL+bad)); PROB="$PROB\n  [$file] $base FAIL=${kaldi:-CRASH} rc=$rc"
   fi
 done
 echo "======================================"
