@@ -70,13 +70,16 @@ setTimeout(()=>{ try {
     state.lessons=[
       {id:'LJ1',date:'2026-07-21',time:'10:00',durationMin:45,instructorId:'',size:2,memberIds:['a','b'],groupId:'g1',packageMonth:'2026-07',packageOwnerType:'group',packageOwnerId:'g1',status:'planned',note:''},
       {id:'LJ2',date:'2026-07-08',time:'10:00',durationMin:45,instructorId:'',size:2,memberIds:['a','b'],groupId:'g1',packageMonth:'2026-07',packageOwnerType:'group',packageOwnerId:'g1',status:'completed',note:''},
-      {id:'LH1',date:'2026-07-02',time:'10:00',durationMin:45,instructorId:'',size:2,memberIds:['a','b'],groupId:'g1',packageMonth:'2026-06',packageOwnerType:'group',packageOwnerId:'g1',status:'planned',note:''}
+      {id:'LH1',date:'2026-07-02',time:'10:00',durationMin:45,instructorId:'',size:2,memberIds:['a','b'],groupId:'g1',packageMonth:'2026-06',packageOwnerType:'group',packageOwnerId:'g1',status:'planned',note:''},
+      {id:'LH0',date:'2026-06-25',time:'10:00',durationMin:45,instructorId:'',size:2,memberIds:['a','b'],groupId:'g1',packageMonth:'2026-06',packageOwnerType:'group',packageOwnerId:'g1',status:'planned',note:''}
     ];`);
     const ok = w.removeMemberFromMonth('b','2026-07');
     t('cikarma tamam', ok===true);
     t('Temmuz PLANLI dersten cikti', !w.S().lessons.find(l=>l.id==='LJ1').memberIds.includes('b'));
     t('YAPILMIS ders TARIHSEL korunur', w.S().lessons.find(l=>l.id==='LJ2').memberIds.includes('b'));
-    t('HAZIRAN paketinin dersi korunur (ay izolasyonu)', w.S().lessons.find(l=>l.id==='LH1').memberIds.includes('b'));
+    // v211 test bakimi: v179 (U4) bilincli degisiklik — onceki paketin bu aya SARKAN planli dersi de temizlenir (eski sozlesme bayatti)
+    t('HAZIRAN paketinin HAZIRAN tarihli dersi korunur (ay izolasyonu)', w.S().lessons.find(l=>l.id==='LH0').memberIds.includes('b'));
+    t('HAZIRAN paketinin TEMMUZA SARKAN planli dersi de temizlenir (v179 U4)', !w.S().lessons.find(l=>l.id==='LH1').memberIds.includes('b'), JSON.stringify(w.S().lessons.find(l=>l.id==='LH1').memberIds));
     w.eval("syncGroupLessonsToRoster('g1','2026-07');");
     t('kadro senkronu cikarilan uyeyi GERI GETIRMEZ (v41 kok fix)', !w.S().lessons.find(l=>l.id==='LJ1').memberIds.includes('b'), JSON.stringify(w.S().lessons.find(l=>l.id==='LJ1').memberIds));
     w.addMemberToMonth('b','2026-07');
@@ -87,7 +90,9 @@ setTimeout(()=>{ try {
   {
     w.removeMemberFromMonth('b','2026-07'); // b yine Temmuzdan cikti
     w.eval("currentGroupDetailId=null;currentGroupDetailMonth='';");
-    const mmSel = d.getElementById('member-month'); if (mmSel) mmSel.value='2026-07';
+    const mmSel = d.getElementById('member-month');
+    if (mmSel && ![...mmSel.options].some(o=>o.value==='2026-07')) { const o=d.createElement('option'); o.value='2026-07'; o.textContent='Tem'; mmSel.appendChild(o); } // v211 test bakimi: saat bagimsiz
+    if (mmSel) mmSel.value='2026-07';
     w.openGroupModal('g1');
     t('baslikta ay var', (d.getElementById('mg-title').textContent||'').includes('2026-07'), d.getElementById('mg-title').textContent);
     const checkedIds=[...d.querySelectorAll('#mg-members input.gm-mc:checked')].map(x=>x.value);
@@ -152,7 +157,7 @@ setTimeout(()=>{ try {
     w.renderInstructors();
     const ih = el.innerHTML;
     t('"Ders Bazlı Hakediş" bolumu var', ih.includes('Ders Bazlı Hakediş'), 'yok');
-    t('dokumde grup adi + tutar satiri var', ih.includes('👯') && ih.includes('÷8'), 'yok');
+    t('dokumde grup adi + tutar satiri var (v54: ÷ hak)', ih.includes('👯') && ih.includes('Ders Ücreti (÷ hak)') && /<td><b>[0-9.,]+ ₺<\/b><\/td><\/tr>/.test(ih), 'yok');
   }
 
   console.log('[10] YANAN DERS BEYAZ/SIYAH stili');
@@ -191,7 +196,7 @@ setTimeout(()=>{ try {
     t('kirli planli GRUP dersinden dustu', !w.S().lessons.find(l=>l.id==='DL1').memberIds.includes('b'), JSON.stringify(w.S().lessons.find(l=>l.id==='DL1').memberIds));
     t('YAPILMIS ders tarihsel korunur', w.S().lessons.find(l=>l.id==='DL2').memberIds.includes('b'));
     const dl3=w.S().lessons.find(l=>l.id==='DL3');
-    t('bos kalan bireysel planli ders IPTAL oldu', dl3.status==='cancelled' && dl3.memberIds.length===0, dl3.status);
+    t('bos kalan bireysel planli ders TAKVIMDEN KALKTI (v106 olu ders supurmesi)', !dl3, dl3 && dl3.status);
   }
 
   console.log('[14] v42: BOS slot satirinda tarih yok');
@@ -210,4 +215,4 @@ setTimeout(()=>{ try {
 
   console.log('\nSONUC: '+pass+' gecti, '+fail+' kaldi');
   process.exit(fail?1:0);
-} catch(e){ console.log('HATA', e); process.exit(1); } }, 1500);
+} catch(e){ console.log('TEST COKTU:', e); process.exit(2); } }, 1500);

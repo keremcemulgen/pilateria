@@ -34,14 +34,22 @@ setTimeout(()=>{ try {
     const mm=document.getElementById('member-month'); if(mm){mm.innerHTML='<option value="2026-07">Tem</option>';mm.value='2026-07';}
   `);
 
-  console.log('[1] Grup penceresi HERKESTE AYNI; elle override kendi tarihini korur');
+  // v211 (Kerem 21.10: "her ay yazılan ilk ders tarihi paket başlangıcı kısmında öyle yazmalı ... yeni ayda ilk dersi yazılmamış
+  // üye veya grup olduğunda üyeler sayfasından kolayca anlayabilmiş olacağım"): paket KAYDININ startDate'i tek başına başlangıç
+  // DEĞİL (ders yoksa "—"); yalnız ELLE girilmiş tarih (startManual / üye packageStartDate) ders yokken gösterilir.
+  console.log('[1] Grup penceresi HERKESTE AYNI; ders yoksa bos; elle override kendi tarihini korur');
   seed('2026-07-19');
   let rows = w.buildMemberRows('2026-07').filter(r=>r.groupId==='g1' && !r.isEmpty);
   t('3 uye satiri', rows.length===3, rows.length);
-  t('GOKCE 19.07 (grup paketi)', rows.find(r=>r.memberId==='m1').pkgStart==='2026-07-19', rows.find(r=>r.memberId==='m1').pkgStart);
-  t('TAMELLA 19.07 (ayni pencere — tutarsizlik bitti)', rows.find(r=>r.memberId==='m3').pkgStart==='2026-07-19');
-  t('SEZEN 25.07 (ELLE override korunur)', rows.find(r=>r.memberId==='m2').pkgStart==='2026-07-25');
-  t('bitis = baslangic+29 gun', rows.find(r=>r.memberId==='m1').pkgEnd==='2026-08-17');
+  t('GOKCE: ders yok + paket kaydi tarihi elle degil -> baslangic BOS (v211)', rows.find(r=>r.memberId==='m1').pkgStart==='' && rows.find(r=>r.memberId==='m1').pkgEnd==='', rows.find(r=>r.memberId==='m1').pkgStart+'|'+rows.find(r=>r.memberId==='m1').pkgEnd);
+  t('TAMELLA: ayni (bos) — tutarsizlik yok', rows.find(r=>r.memberId==='m3').pkgStart==='' && rows.find(r=>r.memberId==='m3').pkgEnd==='');
+  t('SEZEN 25.07 (ELLE override korunur, ders yok)', rows.find(r=>r.memberId==='m2').pkgStart==='2026-07-25', rows.find(r=>r.memberId==='m2').pkgStart);
+  t('SEZEN bitis = 25.07+29 gun', rows.find(r=>r.memberId==='m2').pkgEnd==='2026-08-23', rows.find(r=>r.memberId==='m2').pkgEnd);
+  w.eval(`state.groups[0].packages[0].startManual=true;`); // grup detayından ELLE girilmiş (eski kayıt: dayanak yok)
+  rows = w.buildMemberRows('2026-07').filter(r=>r.groupId==='g1' && !r.isEmpty);
+  t('grup ELLE 19.07 -> GOKCE 19.07', rows.find(r=>r.memberId==='m1').pkgStart==='2026-07-19', rows.find(r=>r.memberId==='m1').pkgStart);
+  t('grup ELLE 19.07 -> TAMELLA 19.07 (ayni pencere)', rows.find(r=>r.memberId==='m3').pkgStart==='2026-07-19');
+  t('bitis = baslangic+29 gun', rows.find(r=>r.memberId==='m1').pkgEnd==='2026-08-17', rows.find(r=>r.memberId==='m1').pkgEnd);
 
   console.log('[2] Paket startDate YOKSA grubun ilk dersinden (pm kanonu) — yine herkes ayni');
   seed(null);

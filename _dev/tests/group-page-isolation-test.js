@@ -38,16 +38,24 @@ setTimeout(async ()=>{ try {
   w.openGroupDetail('gz','2026-07');
   let gd = d.getElementById('gd-content').innerHTML;
   t('u1 Temmuzda "Odeme al" (Haziran odemesi sayilmadi)', gd.includes('⬜ Ödeme al'));
-  t('Temmuz kutusunda TEMMUZ paketi baslangici (20.07)', gd.includes('20.07.2026'));
-  t('HAZIRAN paket baslangici (25.06) Temmuz sayfasinda YOK', !gd.includes('25.06.2026'));
+  // v211 (Kerem 21.10): baslangic = o ayin ILK DERSI — paket KAYDININ tarihi (20.07; odeme/ay hazirligi damgasi) tek basina baslangic DEGIL
+  // Haziran paketinin 02.07 PLANLI dersi Temmuza sarkiyor → Temmuz paketi henuz baslamadi: "⏳ Haziran paketi sürüyor (son ders 02.07.2026)"
+  t('Temmuz kutusu: Temmuz paketinin dersi yok + Haziran paketi sarkiyor -> "Haziran paketi sürüyor" (v211; kayit tarihi 20.07 baslangic degil)',
+    /Haziran( \d{4})? paketi sürüyor \(son ders 02\.07\.2026\)/.test(gd) && /Temmuz( \d{4})? paketi ilk dersiyle başlar/.test(gd) && !gd.includes('20.07.2026'), (gd.match(/📦[^🔄]{0,200}/) || [''])[0]);
+  t('HAZIRAN paket baslangici (25.06 / ilk ders 26.06) Temmuz sayfasinda YOK', !gd.includes('25.06.2026') && !gd.includes('26.06.2026'));
   t('haklar TEMMUZ paketinden (iptal 1)', gd.includes('🚫 İptal: <b>1/'));
   t('Temmuz sayfasinda Haziran-paketi sarkan dersi listede YOK (o Haziranin dersi)', !gd.includes("openGroupLessonModal('lj2')"));
+  w.eval(`state.lessons.push({id:'lt1',date:'2026-07-20',time:'10:00',durationMin:45,instructorId:'h1',size:2,memberIds:['u1','u2'],groupId:'gz',packageMonth:'2026-07',status:'planned',note:''});`);
+  w.openGroupDetail('gz','2026-07');
+  gd = d.getElementById('gd-content').innerHTML;
+  t('Temmuzun ilk dersi 20.07 yazilinca kutu TEMMUZ paketi baslangici 20.07 (v211)', gd.includes('Paketi:</b> 20.07.2026'));
+  w.eval(`state.lessons = state.lessons.filter(l => l.id !== 'lt1');`);
 
   console.log('[2] HAZIRAN grup sayfasi: kendi bilgileri + sarkan dersi DAHIL');
   w.openGroupDetail('gz','2026-06');
   gd = d.getElementById('gd-content').innerHTML;
   t('u1 Haziranda ✅ Odendi', gd.includes('✅ Ödendi'));
-  t('Haziran kutusunda 25.06 baslangic', gd.includes('25.06.2026'));
+  t('Haziran kutusunda baslangic = Haziranin ILK DERSI 26.06 (v211; kayit tarihi 25.06 degil)', gd.includes('Paketi:</b> 26.06.2026') && !gd.includes('25.06.2026'));
   t('haklar HAZIRAN paketinden (saat degisikligi 1)', gd.includes('🔄 Saat değişikliği: <b>1/'));
   t('sarkan 02.07 dersi HAZIRAN sayfasinda listede', gd.includes("openGroupLessonModal('lj2')"));
   t('u1 kalan ders ay bazli: 8 alindi - 2 ders = 6', gd.includes('>6</span>') || gd.includes('badge ok">6'));
