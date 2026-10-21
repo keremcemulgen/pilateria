@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.21.133">
+<meta name="app-version" content="2026.10.21.134">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -1031,6 +1031,9 @@
     .mc-mid { display:flex; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--muted, #697077); margin-top:6px; }
     .mc-mid b { color:var(--text, #14181b); font-weight:700; }
     .mc-due { color:var(--bad, #d24a47) !important; }
+    .mc-dates { font-size:12px; color:var(--muted, #697077); margin-top:5px; } /* v211 */
+    .mc-gwin { font-size:12px; color:var(--muted, #697077); margin:-2px 2px 6px 12px; } /* v211 */
+    .mc-dates.mc-nolesson, .mc-gwin.mc-nolesson { color:var(--bad, #d24a47); font-weight:700; } /* v211 */
     .mc-actions { display:flex; gap:6px; margin-top:10px; }
     .mc-actions .btn { flex:1; min-height:42px; font-size:13px !important; padding:8px 4px; white-space:nowrap; }
     /* AYARLAR ve tum formlar: inputlar tam genislik, tasma yok */
@@ -2119,7 +2122,7 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
       <div class="field"><label>Üye *</label><select id="mp-member" onchange="onPayMemberChange()"></select></div>
       <div class="field"><label>Ödeme Tarihi</label><input type="date" id="mp-date"></div>
       <div class="field"><label>Paket Ayı <small style="color:var(--muted);font-weight:400;">— ödeme bu ayın sayfasına yazılır</small></label><input type="text" id="mp-pkg-month-label" disabled style="font-weight:700;"><input type="hidden" id="mp-pkg-month"></div>
-      <div class="field" id="mp-pkg-start-field"><label>Paket Başlangıç Tarihi <small style="color:var(--muted);font-weight:400;">— opsiyonel; boşsa ilk ders / ayın 1'i</small></label><input type="date" id="mp-pkg-start"></div>
+      <div class="field" id="mp-pkg-start-field"><label>Paket Başlangıç Tarihi <small style="color:var(--muted);font-weight:400;">— opsiyonel; boşsa ilk dersin tarihi (ilk ders yazılınca ona geçer)</small></label><input type="date" id="mp-pkg-start"></div>
       <div class="field">
         <label>Paket <small style="color:var(--muted);font-weight:400;">— opsiyonel</small></label>
         <select id="mp-pkg" onchange="onPkgChange()"></select>
@@ -4792,7 +4795,7 @@ function renderDashboard() {
       ? `<div class="row" style="margin-bottom:8px;">
           <button class="btn small" style="background:#25D366;border-color:#25D366;" onclick='openWaBulkModal(${JSON.stringify(overdueMemberIds)}, "wa-reminder")'>💬 Tümüne WhatsApp Hatırlat (${overdueMemberIds.length})</button>
         </div>` : '';
-    olist.innerHTML = bulkBtn + '<div class="table-wrap"><table><thead><tr><th>Üye / Grup</th><th>İlk Ders</th><th>Beklenen</th><th>Alınan</th><th>Eksik</th><th>İşlem</th></tr></thead><tbody>' +
+    olist.innerHTML = bulkBtn + '<div class="table-wrap"><table><thead><tr><th>Üye / Grup</th><th title="Ödeme vadesi = paket başlangıcı (ilk ders; elle düzeltildiyse o tarih)">Paket Başlangıcı</th><th>Beklenen</th><th>Alınan</th><th>Eksik</th><th>İşlem</th></tr></thead><tbody>' +
       overdue.map(o => `<tr>
         <td><b style="cursor:pointer;text-decoration:underline dotted;" onclick="${o.groupId ? `openGroupDetail('${o.groupId}','${(o.months&&o.months[0])||''}')` : `openMemberDetail('${o.memberId}')`}" title="Detayı aç — bu borcun kaynağını gör">${o.label}</b>${o.groupId?`<br><small style="color:var(--p2)">👯 grup — ada dokun: detay</small>`:''}</td>
         <td>${fmtDate(o.firstLessonDate)} <small style="color:var(--muted)">(${o.daysOverdue} gün geçti)</small>${(o.months&&o.months.length)?`<br><small style="color:var(--p2)">📅 ${o.months.join(', ')}</small>`:''}</td>
@@ -5019,6 +5022,18 @@ function getOverduePayments(opts) {
     });
     return map;
   }
+  // v211 (Kerem 21.10): VADE = PAKET BAŞLANGICI (pkgWindow211 — Üyeler sayfasıyla aynı kaynak): ilk ders; elle düzeltildiyse elle tarih.
+  // Dersi olmayan ayda yalnız elle başlangıç varsa o ay da vadelidir (elle "paket başladı" demek). Elle tarih yoksa davranış eskisiyle aynı.
+  function __ovStarts211(ownerType, ownerId, map, extraMonths) {
+    const out = {};
+    Object.keys(map).concat(extraMonths || []).forEach(ay => {
+      if (!ay || out[ay]) return;
+      let st = map[ay] || '';
+      try { const w = pkgWindow211(ownerType, ownerId, ay); if (w.start) st = w.start; } catch(e) {}
+      if (st) out[ay] = st;
+    });
+    return out;
+  }
   // Vadesi gelmis + borclu aylari sec (fiyat tanimsizsa BORC UYDURULMAZ)
   const __fs197 = (typeof finStartMonth196 === 'function') ? finStartMonth196() : ''; // v197: finans başlangıç ayı
   function __ovRows(map, expectedFn, paidFn) {
@@ -5053,8 +5068,9 @@ function getOverduePayments(opts) {
   // GRUPLAR — o ay pasifse borc yok
   state.groups.forEach(g => {
     const gLessons = __gLes.get(g.id) || [];
-    if (!gLessons.length) return;
-    const rows = __ovRows(__ovMonths(gLessons),
+    const __gMan211 = (g.packages || []).filter(p => p && p.startManual && p.month).map(p => p.month); // v211: elle başlangıç
+    if (!gLessons.length && !__gMan211.length) return;
+    const rows = __ovRows(__ovStarts211('group', g.id, __ovMonths(gLessons), __gMan211),
       ay => (isGroupInactiveInMonth(g, ay) ? 0 : groupExpectedTotal(g, ay)),
       ay => groupPaidForMonth(g, ay)); // v177 (P1): kadro+pay siniri (indeks tum odemeleri sayiyordu)
     if (!rows.length) return;
@@ -5069,8 +5085,9 @@ function getOverduePayments(opts) {
   // BIREYSEL — uye O AY aktif bir gruba bagliysa o ay GRUP satiri kapsar
   state.members.forEach(m => {
     const mLessons = __mLes.get(m.id) || [];
-    if (!mLessons.length) return;
-    const rows = __ovRows(__ovMonths(mLessons),
+    const __mMan211 = Object.keys(m.monthly || {}).filter(ay => m.monthly[ay] && m.monthly[ay].packageStartDate); // v211: elle başlangıç
+    if (!mLessons.length && !__mMan211.length) return;
+    const rows = __ovRows(__ovStarts211('member', m.id, __ovMonths(mLessons), __mMan211),
       ay => ((memberActiveGroupForMonth(m.id, ay) || !__hasIndividualUnit179(m.id, ay)) ? 0 : (+memberMonthlyTotalPrice(m.id, ay) || 0)), // v176 (F16): acik 0 (uzadi) genel fiyata DUSMEZ; v179: yalniz ayrilan payi olan uye bireysel borclu degil
       ay => __mPaid.get(m.id + '|' + ay) || 0);
     __ovPush({ label: m.name, groupId: '', memberId: m.id }, rows);
@@ -5969,6 +5986,87 @@ function addMemberToMonth(memberId, monthISO) {
   closeMonthAddPicker();
   renderMembers(); renderDashboard(); if (typeof renderCalendar === 'function') renderCalendar();
 }
+// ===== v211 (Kerem 21.10): PAKET PENCERESİ — TEK KAYNAK (Üyeler tablosu, telefon kartları, grup detayı, ders penceresi) =====
+// Başlangıç = paketin İLK DERSİ (iptal hariç). Elle düzeltme (ileri/geri tarih) yapıldığı andaki ilk ders hâlâ aynıysa gösterilir; ilk ders
+// yazılınca ya da değişince başlangıç kendiliğinden ilk derse geçer. Eski işaretsiz elle tarih yalnız ders yokken. Ders yoksa '' (Üyeler'de "—").
+// Bitiş = paket BİTTİYSE (yapıldı + yandı ≥ hak, ya da ⭐ son ders + planlı kalmadı) o son dersin tarihi; sürüyorsa 30 gün kuralı.
+function __pkgLessons211(ownerType, ownerId, ay) {
+  const key = function(l){ return String(l.date || '') + 'T' + String(l.time || '') + '|' + String(l.id || ''); };
+  return (state.lessons || []).filter(function(l){
+    if (!l || l.status === 'cancelled' || !l.date) return false;
+    if ((l.packageMonth || String(l.date || '').slice(0, 7)) !== ay) return false;
+    return ownerType === 'group' ? l.groupId === ownerId : (!l.groupId && (l.memberIds || []).includes(ownerId));
+  }).sort(function(a, b){ const ka = key(a), kb = key(b); return ka < kb ? -1 : (ka > kb ? 1 : 0); });
+}
+function __pkgManualPick211(date, basis, first) {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return '';
+  if (basis === undefined || basis === null) return first ? '' : String(date); // eski (v211 öncesi) elle tarih: ilk ders yazıldıysa ilk ders öncelikli
+  return String(basis) === String(first || '') ? String(date) : '';           // düzeltmeden sonra ilk ders değişmediyse elle tarih
+}
+function pkgWindow211(ownerType, ownerId, ay, memberId) {
+  const w = { start: '', end: '', startSrc: '', endSrc: '', first: '', quota: 0, done: 0, planned: 0, finished: false, prevPm: '', prevLast: '' };
+  if (!ownerId || !ay) return w;
+  try {
+    const ls = __pkgLessons211(ownerType, ownerId, ay);
+    w.first = ls.length ? ls[0].date : '';
+    let man = '';
+    const mid = memberId || (ownerType === 'member' ? ownerId : '');
+    if (mid) { const ov = getMemberMonthlyOverride(mid, ay) || {}; man = __pkgManualPick211(ov.packageStartDate, ov.packageStartBasis, w.first); }
+    if (!man && ownerType === 'group') {
+      const g = (state.groups || []).find(function(x){ return x && x.id === ownerId; });
+      const pk = g && (g.packages || []).find(function(p){ return p && p.month === ay; });
+      if (pk && pk.startManual) man = __pkgManualPick211(pk.startDate, pk.startBasis, w.first);
+    }
+    w.start = man || w.first; w.startSrc = man ? 'manual' : (w.first ? 'lesson' : '');
+    const quota = +sessionQuotaFor(ownerType, ownerId, ay) || 0; w.quota = quota;
+    const doneLs = ls.filter(function(l){ return l.status !== 'planned'; }); // yapıldı + yandı (sessionsFinishState ile aynı sayım)
+    w.done = doneLs.length; w.planned = ls.length - doneLs.length;
+    let fin = '';
+    if (quota > 0 && doneLs.length >= quota) fin = doneLs[quota - 1].date;
+    else if (doneLs.length && w.planned === 0 && __pkgClosedEarlyLesson(ownerType, ownerId, ay)) fin = doneLs[doneLs.length - 1].date; // v108 ⭐ erken kapandı
+    if (fin) { w.finished = true; w.end = fin; w.endSrc = 'done'; }
+    else if (w.start) { const days = +((state.settings || {}).groupPackageDays) || 30; w.end = addDaysISO(w.start, days - 1); w.endSrc = '30gun'; }
+    if (!w.start) { // önceki ayın paketi bu aya PLANLI dersle sarkıyor mu → "⏳ Eylül paketi sürüyor" (eksik değil; kırmızı "—" yalnız gerçek eksik)
+      let pp = '';
+      (state.lessons || []).forEach(function(l){
+        if (!l || l.status !== 'planned' || !l.date || String(l.date) < ay + '-01') return;
+        const pm = l.packageMonth || String(l.date).slice(0, 7);
+        if (!(pm < ay) || pm <= pp) return;
+        if (ownerType === 'group' ? l.groupId === ownerId : (!l.groupId && (l.memberIds || []).includes(ownerId))) pp = pm;
+      });
+      if (pp) { w.prevPm = pp; __pkgLessons211(ownerType, ownerId, pp).forEach(function(l){ if (String(l.date) > w.prevLast) w.prevLast = String(l.date); }); }
+    }
+  } catch(e) {}
+  return w;
+}
+// Elle düzeltme yazımı (Üyeler hücresi / ödeme penceresi / grup detayı): o anki ilk ders saklanır
+function __pkgMarkManual211(ownerType, ownerId, ay, date, memberId) {
+  if (!ownerId || !ay || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return false;
+  const first = (__pkgLessons211(ownerType, ownerId, ay)[0] || {}).date || '';
+  if (ownerType === 'group') {
+    const g = (state.groups || []).find(function(x){ return x && x.id === ownerId; });
+    const pk = g && (g.packages || []).find(function(p){ return p && p.month === ay; });
+    if (!pk) return false;
+    pk.startDate = String(date); pk.startManual = true; pk.startBasis = first; pk.startAt = Date.now();
+    return true;
+  }
+  setMemberMonthly(memberId || ownerId, ay, { packageStartDate: String(date), packageStartBasis: first, packageStartAt: Date.now() });
+  return true;
+}
+// Üyeler tablosu bitiş hücresi: ✓ = paket bitti (son dersin tarihi); soluk = 30 gün kuralı (sürüyor)
+function __pkgEndCell211(r, monthISO) {
+  if (!r || !r.pkgEnd) return '<td>—</td>';
+  if (!monthISO) return '<td>' + fmtDate(r.pkgEnd) + '</td>';
+  if (r.pkgDone211) return '<td title="Paket bitti — yapılan + yanan dersler hakkı doldurdu; son dersin tarihi"><b>' + fmtDate(r.pkgEnd) + '</b> <span style="color:var(--ok);">✓</span></td>';
+  return '<td style="color:#8a8573;" title="30 gün kuralı — paket bitince (yapılan + yanan = hak) son dersin tarihi yazılır">' + fmtDate(r.pkgEnd) + '</td>';
+}
+// Telefon kartı / grup başlığı tarih satırı
+function __mcDates211(w, cls) {
+  if (!w) return '';
+  if (!w.start && w.prevPm) return '<div class="' + cls + ' mc-prevrun">⏳ ' + (pkgMonthLabel(w.prevPm) || w.prevPm) + ' paketi sürüyor' + (w.prevLast ? ' (son ders ' + fmtDate(w.prevLast) + ')' : '') + '</div>';
+  if (!w.start) return '<div class="' + cls + ' mc-nolesson">📅 İlk ders girilmedi</div>';
+  return '<div class="' + cls + '">📅 ' + fmtDate(w.start) + ' – ' + (w.end ? fmtDate(w.end) + (w.finished ? ' ✓' : '') : '—') + (w.startSrc === 'manual' ? ' ✎' : '') + '</div>';
+}
 // Üyenin o ay için paket başlangıç tarihi
 function memberMonthlyPackageStart(memberId, monthISO) {
   if (!monthISO) {
@@ -6079,19 +6177,23 @@ function __removeMemberFromMonthCore(memberId, monthISO) {
 }
 // (v23: addMemberToMonth artik yukarida — picker'li, monthInit'li tek surum)
 // Belirli ay için paket başlangıç tarihini elle düzenle (kullanıcı isteği)
-async function editMonthlyPackageStart(memberId, monthISO) {
+async function editMonthlyPackageStart(memberId, monthISO, groupId) {
   const m = state.members.find(x=>x.id===memberId);
   if (!m) return;
-  const cur = memberMonthlyPackageStart(memberId, monthISO) || '';
+  // v211: satırın birimi (grup satırı → grubun penceresi; bireysel → üyenin) — gösterilen başlangıçla aynı kaynak
+  const __gid211 = (groupId === undefined || groupId === null) ? (function(){ try { const gg = memberActiveGroupForMonth(memberId, monthISO); return gg ? gg.id : ''; } catch(e) { return ''; } })() : String(groupId || '');
+  const __w211 = __gid211 ? pkgWindow211('group', __gid211, monthISO, memberId) : pkgWindow211('member', memberId, monthISO, memberId);
+  const cur = __w211.start || '';
   const monthLabel = (() => {
     const [y, mo] = monthISO.split('-').map(Number);
     return new Date(y, mo-1, 1).toLocaleDateString('tr-TR', {month:'long', year:'numeric'});
   })();
   const input = await plPrompt(
     `"${m.name}" — ${monthLabel} paket başlangıç tarihi (YYYY-AA-GG):\n\n` +
-    (cur ? `Mevcut: ${cur}\n` : '(şu an boş)\n') +
-    `\n• Boş bırakıp Tamam → o ay özel tarih silinir (otomatik türetmeye döner)\n` +
-    `• Tarih gir → bu ay için manuel tarih (örn. 2026-05-08)`,
+    (__w211.first ? `İlk ders: ${fmtDate(__w211.first)}\n` : 'Bu ayın paketine henüz ders girilmedi.\n') +
+    (__w211.startSrc === 'manual' ? `Şu an elle düzeltilmiş: ${fmtDate(__w211.start)}\n` : '') +
+    `\n• Tarih gir → bu ay için elle başlangıç (ileri ya da geri tarih olabilir). İlk ders sonradan yazılır ya da değişirse başlangıç kendiliğinden ilk derse geçer.\n` +
+    `• Boş bırakıp Tamam → elle tarih silinir (ilk dersin tarihi gösterilir)`,
     cur || '', { placeholder: 'YYYY-AA-GG' }
   );
   if (input === null) return;
@@ -6099,7 +6201,9 @@ async function editMonthlyPackageStart(memberId, monthISO) {
   if (trimmed === '') {
     // Override'ı sil
     if (m.monthly && m.monthly[monthISO]) {
+      if (m.monthly[monthISO].packageStartDate) __undoSnapshot('Paket başlangıcı: ' + (m.name || 'Üye') + ' — ' + monthISO); // v211
       delete m.monthly[monthISO].packageStartDate;
+      delete m.monthly[monthISO].packageStartBasis; delete m.monthly[monthISO].packageStartAt; // v211
       // Eğer monthly kaydında başka alan kalmadıysa bütün kaydı sil
       if (Object.keys(m.monthly[monthISO]).length === 0) delete m.monthly[monthISO];
     }
@@ -6111,7 +6215,8 @@ async function editMonthlyPackageStart(memberId, monthISO) {
     if (!trimmed.startsWith(monthISO)) {
       if (!(await plConfirm(`Girdiğin tarih (${trimmed}) seçili ay (${monthISO}) içinde değil. Yine de kaydedeyim mi?`))) return;
     }
-    setMemberMonthly(memberId, monthISO, { packageStartDate: trimmed });
+    __undoSnapshot('Paket başlangıcı: ' + (m.name || 'Üye') + ' — ' + monthISO); // v211
+    setMemberMonthly(memberId, monthISO, { packageStartDate: trimmed, packageStartBasis: __w211.first || '', packageStartAt: Date.now() }); // v211: o anki ilk ders
   }
   save();
   if (typeof renderMembers === 'function') renderMembers();
@@ -6434,9 +6539,10 @@ function buildMemberRows(monthISO) {
     // son odemenin tutari / ilk paket tipi / 7000 UYDURULMAZ (bakiye ve vadesi-gecen kanonu ile ayni: "fiyat tanimsizsa borc yok").
     let expected = monthISO ? (+memberMonthlyTotalPrice(m.id, monthISO) || 0) : (+memberMonthlyTotalPrice(m.id, '') || 0);
     if (expected < 0) expected = 0;
-    // Aylık paket başlangıç tarihi: override → o ayın ilk ders/ödeme tarihi → joinDate (sadece ay seçili değilse)
+    // v211 (Kerem): paket penceresi TEK KAYNAK — başlangıç ilk ders (ders yoksa '—'), bitiş 30 gün kuralı / paket bitince son ders
+    const __w211 = monthISO ? pkgWindow211('member', m.id, monthISO, m.id) : null;
     const pkgStart = monthISO
-      ? memberMonthlyPackageStart(m.id, monthISO)
+      ? __w211.start
       : (latestPay ? latestPay.date : (m.joinDate||''));
     rows.push({
       memberId: m.id, name: m.name,
@@ -6444,7 +6550,8 @@ function buildMemberRows(monthISO) {
       isFirstInGroup: false,
       groupMemberCount: 0,
       pkgStart: pkgStart,
-      pkgEnd: '',
+      pkgEnd: __w211 ? __w211.end : '',
+      pkgDone211: !!(__w211 && __w211.finished), pkgManual211: !!(__w211 && __w211.startSrc === 'manual'), pkgWin211: __w211,
       payDate: latestPay ? latestPay.date : '',
       totalPrice: expected,
       ownPrice: expected,
@@ -6547,15 +6654,14 @@ function buildMemberRows(monthISO) {
       const latestPay = memberPayments.sort((a,b)=>b.date.localeCompare(a.date))[0];
       const paid = memberPayments.reduce((a,b)=>a+(+b.amount||0),0);
       // v109 (Kerem): GRUP uyesinin paket penceresi = GRUBUN penceresi — TUM uyelerde AYNI tarih.
-      // Oncelik: uyenin ELLE override'i -> grubun o ay paket baslangici -> grubun o ayin (pm) ilk dersi -> uyenin odemesi.
-      const __ovStart = monthISO ? (((getMemberMonthlyOverride(mid, monthISO)) || {}).packageStartDate || '') : '';
-      const __gPkgStart = monthISO ? (((((g.packages || []).find(pp => pp && pp.month === monthISO))) || {}).startDate || '') : '';
-      const __gFirstLesson = monthISO ? (((state.lessons.filter(l => l && l.groupId === g.id && l.status !== 'cancelled' && ((l.packageMonth || String(l.date || '').slice(0, 7)) === monthISO) && l.date).sort((a, b) => a.date.localeCompare(b.date))[0]) || {}).date || '') : '';
-      const memberStart = monthISO
-        ? (__ovStart || __gPkgStart || __gFirstLesson || (latestPay ? latestPay.date : ''))
-        : (m.joinDate || g.packageStartDate || (latestPay ? latestPay.date : ''));
+      // v211 (Kerem): tek kaynak pkgWindow211 — uyenin elle duzeltmesi > grubun elle duzeltmesi > grubun o ayin ILK DERSI; ders yoksa '—'
+      // (paket kaydinin otomatik tarihi / odeme tarihi baslangic SAYILMAZ); bitis 30 gun kurali, paket bitince son dersin tarihi.
+      const __w211 = monthISO ? pkgWindow211('group', g.id, monthISO, mid) : null;
       const pkgDays = state.settings.groupPackageDays || 30;
-      const memberEnd = memberStart ? addDaysISO(memberStart, pkgDays-1) : '';
+      const memberStart = monthISO
+        ? __w211.start
+        : (m.joinDate || g.packageStartDate || (latestPay ? latestPay.date : ''));
+      const memberEnd = monthISO ? __w211.end : (memberStart ? addDaysISO(memberStart, pkgDays-1) : '');
       rows.push({
         memberId: m.id, name: m.name,
         groupId: g.id, groupName: __gDispName,
@@ -6565,6 +6671,7 @@ function buildMemberRows(monthISO) {
         groupFilledCount: validMemberIds.length, // v36: 'N/M dolu' = o ayin ENROLLED uye sayisi (roster degil)
         pkgStart: memberStart,
         pkgEnd: memberEnd,
+        pkgDone211: !!(__w211 && __w211.finished), pkgManual211: !!(__w211 && __w211.startSrc === 'manual'), pkgWin211: __w211,
         payDate: latestPay ? latestPay.date : '',
         ownPrice: memberMonthlyTotalPrice(m.id, monthISO||''), // v.40 uyenin KENDI ay-fiyati (grup toplami DEGIL)
         totalPrice: isFirstInGroup ? totalPrice : '',   // Excel style: only first row shows total
@@ -7208,16 +7315,23 @@ function renderMembers() {
       </tr>`;
     }
     // Aylık paket başlangıç tarihi düzenleme — ay seçiliyse hücre tıklanabilir
-    const pkgStartLabel = r.pkgStart ? fmtDate(r.pkgStart) : '—';
+    // v211: başlangıç = ilk ders; ders yoksa KIRMIZI "—" (yeni ayda ilk dersi yazılmamış birim hemen görünür); ✎ = elle düzeltilmiş;
+    //       önceki ayın paketi bu aya planlı dersle sarkıyorsa soluk "⏳ Eylül paketi sürüyor" (eksik değil)
+    const __prev211 = (!r.pkgStart && monthISO && r.pkgWin211 && r.pkgWin211.prevPm) ? r.pkgWin211 : null;
+    const pkgStartLabel = r.pkgStart
+      ? fmtDate(r.pkgStart) + (r.pkgManual211 ? ' <small title="Elle düzeltilmiş başlangıç — ilk ders yazılınca ya da değişince ilk derse geçer">✎</small>' : '')
+      : (monthISO ? (__prev211 ? '<span class="pkg-prevrun" style="color:#8a8573;font-size:12px;">⏳ ' + (pkgMonthLabel(__prev211.prevPm) || __prev211.prevPm) + ' paketi sürüyor</span>' : '<span class="pkg-nolesson" style="color:#c62828;font-weight:700;">—</span>') : '—');
+    const __startTitle211 = r.pkgStart ? (r.pkgManual211 ? 'Elle düzeltilmiş başlangıç' : 'İlk dersin tarihi')
+      : (__prev211 ? ((pkgMonthLabel(__prev211.prevPm) || __prev211.prevPm) + ' paketi sürüyor' + (__prev211.prevLast ? ' (son ders ' + fmtDate(__prev211.prevLast) + ')' : '') + '; bu ayın paketi ilk dersi yazılınca başlar') : 'Bu ayın paketine henüz ders girilmedi');
     const pkgStartCell = monthISO
-      ? `<td onclick="event.stopPropagation();editMonthlyPackageStart('${r.memberId}','${monthISO}')" style="cursor:pointer;text-decoration:underline dotted;color:#2e7d32;" title="Tıkla — bu ay için paket başlangıç tarihini düzenle">${pkgStartLabel}</td>`
+      ? `<td onclick="event.stopPropagation();editMonthlyPackageStart('${r.memberId}','${monthISO}','${r.groupId||''}')" style="cursor:pointer;text-decoration:underline dotted;color:#2e7d32;" title="${__startTitle211} — tıkla: bu ay için başlangıcı elle düzelt">${pkgStartLabel}</td>`
       : `<td>${pkgStartLabel}</td>`;
     return `<tr class="${rowClass}" onclick="openMemberDetail('${r.memberId}')" style="cursor:pointer;">
       <td>${idx+1}</td>
       ${groupNameCell}
       <td><b>${r.name}</b>${r.type==='group' && r.ownPrice ? ' <small style="color:var(--muted);white-space:nowrap;">· '+money(r.ownPrice)+' ₺</small>' : ''}${__partBadge194}</td>
       ${pkgStartCell}
-      <td>${r.pkgEnd ? fmtDate(r.pkgEnd) : '—'}</td>
+      ${__pkgEndCell211(r, monthISO)}
       <td>${r.payDate ? fmtDate(r.payDate) : '—'}</td>
       ${totalCell}
       ${paidCell}
@@ -7247,7 +7361,7 @@ function renderMembersCardsMobile(rows, monthISO) {
       html += `<div class="mc-group-head" onclick="openGroupDetail('${r.groupId}','${monthISO||''}')">
         <span class="mc-gname">👯 ${escapeHtml(r.groupName||'')}</span>${(function(){ const __in = __rowInstructorName184(r); return __in ? `<small class="mc-gins184" style="flex-shrink:0;font-weight:500;opacity:.85;white-space:nowrap;margin-left:6px;">🧑‍🏫 ${escapeHtml(__in)}</small>` : ''; })()}
         <span class="mc-gsum ${gRem>0?'due':'ok'}">${gRem>0 ? 'Kalan ' + money(gRem) + ' ₺' : (r.groupFullyPaid ? '✅ Ödendi' : '')}</span>
-      </div>`;
+      </div>` + (monthISO ? __mcDates211(pkgWindow211('group', r.groupId, monthISO), 'mc-gwin') : ''); // v211: grubun paket penceresi
     }
     if (!r.memberId) {
       html += `<button class="mc-card mc-empty" onclick="fillEmptySlot('${r.groupId}',${r.slotIndex})">+ BOŞ SLOT — üye eklemek için dokun</button>`;
@@ -7281,7 +7395,7 @@ function renderMembersCardsMobile(rows, monthISO) {
         <span>Ücret <b>${money(fee)} ₺</b></span>
         <span>Ödenen <b>${money(paid)} ₺</b></span>
         <span>Kalan <b class="${__kalanTL>0?'mc-due':''}">${money(__kalanTL)} ₺</b></span>
-      </div>
+      </div>${(monthISO && (r.type !== 'group' || r.pkgManual211)) ? __mcDates211(r.pkgWin211, 'mc-dates') : ''}
       <div class="mc-actions" onclick="event.stopPropagation()">
         <button class="btn small pl-owner-only" onclick="openPaymentModal('${r.memberId}',null,'${r.groupId||''}')">+ ₺ Ödeme</button>
         <button class="btn small secondary" onclick="openMemberModal('${r.memberId}')">Düzenle</button>
@@ -10077,9 +10191,10 @@ function openLessonModal(id, date, time, groupId, ctxMonth) {
         const cLimit = state.settings.groupCancelLimit ?? 1;
         const rUsed = g.rescheduleUsed || 0;
         const cUsed = g.cancelUsed || 0;
-        const pkgInfo = g.packageStartDate
-          ? `📦 Paket: ${fmtDate(g.packageStartDate)} – ${fmtDate(groupPackageEnd(g))} (${groupPackageDaysLeft(g)} gün kaldı)`
-          : `📦 Paket başlangıç tarihi yok (ilk ödemede otomatik atanır).`;
+        const __pmL211 = __plLessonMonth(l); const __wl211 = __pmL211 ? pkgWindow211('group', g.id, __pmL211) : null; // v211: dersin paket ayının penceresi
+        const pkgInfo = (__wl211 && __wl211.start)
+          ? `📦 ${pkgMonthLabel(__pmL211)} paketi: ${fmtDate(__wl211.start)} – ${__wl211.end ? fmtDate(__wl211.end) : '—'}` + (__wl211.finished ? ` (✅ bitti, ${__wl211.done}/${__wl211.quota} ders)` : ` (${__wl211.done}/${__wl211.quota} ders` + ((__wl211.end && todayISO() <= __wl211.end) ? `, ${Math.max(0, Math.round((parseISO(__wl211.end) - parseISO(todayISO()))/86400000))} gün kaldı)` : ', 30 günlük süre doldu)'))
+          : `📦 ${__pmL211 ? pkgMonthLabel(__pmL211) + ' paketine' : 'Pakete'} henüz ders girilmedi.`;
         rightsInfo.innerHTML = `<b>👯 ${groupDisplayName(g, __gnAy)}</b> grubu hakları:<br>
           🔄 Saat değişikliği: ${rUsed}/${rLimit} &nbsp;·&nbsp; 🚫 İptal: ${cUsed}/${cLimit}<br>${pkgInfo}`;
       } else rightsInfo.textContent = '';
@@ -11612,22 +11727,40 @@ function openGroupDetail(id, monthISO) {
   const rUsed = __mp ? (__mp.rescheduleUsed||0) : (g.rescheduleUsed || 0);
   const cUsed = __mp ? (__mp.cancelUsed||0) : (g.cancelUsed || 0);
   const __days = state.settings.groupPackageDays || 30;
-  const __mpStart = __mp && __mp.startDate ? __mp.startDate : '';
-  const pkgEnd = __mpStart ? addDaysISO(__mpStart, __days-1) : (monthISO ? null : groupPackageEnd(g));
-  const pkgActive = __mpStart ? (todayISO() <= pkgEnd) : (monthISO ? false : groupPackageActive(g));
-  const pkgLeft = (__mpStart && pkgEnd) ? Math.max(0, Math.round((parseISO(pkgEnd) - parseISO(todayISO()))/86400000)) : (monthISO ? 0 : groupPackageDaysLeft(g));
+  // v211 (Kerem): AYIN paket penceresi tek kaynaktan — başlangıç ilk ders (elle düzeltme), bitiş 30 gün kuralı / paket bitince son ders
+  const __w211 = monthISO ? pkgWindow211('group', id, monthISO) : null;
+  const __mpStart = __w211 ? __w211.start : '';
+  const pkgEnd = __w211 ? (__w211.end || null) : groupPackageEnd(g);
+  const pkgActive = __w211 ? !!(__w211.start && !__w211.finished && __w211.end && todayISO() <= __w211.end) : groupPackageActive(g);
+  const pkgLeft = (__w211 && pkgActive) ? Math.max(0, Math.round((parseISO(__w211.end) - parseISO(todayISO()))/86400000)) : (monthISO ? 0 : groupPackageDaysLeft(g));
   const __pkgStartShown = monthISO ? __mpStart : g.packageStartDate;
+  const __pkLbl211 = monthISO ? (pkgMonthLabel(monthISO) || monthISO) : '';
+  const __pkStatus211 = __w211
+    ? (__w211.finished
+        ? `· <span style="color:var(--ok)"><b>✅ paket bitti (${__w211.done}/${__w211.quota} ders)</b></span>`
+        : `· ${__w211.done}/${__w211.quota} ders` + (pkgActive ? ` · <span style="color:var(--ok)"><b>${pkgLeft} gün kaldı</b></span>` : ((pkgEnd && todayISO() > pkgEnd) ? ` · <span style="color:var(--bad)"><b>süresi doldu</b></span>` : '')))
+    : (pkgActive ? `· <span style="color:var(--ok)"><b>${pkgLeft} gün kaldı</b></span>` : '');
+  const __pkEditBtn211 = monthISO ? (__mp ? `<br><button class="btn small secondary" style="margin-top:6px" onclick="editGroupPkgStart('${id}','${monthISO}')">📆 ${monthISO} Paket Başlangıcını Düzenle</button>` : '') : `<br><button class="btn small secondary" style="margin-top:6px" onclick="resetGroupPackage('${id}')">📆 Paketi Yenile (rights sıfırla)</button>`;
   const pkgBox = __pkgStartShown
-    ? `<div style="padding:8px 12px;background:${pkgActive?'#e8f0e0':'#ffebee'};border-radius:6px;margin:8px 0;font-size:13px;">
-         📦 <b>${monthISO ? monthISO + ' Paketi:' : 'Paket:'}</b> ${fmtDate(__pkgStartShown)} – ${pkgEnd ? fmtDate(pkgEnd) : '—'}
-         ${pkgActive ? `· <span style="color:var(--ok)"><b>${pkgLeft} gün kaldı</b></span>` : (monthISO && pkgEnd && todayISO() > pkgEnd ? `· <span style="color:var(--bad)"><b>süresi doldu</b></span>` : '')}
+    ? `<div style="padding:8px 12px;background:${(__w211 && __w211.finished) ? '#eef3f7' : (pkgActive?'#e8f0e0':'#ffebee')};border-radius:6px;margin:8px 0;font-size:13px;">
+         📦 <b>${monthISO ? __pkLbl211 + ' Paketi:' : 'Paket:'}</b> ${fmtDate(__pkgStartShown)} – ${pkgEnd ? fmtDate(pkgEnd) : '—'}
+         ${__pkStatus211}
+         ${(__w211 && __w211.startSrc === 'manual') ? '<br><small style="color:var(--muted)">✎ başlangıç elle düzeltildi — ilk ders yazılınca ya da değişince ilk derse geçer</small>' : ''}
          <br>🔄 Saat değişikliği: <b>${rUsed}/${rLimit}</b> &nbsp;·&nbsp; 🚫 İptal: <b>${cUsed}/${cLimit}</b>
-         ${monthISO ? `<br><button class="btn small secondary" style="margin-top:6px" onclick="editGroupPkgStart('${id}','${monthISO}')">📆 ${monthISO} Paket Başlangıcını Düzenle</button>` : `<br><button class="btn small secondary" style="margin-top:6px" onclick="resetGroupPackage('${id}')">📆 Paketi Yenile (rights sıfırla)</button>`}
+         ${__pkEditBtn211}
        </div>`
-    : `<div style="padding:8px 12px;background:#fff3e0;border-radius:6px;margin:8px 0;font-size:13px;">
-         ⚠️ <b>${monthISO ? monthISO + ' ayı için paket kaydı yok.' : 'Paket başlangıç tarihi yok.'}</b> ${monthISO ? 'Bu aya ödeme alındığında otomatik oluşur (başlangıç: elle girilen > ilk ders > ayın 1\'i).' : 'Gruba ilk ödeme alındığında otomatik atanır, ya da manuel başlat:'}
-         ${monthISO ? '' : `<button class="btn small" style="margin-left:8px" onclick="startGroupPackage('${id}')">▶️ Paketi Bugün Başlat</button>`}
-       </div>`;
+    : (monthISO
+      ? `<div style="padding:8px 12px;background:${(__w211 && __w211.prevPm) ? '#f4f1e8' : '#fff3e0'};border-radius:6px;margin:8px 0;font-size:13px;">
+         📦 <b>${__pkLbl211} Paketi:</b> ${(__w211 && __w211.prevPm)
+           ? `<span style="font-weight:600;">⏳ ${pkgMonthLabel(__w211.prevPm) || __w211.prevPm} paketi sürüyor${__w211.prevLast ? ' (son ders ' + fmtDate(__w211.prevLast) + ')' : ''}</span> — ${__pkLbl211} paketi ilk dersiyle başlar.`
+           : `<span style="color:var(--bad);font-weight:700;">ilk ders henüz girilmedi</span> — başlangıç ilk dersin tarihi olur.`}
+         <br>🔄 Saat değişikliği: <b>${rUsed}/${rLimit}</b> &nbsp;·&nbsp; 🚫 İptal: <b>${cUsed}/${cLimit}</b>
+         ${__pkEditBtn211}
+       </div>`
+      : `<div style="padding:8px 12px;background:#fff3e0;border-radius:6px;margin:8px 0;font-size:13px;">
+         ⚠️ <b>Paket başlangıç tarihi yok.</b> Gruba ilk ödeme alındığında otomatik atanır, ya da manuel başlat:
+         <button class="btn small" style="margin-left:8px" onclick="startGroupPackage('${id}')">▶️ Paketi Bugün Başlat</button>
+       </div>`);
   // v34 (Kerem kurali): GRUP SAYFASINDA BASKA AY OPSIYONU YOK — sayfa hangi aydan acildiysa O AY.
   const monthLabel = parseISO(monthISO + '-01').toLocaleDateString('tr-TR', {month:'long', year:'numeric'});
   // v10: Aktif paketin durumu (paket uzadı banner için)
@@ -11856,11 +11989,14 @@ async function editGroupPkgStart(groupId, monthISO) {
   const g = state.groups.find(x=>x.id===groupId); if (!g || !monthISO) return;
   const pk = (g.packages||[]).find(pp => pp && pp.month === monthISO);
   if (!pk) { alert(monthISO + ' ayı için paket kaydı yok.'); return; }
-  const cur = pk.startDate || (monthISO + '-01');
-  const ans = await plPrompt(`${monthISO} paketinin başlangıç tarihi (YYYY-AA-GG):\n(Sadece bu ayın paketi değişir; diğer aylar etkilenmez.)`, cur, { placeholder: 'YYYY-AA-GG' });
+  const __w211 = pkgWindow211('group', groupId, monthISO); // v211: gösterilen başlangıç tek kaynaktan
+  const cur = __w211.start || pk.startDate || (monthISO + '-01');
+  const ans = await plPrompt(`${monthISO} paketinin başlangıç tarihi (YYYY-AA-GG):\n(Sadece bu ayın paketi değişir; diğer aylar etkilenmez.)\n\n` + (__w211.first ? 'İlk ders: ' + fmtDate(__w211.first) : 'Bu ayın paketine henüz ders girilmedi.') + '\nElle tarih (ileri/geri olabilir) — ilk ders sonradan yazılır ya da değişirse başlangıç kendiliğinden ilk derse geçer.\nBoş bırakıp Tamam → elle tarih silinir.', cur, { placeholder: 'YYYY-AA-GG' });
   if (ans === null) return;
+  if (String(ans).trim() === '') { __undoSnapshot('Grup paket başlangıcı: ' + (groupDisplayName(g, monthISO) || g.name || 'Grup') + ' — ' + monthISO); delete pk.startManual; delete pk.startBasis; delete pk.startAt; save(); refreshGroupDetailIfOpen(); renderMembers(); renderDashboard(); return; } // v211
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ans.trim())) { alert('Geçersiz tarih. Örn: ' + monthISO + '-05'); return; }
-  pk.startDate = ans.trim();
+  __undoSnapshot('Grup paket başlangıcı: ' + (groupDisplayName(g, monthISO) || g.name || 'Grup') + ' — ' + monthISO); // v211
+  __pkgMarkManual211('group', groupId, monthISO, ans.trim()); // v211: o anki ilk ders saklanır
   save();
   refreshGroupDetailIfOpen();
   renderMembers(); renderDashboard();
@@ -13101,6 +13237,7 @@ function savePayment() {
       }
     }
   }
+  try { const __typed211 = ((document.getElementById('mp-pkg-start') || {}).value || '').trim(); if (__typed211 && !id && !isRefund) __pkgMarkManual211(groupId ? 'group' : 'member', groupId || memberId, data.packageMonth, __typed211, memberId); } catch(e) {} // v211
   // v23: odeme alinan uye, paket ayinin listesine otomatik girer
   const __isPartialPay171 = !!(groupId && partialShareFor(groupId, memberId, data.packageMonth)); // v171 (F14): ayrilan uyenin pay odemesi uyeyi aya GERI SOKMAZ
   if (!isRefund && !__isPartialPay171) if (memberId && (data.packageMonth >= ROSTER_START_MONTH || ((state.members.find(x=>x.id===memberId)||{}).secondOfMember))) setMemberMonthly(memberId, data.packageMonth, { enrolled: true }); // v58: klon, odeme aldigi ayda da aktif olur
@@ -13183,6 +13320,7 @@ function saveGroupPaymentAll() {
   if (!(g.packages||[]).find(p => p.month === packageMonth)) {
     createGroupPackage(g, packageMonth, __pkgStartAll, { sessions: __groupPkgSessions172(document.getElementById('mp-member').value, groupId, packageMonth, sessions) }); // v172: uyeye ozel hak grubun paketine karismaz
   }
+  try { const __typedA211 = ((document.getElementById('mp-pkg-start') || {}).value || '').trim(); if (__typedA211) __pkgMarkManual211('group', groupId, packageMonth, __typedA211); } catch(e) {} // v211
   save();
   closeModal('modal-payment');
   __refreshUIInPlace(); // v125
@@ -18474,7 +18612,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.21.133';
+const APP_VERSION = '2026.10.21.134';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
