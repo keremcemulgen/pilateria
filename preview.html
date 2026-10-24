@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.21.134-onizleme">
+<meta name="app-version" content="2026.10.24.135-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -142,6 +142,7 @@
   }
   .stat .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .stat .value { font-size: 24px; font-weight: 700; color: var(--text); }
+  .stat .stat-sub212 { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.3; } /* v212 */
   .stat.ok { border-left-color: var(--ok); }
   .stat.warn { border-left-color: var(--warn); }
   .stat.bad { border-left-color: var(--bad); }
@@ -1432,12 +1433,12 @@ body.pl-authlock > *:not(#sb-auth-overlay) { visibility:hidden !important; }
   <div class="row" style="margin-bottom:10px;align-items:center;gap:8px;flex-wrap:wrap;">
     <label style="font-size:13px;color:var(--muted);font-weight:600;">📅 Panel ayı:</label>
     <input type="month" id="dash-month" onchange="window.__dashMonthUserSet=true; renderDashboard()" style="max-width:180px;">
-    <span style="font-size:12px;color:var(--muted);">(tahsilat, net kâr ve doluluk bu aya göre — para esası)</span>
+    <span style="font-size:12px;color:var(--muted);">(tahsilat = bu ayın paketleri, Üyeler › Ödenmiş ile aynı · net kâr = para esası, Finans › Özet ile aynı)</span>
   </div>
   <div class="grid-stats">
     <div class="stat blue"><div class="label">Aktif Üye</div><div class="value" id="s-members">0</div></div>
-    <div class="stat ok"><div class="label" id="s-revenue-label">Bu Ay Gelir (₺)</div><div class="value" id="s-revenue">0</div></div>
-    <div class="stat blue"><div class="label" id="s-netprofit-label" title="Para esası: o ay giren − çıkan (stüdyo) — Finans › Özet ile aynı">Net Kâr — stüdyo (₺)</div><div class="value" id="s-netprofit">—</div></div>
+    <div class="stat ok"><div class="label" id="s-revenue-label" title="Bu ayın paketleri için alınan ödemeler (ödeme günü fark etmez) — Üyeler › Ödenmiş ile aynı. O ay kasaya giren para: Finans › Özet">Bu Ay Gelir (₺)</div><div class="value" id="s-revenue">0</div><div class="stat-sub212" id="s-revenue-sub">bu ayın paketleri · Üyeler › Ödenmiş ile aynı</div></div>
+    <div class="stat blue"><div class="label" id="s-netprofit-label" title="Para esası: o ay giren − çıkan (stüdyo) — Finans › Özet ile aynı">Net Kâr — stüdyo (₺)</div><div class="value" id="s-netprofit">—</div><div class="stat-sub212" id="s-netprofit-sub">para esası · o ay giren − çıkan</div></div>
     <div class="stat warn"><div class="label">Bu Hafta Dersler</div><div class="value" id="s-lessons">0</div></div>
     <div class="stat"><div class="label" id="s-occupancy-label">Bu Ay Doluluk</div><div class="value" id="s-occupancy">—</div></div>
     <div class="stat bad"><div class="label">1 Kalan / Biten</div><div class="value" id="s-low">0</div></div>
@@ -4624,9 +4625,8 @@ function renderDashboard() {
   document.querySelectorAll('.mask-amounts-btn').forEach(b => {
     b.textContent = __maskAmounts ? '👁 Tutarları Göster' : '🙈 Tutarları Gizle';
   });
-  // this month revenue — v21: PAKET AYI kanonu (Üyeler sayfasındaki "Ödenmiş" ile birebir aynı tanım;
-  // 31 Mayıs'ta alınan Haziran paketi ödemesi HAZİRAN gelirinde görünür — her yerde tek rakam)
-  // v35: PANEL AY SEÇİCİ — gelir+doluluk SEÇİLİ AYA göre (varsayılan içinde bulunulan ay)
+  // v212 (Kerem 24.10): Panel tahsilatı = Üyeler › Ödenmiş — o ayın PAKETLERİ için alınan (31 Eylül'de alınan Ekim paketi Ekim'de;
+  // Ekim'de alınan Eylül paketi Eylül'de). Net Kâr kartı para esası (Finans › Özet). v35: PANEL AY SEÇİCİ — seçili aya göre.
   const __dm = document.getElementById('dash-month');
   // v39: panel varsayilan ayi = EN SON odeme olan ay (kullanici degistirene kadar) — bos ay yerine veri olan ay gorunur
   if (__dm && !window.__dashMonthUserSet) {
@@ -4638,8 +4638,12 @@ function renderDashboard() {
   document.getElementById('s-members').textContent = new Set(state.members.filter(function(mm){ return isMemberEnrolledInMonth(mm.id, m); }).map(function(mm){ return mm.secondOfMember || mm.id; })).size; // v59: AKTIF = benzersiz KISI — klon ayni kisiye katlanir (cift sayilmaz; yalniz-klon aktifse kisi yine 1)
   const __mLbl = (() => { try { return parseISO(m+'-01').toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); } catch(e){ return m; } })();
   { const e1=document.getElementById('s-revenue-label'); if(e1) e1.textContent = __mLbl+' Tahsilatı (₺)'; const e2=document.getElementById('s-occupancy-label'); if(e2) e2.textContent = __mLbl+' Doluluk'; }
-  const __S208 = finSummary208(m); // v208 TEK ÖZET (Kerem 20.10, para esası): Panel = Raporlar = Finans › Özet — aynı fonksiyon, aynı rakam
-  document.getElementById('s-revenue').textContent = money(__S208.studio.uye);
+  const __S208 = finSummary208(m); // v208 TEK ÖZET (para esası): Net Kâr kartı = Finans › Özet
+  // v212 (Kerem 24.10: "Panelde Ekim 2026 tahsilatı yazan miktar … Üyeler kısmında yazan miktarla birbirine uymuyor" → karar "Panel paket
+  // ayına dönsün"): TEK KAYNAK membersMonthStats212 — Üyeler sayfasındaki "Ödenmiş" ile aynı fonksiyon, aynı rakam. Hesap üye satırlarını
+  // kurar (ağır) → yalnız Panel görünürken; başka sayfadayken atlanır (Panel'e geçişte switchPage zaten yeniden çizer).
+  { const __pg212 = document.getElementById('page-dashboard');
+    if (!__pg212 || __pg212.classList.contains('active')) document.getElementById('s-revenue').textContent = money(membersMonthStats212(m).paid); }
   try { const __npe = document.getElementById('s-netprofit'); if (__npe) __npe.textContent = money(__S208.studio.net); } catch(e) {} // v127 · v208
   // this week lessons
   const ws = startOfWeek(0), we = addDays(ws,7);
@@ -7112,6 +7116,21 @@ function renderMonthNotes(ay) {
     </div>`;
   }).join('') : '<div class="empty" style="padding:10px;">Bu ay için not yok. Yukarıdan ekleyebilirsin.</div>';
 }
+// v212 (Kerem 24.10): Üyeler sayfası istatistikleri TEK KAYNAK — Üyeler kartları VE Panel tahsilat kartı buradan (her zaman aynı rakam).
+// Ödenmiş = o ayın listesindeki satırların ödemeleri (paket ayı: p.packageMonth || ödeme ayı — ödeme günü fark etmez).
+function membersMonthStats212(monthISO) {
+  let expected = 0, paid = 0, pending = 0;
+  const __uniq = new Set(); // v18: bos grup slotlari ve olasi cift satirlar SAYILMAZ
+  buildMemberRows(monthISO).forEach(r => {
+    if (r.type === 'individual' || r.isFirstInGroup) {
+      expected += +r.totalPrice || 0;
+      pending += +r.remaining || 0;  // Sadece grup başına 1 kez, bireyler tek başına sayılır
+    }
+    paid += +r.paid || 0;
+    if (r.memberId && !r.isPartial) __uniq.add(personIdOf(r.memberId)); // v59: klon ayni KISI — cift sayilmaz · v171: ayrilan payi sayilmaz (F10)
+  });
+  return { expected: expected, paid: paid, pending: pending, memberCount: __uniq.size };
+}
 function renderMembers() {
   ensureMemberMonthSelect();
   const q = (document.getElementById('member-search').value||'').toLowerCase();
@@ -7127,23 +7146,13 @@ function renderMembers() {
     const unpaidGroupIds = new Set(rows.filter(r => r.type==='group' && r.isFirstInGroup && (+r.remaining||0) > 0).map(r => r.groupId));
     rows = rows.filter(r => (r.type==='individual' && r.remaining > 0) || (r.type==='group' && unpaidGroupIds.has(r.groupId)));
   }
-  // Stats: expected (toplam paket ücretleri) / paid / pending
-  // Expected = sum of totalPrice for first-in-group rows + individual totalPrices
-  let expected = 0, paid = 0, pending = 0;
-  const __uniqMemberIds = new Set(); // v18: bos grup slotlari ve olasi cift satirlar SAYILMAZ
-  buildMemberRows(monthISO).forEach(r => {
-    if (r.type==='individual' || r.isFirstInGroup) {
-      expected += +r.totalPrice || 0;
-      pending += +r.remaining || 0;  // Sadece grup başına 1 kez, bireyler tek başına sayılır
-    }
-    paid += +r.paid || 0;
-    if (r.memberId && !r.isPartial) __uniqMemberIds.add(personIdOf(r.memberId)); // v59: klon ayni KISI — cift sayilmaz · v171: ayrilan payi sayilmaz (F10)
-  });
-  const memberCount = __uniqMemberIds.size;
+  // Stats: expected (toplam paket ücretleri) / paid / pending — v212: TEK KAYNAK membersMonthStats212 (Panel tahsilatı da buradan)
+  const __st212 = membersMonthStats212(monthISO);
+  const expected = __st212.expected, paid = __st212.paid, pending = __st212.pending, memberCount = __st212.memberCount;
   document.getElementById('members-stats').innerHTML = `
     <div class="stat blue"><div class="label">Üye Sayısı</div><div class="value">${memberCount}</div></div>
     <div class="stat"><div class="label">Beklenen Gelir</div><div class="value">${money(expected)} ₺</div></div>
-    <div class="stat ok"><div class="label">Ödenmiş</div><div class="value">${money(paid)} ₺</div></div>
+    <div class="stat ok"><div class="label" title="Bu ayın paketleri için alınan ödemeler (ödeme günü fark etmez) — Panel tahsilatı ile aynı">Ödenmiş</div><div class="value">${money(paid)} ₺</div></div>
     <div class="stat warn"><div class="label">Ödenecek (Kalan)</div><div class="value">${money(pending)} ₺</div></div>
   `;
   const tb = document.getElementById('members-tbody');
@@ -17075,9 +17084,10 @@ async function sbResync(reason) {
     }
     const all = {};
     let __resyncOk = true;
+    let __rawLes212r = null; // v212
     for (const t of SB_TABLES) {
       all[t] = {};
-      try { const r = await __sbSelectAll191(t); /* v191: SAYFALI */ if (r && r.error) __resyncOk = false; (r.data || []).forEach(row => { if (!row || __sbBadKey(String(row.id))) return; all[t][row.id] = row.data; }); }
+      try { const r = await __sbSelectAll191(t); /* v191: SAYFALI */ if (r && r.error) __resyncOk = false; if (t === 'lessons' && r && !r.error) __rawLes212r = r.data || []; /* v212 */ (r.data || []).forEach(row => { if (!row || __sbBadKey(String(row.id))) return; all[t][row.id] = row.data; }); }
       catch(e) { __resyncOk = false; console.error('[sb] resync select', t, e); }
     }
     if (!__resyncOk) { __trace('RESYNC('+reason+'): eksik çekim → ATLA (yerel korundu)'); try { setCloudDot && setCloudDot('offline'); if (typeof plToast === 'function') plToast('⚠️ Buluttan eksik çekim — veriler korundu, tekrar denenecek', 6000); } catch(e) {} return; }
@@ -17126,6 +17136,7 @@ async function sbResync(reason) {
     state = __incoming; applyV10MigrationToState(state); sanitizeStateText(state); save();
     window.__pilSuppressDirty = false; __sbApplying = false;
     sbSnapshotShadow(sbStateToRows());
+    try { if (__rawLes212r) __sbLessonProofFromRows212(__rawLes212r, __sbCloudCounts.lessons, true); } catch(e) {} // v212
     try { __sbVerifyCounts192('tazeleme'); } catch(e) {} // v192
     __refreshUIWhenIdle(); // v122: mesgulse ERTELENIR ama KAYBOLMAZ (eskiden sessizce atiliyordu)
   } catch(e) { console.error('[sb] resync', e); }
@@ -17504,6 +17515,98 @@ async function __restoreDailyBackupNow(day) {
 // eksik veriyi state'e YAZMAZ). range() desteklemeyen eski/sahte istemcide tek istek (geri uyumlu).
 var __SB_PAGE191 = 1000;
 var __sbCloudCounts = {}; // v192: son TAM cekimde sunucudan gelen satir sayilari (panelde kanit)
+// ===== v212 BULUT DERS SAYIMI KANITI (Kerem 24.10: "⚠️ EKSİK: bulut 1.169 ders, uygulama 1.168 — bu uyarı niye sebebini bul") =====
+// KÖK: bulut sayısı yalnız TAM ÇEKİMDE alınıyordu → sonraki her ders silme/ekleme (buluta da gitse) sayacı bayat bırakıp "EKSİK"
+// dedirtiyordu; v106 ölü ders süpürmesi (üyesiz iptal / üyesiz planlı) yalnız yerelde düştüğü için bulutta kalan boş kayıt kalıcı fark
+// yapıyordu. Kanıt artık KİMLİK düzeyinde: boş kayıt "gösterilmez" (eksik değil), gerçek eksik adı-tarihiyle; silme/eklemeden sonra
+// bulut sayısı SUNUCUDAN yeniden sayılır; kırmızı uyarı ancak iki ayrı kontrolde de süren farkta.
+var __sbLessonProof212 = null;   // { at, cloud, empty:[id], bad, other:[{id,date,time,groupId,memberIds,packageMonth}], localOnly:[id], checking, pending, sig }
+var __sbRecountT212 = null;
+function __sbLessonProofFromRows212(rows, cloudCount, fromPull) {
+  const local = new Set(); (state.lessons || []).forEach(function(l){ if (l && l.id != null) local.add(String(l.id)); });
+  const cloud = new Set(); const empty = [], other = []; let bad = 0;
+  (rows || []).forEach(function(row){
+    if (!row || row.id == null || __sbBadKey(String(row.id)) || !row.data || typeof row.data !== 'object') { bad++; return; }
+    const id = String(row.id); cloud.add(id);
+    if (local.has(id)) return;
+    const d = row.data;
+    if (!Array.isArray(d.memberIds) || d.memberIds.length === 0) { empty.push(id); return; } // v106 süpürmesi: üyesiz boş kayıt (yerelde düşer)
+    other.push({ id: id, date: String(d.date || ''), time: String(d.time || ''), groupId: d.groupId || '', memberIds: d.memberIds.slice(0, 6), packageMonth: d.packageMonth || '' });
+  });
+  const localOnly = []; local.forEach(function(id){ if (!cloud.has(id)) localOnly.push(id); });
+  const prev = __sbLessonProof212;
+  const sig = JSON.stringify([other.map(function(x){ return x.id; }).sort(), localOnly.slice().sort()]);
+  const mismatch = other.length > 0 || localOnly.length > 0;
+  // tam çekimde bulunan fark hemen gösterilir (state buluttan yeni kuruldu); sonraki kontrolde AYNI fark ikinci kez görülünce gösterilir
+  const pending = mismatch && !fromPull && !(prev && prev.pending && prev.sig === sig);
+  __sbLessonProof212 = { at: Date.now(), cloud: (typeof cloudCount === 'number') ? cloudCount : (rows || []).length, empty: empty, bad: bad, other: other, localOnly: localOnly, checking: pending, pending: pending, sig: sig };
+  try {
+    if (mismatch && !pending) __trace('⚠️ SAYIM KANITI: bulutta olup uygulamada olmayan ' + other.length + ' ders' + (other.length ? ' [' + other.slice(0, 5).map(function(x){ return x.id + ' ' + x.date + ' ' + x.time; }).join(', ') + ']' : '') + (localOnly.length ? ' · buluta gitmemiş ' + localOnly.length + ' ders [' + localOnly.slice(0, 5).join(', ') + ']' : ''));
+    else if ((empty.length || bad) && fromPull) __trace('ℹ️ SAYIM KANITI: bulutta ' + (empty.length + bad) + ' üyesiz boş ders kaydı uygulamada gösterilmiyor (v106 süpürmesi) — eksik değil');
+  } catch(e) {}
+  return __sbLessonProof212;
+}
+function __sbScheduleLessonRecount212(delayMs, attempt) {
+  if (!SUPABASE_MODE || !sbClient) return;
+  if (__sbRecountT212) return; // zaten planlı — art arda tetikler tek kontrol
+  if (__sbLessonProof212) __sbLessonProof212.checking = true;
+  const ms = (delayMs != null) ? delayMs : ((window.__sbRecountMs212 != null) ? window.__sbRecountMs212 : 8000);
+  __sbRecountT212 = setTimeout(function(){ __sbRecountT212 = null; try { __sbRecountLessons212(attempt || 0); } catch(e) {} }, ms);
+}
+async function __sbRecountLessons212(attempt) {
+  attempt = +attempt || 0;
+  if (!SUPABASE_MODE || !sbClient) return;
+  const quiet = (window.__sbRecountQuietMs212 != null) ? window.__sbRecountQuietMs212 : 6000; // gönderimden hemen sonra sayma (replika gecikmesi)
+  const busy = function(){ return (typeof isDirty === 'function' && isDirty()) || __sbPushInFlight || __sbResyncBusy || (__sbLastPushAt && (Date.now() - __sbLastPushAt) < quiet); };
+  const redraw = function(){ try { if (typeof setCloudDot === 'function') setCloudDot(navigator.onLine === false ? 'offline' : ((typeof isDirty === 'function' && isDirty()) ? 'pending' : 'ok')); } catch(e) {} };
+  if (busy()) { if (attempt < 40) __sbScheduleLessonRecount212(4000, attempt + 1); return; }
+  const P = __sbLessonProof212 || (__sbLessonProof212 = { at: 0, cloud: null, empty: [], bad: 0, other: [], localOnly: [], checking: false, pending: false, sig: '' });
+  let n = null;
+  try { let q = sbClient.from('lessons').select('id', { count: 'exact' }); if (q && typeof q.range === 'function') q = q.range(0, 0); const r = await q; if (r && !r.error && typeof r.count === 'number') n = r.count; } catch(e) {}
+  if (n === null) { P.checking = false; redraw(); return; } // sayılamadı (çevrimdışı vb.) → eski kanıt kalır
+  if (busy()) { if (attempt < 40) __sbScheduleLessonRecount212(4000, attempt + 1); return; }
+  const a = (state.lessons || []).length;
+  const k = (P.empty || []).length + (+P.bad || 0);
+  if (n - k === a && !(P.other || []).length && !(P.localOnly || []).length && !P.pending) {
+    P.cloud = n; P.at = Date.now(); P.checking = false; __sbCloudCounts.lessons = n; redraw(); return;
+  }
+  // sayı tutmuyor (ya da önceki kontrolde fark vardı) → KİMLİK düzeyinde kanıt: dersler sunucudan okunur, state'e YAZILMAZ
+  let r2 = null; try { r2 = await __sbSelectAll191('lessons'); } catch(e) {}
+  if (!r2 || r2.error || !r2.data) { P.checking = false; redraw(); return; }
+  if (busy()) { if (attempt < 40) __sbScheduleLessonRecount212(4000, attempt + 1); return; } // okuma sırasında yerel değişiklik → sonra yeniden
+  const Q = __sbLessonProofFromRows212(r2.data, __sbCloudCounts.lessons, false);
+  if (Q.pending) { if (attempt < 40) __sbScheduleLessonRecount212(null, attempt + 1); } // fark ilk kez görüldü → biraz sonra doğrula
+  else if (Q.other.length || Q.localOnly.length) {
+    try { if (typeof plToast === 'function') plToast('⚠️ Ders sayımı tutmuyor: ' + [Q.other.length ? 'bulutta olup uygulamada olmayan ' + Q.other.length + ' ders' : '', Q.localOnly.length ? 'buluta gitmemiş ' + Q.localOnly.length + ' ders' : ''].filter(Boolean).join(' · ') + ' — Panel’deki satırdan yenile', 9000); } catch(e) {}
+  }
+  redraw();
+}
+function __sbLessonLabel212(x) {
+  let who = '';
+  try {
+    if (x.groupId) { const g = (state.groups || []).find(function(gg){ return gg && gg.id === x.groupId; }); who = g ? (groupDisplayName(g, x.packageMonth || String(x.date || '').slice(0, 7)) || g.name || '') : 'grup'; }
+    else who = (x.memberIds || []).map(function(id){ try { return memberName(id); } catch(e) { return ''; } }).filter(Boolean).join(', ');
+  } catch(e) {}
+  return (x.date ? fmtShort(x.date) : '?') + (x.time ? ' ' + x.time : '') + (who ? ' ' + who : '');
+}
+function __sbLessonProofLine212() {
+  const fmt = function(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+  const P = __sbLessonProof212;
+  const a = (state.lessons || []).length;
+  let c = (P && typeof P.cloud === 'number') ? P.cloud : null;
+  if (c === null && typeof __sbCloudCounts === 'object' && __sbCloudCounts && typeof __sbCloudCounts.lessons === 'number') c = __sbCloudCounts.lessons;
+  if (c === null) return '';
+  const k = P ? ((P.empty || []).length + (+P.bad || 0)) : 0;
+  const exp = c - k;
+  if (P && !P.pending && (P.other || []).length) {
+    const lbl = P.other.slice(0, 3).map(__sbLessonLabel212).join(' · ') + (P.other.length > 3 ? ' …' : '');
+    return ' · <b style="color:#c62828;">⚠️ EKSİK: buluttaki ' + fmt(P.other.length) + ' ders uygulamada yok</b> (' + escapeHtml(lbl) + ') · <a href="#" onclick="sbResync(\'manual\');return false;">yenile</a>';
+  }
+  if (P && !P.pending && (P.localOnly || []).length) return ' · <b style="color:#c62828;">⚠️ ' + fmt(P.localOnly.length) + ' ders buluta gitmemiş</b> · <a href="#" onclick="cloudDotClick();return false;">şimdi gönder</a>';
+  if (a === exp && !(P && P.pending)) return ' · bulut ' + fmt(exp) + ' ders = uygulama ' + fmt(a) + (k ? ' · <span style="color:var(--muted);">bulutta ' + fmt(k) + ' üyesiz boş ders kaydı (gösterilmez)</span>' : '');
+  try { __sbScheduleLessonRecount212((window.__sbRecountMs212 != null) ? window.__sbRecountMs212 : 1500); } catch(e) {} // fark var ama sunucudan doğrulanmadı (silme/ekleme sonrası sayaç bayat olabilir)
+  return ' · <span style="color:var(--muted);">ders sayımı kontrol ediliyor…</span>';
+}
 async function __sbSelectAll191(t) {
   const rows = [];
   let total = null;
@@ -17542,11 +17645,13 @@ async function sbLoadAll() {
   setCloudDot && setCloudDot('syncing');
   const all = {};
   let __loadOk = true;
+  let __rawLes212 = null; // v212: kanıt için ham bulut ders satırları
   for (const t of SB_TABLES) {
     all[t] = {};
     try {
       const r = await __sbSelectAll191(t); // v40: deterministik yukleme sirasi (order id) · v191: SAYFALI (1000 satir siniri)
       if (r && r.error) __loadOk = false;
+      if (t === 'lessons' && r && !r.error) __rawLes212 = r.data || []; // v212
       (r.data || []).forEach(row => { if (!row || __sbBadKey(String(row.id))) return; all[t][row.id] = row.data; });
     } catch(e) { __loadOk = false; console.error('[sb] select', t, e); }
   }
@@ -17614,6 +17719,7 @@ async function sbLoadAll() {
   state = sbRowsToState(all);
   applyV10MigrationToState(state);
   sanitizeStateText(state);
+  try { if (__rawLes212) __sbLessonProofFromRows212(__rawLes212, __sbCloudCounts.lessons, true); } catch(e) {} // v212: kimlik düzeyinde sayım kanıtı
   sbSnapshotShadow(sbStateToRows()); // shadow = SUNUCU hali (diff temeli)
   if (__wasDirty && __localState) {
     // v117: yerel hali OLDUGU GIBI geri koymak = bayat cihazin bulutu geri sarmasi (Kerem, 26 Tem).
@@ -17745,12 +17851,14 @@ async function sbDiffPush() {
     try { if (window.plToast) plToast('⛔ Toplu silme engellendi — bulut verileri KORUNDU'); } catch(e) {}
   }
   const __ghostAll = [];   // v118: mezar taşı olmadan "yok" görünen kayıtlar (SİLİNMEZ)
+  let __lesChanged212 = false; // v212: ders eklendi/silindi → bulut sayım kanıtı tazelenir
   for (const t of SB_TABLES) {
     if (__sbMissingTables[t]) continue; // v196: sunucuda olmayan isteğe bağlı tablo — gönderim atlanır, diğerleri etkilenmez, gölge değişmez
-    const ups = [], dels = [], upJson = {}, __ghost = [];
+    const ups = [], dels = [], upJson = {}, __ghost = []; let __lesNew212 = 0; // v212
     for (const id in rows[t]) {
       const j = JSON.stringify(rows[t][id]);
       if (__sbShadow[t] && __sbShadow[t][id] === j) continue;
+      if (t === 'lessons' && !(__sbShadow[t] && (id in __sbShadow[t]))) __lesNew212++; // v212: buluta YENİ ders
       __sbVer[t] = __sbVer[t] || {};
       const __vv = Math.max(Date.now(), (__sbVer[t][id] || 0) + 1);
       __sbVer[t][id] = __vv;
@@ -17769,6 +17877,7 @@ async function sbDiffPush() {
     }
     if (ups.length) __pushedSummary.push(t+'['+ups.map(u=>u.id).slice(0,5).join(',')+(ups.length>5?'+':'')+']');
     if (dels.length) __pushedSummary.push('SİL '+t+'['+dels.slice(0,5).join(',')+']');
+    if (t === 'lessons' && (__lesNew212 || dels.length)) __lesChanged212 = true; // v212
     const __inf210 = {}; // v210: yoldaki upsert içeriği (kendi yankımızı tanımak için)
     try { __sbInflight210[t] = __sbInflight210[t] || {}; ups.forEach(u => { const c = __sbCanon210(rows[t][u.id]); __inf210[u.id] = c; __sbInflight210[t][u.id] = c; }); if (dels.length) { __sbOwnDel210[t] = __sbOwnDel210[t] || {}; const __nw = Date.now(); dels.forEach(id => { __sbOwnDel210[t][id] = __nw; }); } } catch(e) {}
     try {
@@ -17789,6 +17898,7 @@ async function sbDiffPush() {
   if (__massDelete) { try { localStorage.removeItem(DIRTY_KEY); } catch(e) {} clearTimeout(sbDiffPush._healT); sbDiffPush._healT = setTimeout(function() { try { sbResync('mass-delete-guard'); } catch(e) {} }, 5000); } // v104: yerel bozulmus olabilir -> buluttan iyiles
   if (__pushedSummary.length) __trace((okAll?'▶ BULUTA gönderildi: ':'⚠ BULUTA gönderilemedi: ')+__pushedSummary.join(' | ')+(__pushErrors.length?('  ‹HATA› '+__pushErrors.join(' ; ')):''));
   if (okAll) { __sbLastPushAt = Date.now(); try { localStorage.removeItem(DIRTY_KEY); } catch(e){} }
+  if (okAll && __lesChanged212) { try { __sbScheduleLessonRecount212(); } catch(e) {} } // v212: silme/eklemeden sonra bulut SUNUCUDAN yeniden sayılır (bayat sayaç "EKSİK" demesin)
   else { clearTimeout(__sbPushTimer); __sbPushTimer = setTimeout(sbFlushPush, 15000); }
   setCloudDot && setCloudDot(okAll ? 'ok' : 'offline');
 }
@@ -17957,6 +18067,7 @@ function sbSubscribeAll() {
         // v52 PER-RECORD APPLY: YALNIZ gelen kaydi guncelle — tum state'i yeniden KURMA (in-flight/yerel baska kaydi EZMEZ).
         __sbApplying = true; window.__pilSuppressDirty = true; window.__undoScope210 = __undoScopeFor210(t, __applyId); // v210
         try { sbApplyOne(t, __applyId); save(); } catch(e) { console.error('[sb] applyOne', e); }
+        if (t === 'lessons') { try { __sbScheduleLessonRecount212(); } catch(e) {} } // v212: bulut sayım kanıtı tazelenir
         window.__undoScope210 = null; window.__pilSuppressDirty = false; __sbApplying = false;
         // yeniden-render'i topakla (60ms) — art arda gelen olaylarda tek render
         clearTimeout(__sbRtTimer);
@@ -18188,16 +18299,10 @@ function __renderSyncStatusLine(mode, last) {
     el.textContent = '☁️ Buluta yazılıyor…';
     __mirror193();
   } else {
-    // v192 (Kerem: "dersler gorunmeli KESINLIKLE"): bulut sayimi = uygulama sayimi kaniti; esit degilse kirmizi uyari
+    // v192 (Kerem: "dersler gorunmeli KESINLIKLE"): bulut sayimi = uygulama sayimi kaniti
+    // v212: kanıt kimlik düzeyinde (__sbLessonProofLine212) — üyesiz boş kayıt eksik sayılmaz, bayat sayaç sunucudan yeniden sayılır
     let __cnt192 = '';
-    try {
-      const c = (typeof __sbCloudCounts === 'object' && __sbCloudCounts && typeof __sbCloudCounts.lessons === 'number') ? __sbCloudCounts.lessons : null;
-      const a = (state.lessons || []).length;
-      if (c !== null) {
-        const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        __cnt192 = (c === a) ? ' · bulut ' + fmt(c) + ' ders = uygulama ' + fmt(a) : ' · <b style="color:#c62828;">⚠️ EKSİK: bulut ' + fmt(c) + ' ders, uygulama ' + fmt(a) + '</b>';
-      }
-    } catch(e) { __cnt192 = ''; }
+    try { __cnt192 = __sbLessonProofLine212(); } catch(e) { __cnt192 = ''; }
     el.innerHTML = '☁️ Bulut senkron aktif' + (last ? ' · son gönderim: ' + escapeHtml(String(last)) : '') + __cnt192 + (__sbMissingTables.finance ? ' · <b style="color:#b26a00;">Finans bulut tablosu kurulmamış</b>' : '');
     __mirror193();
   }
@@ -18205,6 +18310,11 @@ function __renderSyncStatusLine(mode, last) {
 // v192: tam cekimden sonra bulut/uygulama ders sayimi esit degilse sesli uyari (tek kaynak: __sbCloudCounts)
 function __sbVerifyCounts192(where) {
   try {
+    const P = __sbLessonProof212; // v212: kimlik düzeyinde kanıt varsa o esas — üyesiz boş kayıt "eksik" değildir
+    if (P && typeof P.cloud === 'number') {
+      if (!P.pending && (P.other || []).length) { __trace('⚠️ SAYIM FARKI (' + where + '): bulutta olup uygulamada olmayan ' + P.other.length + ' ders'); if (typeof plToast === 'function') plToast('⚠️ Bulutta olup uygulamada görünmeyen ' + P.other.length + ' ders var — Panel’deki satırdan yenile', 8000); return false; }
+      return true;
+    }
     const c = __sbCloudCounts && __sbCloudCounts.lessons; const a = (state.lessons || []).length;
     if (typeof c === 'number' && c !== a) { __trace('⚠️ SAYIM FARKI (' + where + '): bulut ' + c + ' ders / uygulama ' + a); if (typeof plToast === 'function') plToast('⚠️ Ders sayımı tutmuyor: bulut ' + c + ' / uygulama ' + a + ' — yenileyip tekrar dene', 8000); return false; }
   } catch(e) {}
@@ -18624,7 +18734,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.21.134-onizleme';
+const APP_VERSION = '2026.10.24.135-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika

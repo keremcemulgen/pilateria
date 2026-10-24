@@ -2,7 +2,7 @@
 // v51 KOK FIX: eski SW, Supabase GET okumalarini da cache'liyordu; ag kesintisinde ESKI veriyi servis edip
 // state'i geri sariyordu. Artik yalniz kendi kaynagimizdaki (app dosyalari) GET'ler yonetilir; Supabase/harici
 // istekler HIC dokunulmadan dogrudan aga gider (veri tazeligi ZORUNLU).
-const CACHE_NAME = 'pilateria-v211-2026-10-21-134';
+const CACHE_NAME = 'pilateria-v212-2026-10-24-135';
 const ASSETS = [
   './',
   './index.html',
