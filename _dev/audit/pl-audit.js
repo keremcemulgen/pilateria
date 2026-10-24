@@ -97,7 +97,8 @@ window.__plAudit = function(ay, opts) {
     if (dm) { dm.value = M; window.__dashMonthUserSet = true; }
     renderDashboard();
     const rev = parseTL(document.getElementById('s-revenue').textContent);
-    R.checks++; if (!eq(rev, sumCash)) bad('UI_DASH_REVENUE≠Σpayments(ödeme günü)', rev + '≠' + sumCash);
+    { const memPaid = (typeof membersMonthStats212 === 'function') ? membersMonthStats212(M).paid : sumCash; // v212: Panel tahsilatı = Üyeler › Ödenmiş (paket ayı)
+      R.checks++; if (!eq(rev, memPaid)) bad('UI_DASH_REVENUE≠Üyeler›Ödenmiş', rev + '≠' + memPaid); }
     if (typeof finSummary208 === 'function') { const np = parseTL(document.getElementById('s-netprofit').textContent); R.checks++; if (!eq(np, finSummary208(M).studio.net)) bad('UI_DASH_NET≠finSummary208', np + '≠' + finSummary208(M).studio.net); }
     if (dm && prevD !== null) { dm.value = prevD; window.__dashMonthUserSet = prevSet; }
   } catch (e) { bad('UI_DASH_ERR', e.message); }
