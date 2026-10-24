@@ -35,7 +35,9 @@ function fixture(w, ctx) {
     state.lessons=[];
     state.lessons.push({id:'c0',groupId:'G',memberIds:['I1','N1','S1','Y1'],date:'${S}-29',time:'09:00',status:'completed',packageMonth:'${S}',packageOwnerType:'group',packageOwnerId:'G',instructorId:'h1',size:4});
     state.lessons.push({id:'c1',groupId:'G',memberIds:['I1','N1','S1','Y1'],date:'${T}-01',time:'09:00',status:'completed',packageMonth:'${S}',packageOwnerType:'group',packageOwnerId:'G',instructorId:'h1',size:4});
-    ['06','08','13','15','20','22'].forEach((dd,i)=>state.lessons.push({id:'o'+i,groupId:'G',memberIds:['S1','I1','Y1'],date:'${T}-'+dd,time:'09:00',status:'planned',packageMonth:'${S}',packageOwnerType:'group',packageOwnerId:'G',instructorId:'h1',size:4}));
+    // v212 test bakimi: T baglaminda katilis tarihi BUGUN (T bu ayken) — son planli ders 22'de oldugu icin 23–31 Ekim arasi "katilistan
+    // sonraki ders" kalmiyor, kontrol saat yuzunden FAIL ediyordu (v211'e kadar yesildi). Son iki ders 27 ve 31 → her tarihte anlamli.
+    ['06','08','13','15','27','31'].forEach((dd,i)=>state.lessons.push({id:'o'+i,groupId:'G',memberIds:['S1','I1','Y1'],date:'${T}-'+dd,time:'09:00',status:'planned',packageMonth:'${S}',packageOwnerType:'group',packageOwnerId:'G',instructorId:'h1',size:4}));
     state.payments=[];
     document.getElementById('member-month').innerHTML='<option value="${T}">${T}</option><option value="${S}">${S}</option>';
     document.getElementById('member-month').value='${ctx}';`);

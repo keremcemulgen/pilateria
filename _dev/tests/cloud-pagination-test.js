@@ -72,8 +72,13 @@ setTimeout(async function(){try{
   w.eval("__renderSyncStatusLine('ok','')");
   t('panel: "bulut 5.500 ders = uygulama 5.500"', /bulut 5\.500 ders = uygulama 5\.500/.test(w.document.getElementById('dash-sync-status').textContent), w.document.getElementById('dash-sync-status').textContent);
   t('v193: ayni metin sayac kutularinin ALTINDA da (dash-sync-status-top)', /bulut 5\.500 ders = uygulama 5\.500/.test((w.document.getElementById('dash-sync-status-top')||{}).textContent||''), (w.document.getElementById('dash-sync-status-top')||{}).textContent);
-  w.eval("state.lessons = state.lessons.slice(0, 5000); __renderSyncStatusLine('ok','')");
-  t('uygulama eksikse panelde KIRMIZI "EKSİK" uyarisi', /EKSİK: bulut 5\.500 ders, uygulama 5\.000/.test(w.document.getElementById('dash-sync-status').textContent), w.document.getElementById('dash-sync-status').textContent);
+  // v212 (Kerem 24.10 "EKSİK: bulut 1.169, uygulama 1.168"): fark önce SUNUCUDAN doğrulanır (bayat sayaç sahte "EKSİK" demesin);
+  // iki ayrı kontrolde de sürünce KIRMIZI ve eksik derslerin sayısı/adıyla
+  w.eval("state.lessons = state.lessons.slice(0, 5000); window.__sbRecountMs212 = 30; window.__sbRecountQuietMs212 = 0; __sbLastPushAt = 0; localStorage.removeItem('pilateria_dirty'); __renderSyncStatusLine('ok','')");
+  t('v212: ilk anda "kontrol ediliyor" (henüz kırmızı değil)', /kontrol ediliyor/.test(w.document.getElementById('dash-sync-status').textContent), w.document.getElementById('dash-sync-status').textContent);
+  for (let i = 0; i < 150 && !/EKSİK/.test(w.document.getElementById('dash-sync-status').textContent); i++) { await new Promise(r=>setTimeout(r,20)); w.eval("__renderSyncStatusLine('ok','')"); }
+  t('uygulama eksikse (sunucuyla doğrulanınca) panelde KIRMIZI "EKSİK: buluttaki 500 ders uygulamada yok"', /EKSİK: buluttaki 500 ders uygulamada yok/.test(w.document.getElementById('dash-sync-status').textContent), w.document.getElementById('dash-sync-status').textContent);
+  w.eval("if (typeof __sbRecountT212 !== 'undefined') { clearTimeout(__sbRecountT212); __sbRecountT212 = null; }");
 
   console.log('[7] v192: ORTADA BOS SAYFA (sunucu sayimi 5.500, 3. sayfa bos) → hata, state EZILMEZ');
   w.eval(`sbClient = { from:function(tab){ return { select:function(cols,opts){ const q=__mkQ(tab,opts); if (tab==='lessons') { const r0=q.range; q.range=function(a,b){ if (a===2000) { return { order:function(){return this;}, then:function(ok){ return Promise.resolve({data:[],error:null}).then(ok); } }; } return r0.call(q,a,b); }; } return q; }, upsert:function(){ return Promise.resolve({error:null}); }, delete:function(){ return { in:function(){ return Promise.resolve({error:null}); } }; } }; } };

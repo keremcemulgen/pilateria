@@ -85,10 +85,10 @@ setTimeout(async function(){try{
     t('eski netProfitForMonth DEĞİŞMEDİ (paket ayı: 4.500 + 3.000 − 500 = 7.000)', w.eval("netProfitForMonth('"+CUR+"').rev")===7000, w.eval("netProfitForMonth('"+CUR+"').rev"));
   }
 
-  console.log('[2] Panel ve Raporlar aynı rakamı gösterir (para esası)');
+  console.log('[2] Panel net kâr + Raporlar para esası; Panel TAHSİLATI = Üyeler › Ödenmiş (v212, Kerem 24.10 "Panel paket ayına dönsün")');
   { const w=boot(); await tick(1200); w.eval(FX); const d=w.document;
     w.eval("window.__dashMonthUserSet=true; document.getElementById('dash-month').value='"+CUR+"'; renderDashboard();");
-    t('Panel tahsilatı 10.000, etiket "… Tahsilatı"', d.getElementById('s-revenue').textContent.replace(/\s/g,'')==='10.000' && /Tahsilatı/.test(d.getElementById('s-revenue-label').textContent), d.getElementById('s-revenue').textContent+' | '+d.getElementById('s-revenue-label').textContent);
+    t('Panel tahsilatı = Üyeler › Ödenmiş (v212 tek kaynak; bu fikstürde üye satırı yok → 0), etiket "… Tahsilatı"', d.getElementById('s-revenue').textContent.trim()===w.eval("money(membersMonthStats212('"+CUR+"').paid)") && /Tahsilatı/.test(d.getElementById('s-revenue-label').textContent), d.getElementById('s-revenue').textContent+' | '+d.getElementById('s-revenue-label').textContent);
     t('Panel net kâr (stüdyo) −29.300', /^[-−]29\.300$/.test(d.getElementById('s-netprofit').textContent.trim()), d.getElementById('s-netprofit').textContent);
     w.eval("document.getElementById('rep-month').value='"+CUR+"'; renderReports();");
     const st=[...d.querySelectorAll('#report-content .stat')].map(e=>(e.querySelector('.label')||{}).textContent+'='+(e.querySelector('.value')||{}).textContent);
