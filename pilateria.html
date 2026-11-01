@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.10.24.135">
+<meta name="app-version" content="2026.11.01.136">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -8541,6 +8541,11 @@ function __spillPlannedLessons195(g, S, ctxAy) { return (state.lessons || []).fi
 // T'de ayrilan (Nese) S kadrosunda kalir ama kalan derslerden dusmustur — yeri bostur (Kumis vakasi).
 function __spillOccupancy195(g, S, ctxAy, mid) { const ids = {}; __spillPlannedLessons195(g, S, ctxAy).forEach(function(l){ (l.memberIds || []).forEach(function(x){ if (x && x !== mid) ids[x] = 1; }); }); return Object.keys(ids).length; }
 function __joinSpilledPackage186(g, mid, ctxAy) {
+  // v213 (Kerem 01.11: "Uygulama yine geriye dönük üye ekliyor … Ekim için uyarı veriyor eylüle üye ekliyor borç ödeme çıkarıyor" →
+  // karar "Hiç sorma, asla yazma"): bir aya eklenen üye YALNIZ o ay ve sonrasına yazılır; önceki ayın (sarkan) paketine ne otomatik
+  // ne soruyla yazılır. Gerekirse önceki ayın sayfasından elle eklenir. (Aşağıdaki eski gövde çalışmaz — geçmiş kayıt için duruyor.)
+  try { if (g && mid && ctxAy && __groupSpillMonth186(g, ctxAy)) __trace('SARKAN PAKET (v213): ' + mid + ' yalnız ' + ctxAy + ' ve sonrasına yazıldı — önceki ayın paketine dokunulmadı'); } catch(e) {}
+  return '';
   try {
     if (!g || !mid || !ctxAy) return '';
     const S = __groupSpillMonth186(g, ctxAy); if (!S) return '';
@@ -8684,14 +8689,68 @@ async function __offerSpillJoinUndecided195() {
       escValue: null
     });
     if (ans === 'remove' || ans === true) { if (!n) __undoSnapshot('Onarım: sarkan pakete otomatik katılım'); __spillJoinUndo195(g, h.mid, h.S, T); __spillJoinRecord195(g, h.mid, h.S, 'no'); n++; }
-    else if (ans === 'keep') { __spillJoinRecord195(g, h.mid, h.S, 'yes'); n++; }
+    else if (ans === 'keep') { __spillJoinRecord195(g, h.mid, h.S, 'keep'); n++; } // v213: 'keep' (onaylandı) — 'yes' v213 onarımında yeniden sorulurdu
   }
   if (n) { save(); try { renderMembers(); renderGroups(); renderDashboard(); renderCalendar(); refreshGroupDetailIfOpen(); refreshMemberDetailIfOpen(); } catch(e) {} }
+}
+// v213 ONARIM-3 (Kerem 01.11 "Bulup listele, ben onaylayayım"): "<önceki ay> paketine de girsin = Evet" kararıyla önceki ayın paketine
+// yazılmış ve hâlâ o ayın kadrosunda duran üyeler. Çıkarılırsa: o ayın kadrosu, planlı dersleri, kalan derse göre yazılan ücret/hak ve
+// (başka kaydı yoksa) o ay kaydı geri alınır → o ayın borcu kalkar. Yapılmış dersler ve girilmiş ödemeler SİLİNMEZ.
+function __spillJoinYesScan213() {
+  const hits = [];
+  try {
+    (state.groups || []).forEach(function(g){
+      if (!g || !g.spillJoin195 || typeof g.spillJoin195 !== 'object') return;
+      Object.keys(g.spillJoin195).forEach(function(k){
+        if (g.spillJoin195[k] !== 'yes') return;
+        const i = String(k).lastIndexOf('|'); if (i < 1) return;
+        const mid = String(k).slice(0, i), S = String(k).slice(i + 1);
+        if (!/^\d{4}-\d{2}$/.test(S) || S < __SPILL_SCAN_SINCE195) return;
+        const inS = (activeGroupRosterForMonth(g, S) || []).includes(mid) || ((g.monthlyMembers || {})[S] || []).includes(mid);
+        if (!inS) return; // zaten çıkmış
+        const m = (state.members || []).find(function(x){ return x && x.id === mid; }); if (!m) return;
+        const pmOf = function(x){ return x.packageMonth || String(x.date || '').slice(0, 7); };
+        const jd = String(((g.memberJoinDates || {})[mid]) || '');
+        let T = jd.slice(0, 7);
+        if (!T || T <= S) { const p = S.split('-').map(Number); const dt = new Date(p[0], p[1], 1); T = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); }
+        const done = (state.lessons || []).filter(function(l){ return l && l.groupId === g.id && (l.status === 'completed' || l.status === 'missed') && pmOf(l) === S && (l.memberIds || []).includes(mid); }).length;
+        const planned = (state.lessons || []).filter(function(l){ return l && l.groupId === g.id && l.status === 'planned' && pmOf(l) === S && (l.memberIds || []).includes(mid); }).length;
+        const paid = (state.payments || []).filter(function(p){ return p && p.memberId === mid && (p.groupId || '') === g.id && pmOf(p) === S; }).reduce(function(a, p){ return a + (+p.amount || 0); }, 0);
+        hits.push({ gid: g.id, mid: mid, S: S, T: T, done: done, planned: planned, paid: paid });
+      });
+    });
+  } catch(e) {}
+  return hits;
+}
+async function __offerSpillJoinYes213() {
+  const hits = __spillJoinYesScan213(); if (!hits.length) return 0;
+  let n = 0;
+  for (const h of hits) {
+    const g = state.groups.find(function(x){ return x && x.id === h.gid; }); const m = state.members.find(function(x){ return x && x.id === h.mid; });
+    if (!g || !m) continue;
+    const lblS = pkgMonthLabel(h.S), lblT = pkgMonthLabel(h.T);
+    const ans = await plDialog({
+      msg: '🔧 Önceki aya yazılmış üye\n\n' + m.name + ' — «' + (groupDisplayName(g, h.S) || g.name || 'Grup') + '»\n\n' + lblT + ' için gruba alınırken "' + lblS + ' paketine de girsin" seçilmiş; ' + lblS + ' kadrosuna yazılmış'
+        + (h.planned ? ', ' + lblS + ' paketinin ' + h.planned + ' planlı dersinde görünüyor' : '') + (h.done ? '; bu paketten ' + h.done + ' ders yapılmış görünüyor (yapılmış dersler olduğu gibi kalır)' : '') + '.'
+        + (h.paid ? '\n' + lblS + ' için ' + money(h.paid) + ' ₺ ödeme girilmiş — ödeme SİLİNMEZ.' : '')
+        + '\n\n"' + lblS + ' paketinden çıkar" → ' + lblS + ' kadrosu, planlı dersleri, kalan derse göre yazılan ücret/hak ve ' + lblS + ' borcu kalkar. ' + lblT + ' kaydı aynen kalır. (Geri Al ile geri alınabilir.)',
+      buttons: [{ label: lblS + ' paketinden çıkar', value: 'remove', cls: 'ok' }, { label: 'Kalsın', value: 'keep', cls: 'secondary' }, { label: 'Sonra', value: null, cls: 'secondary' }],
+      escValue: null
+    });
+    if (ans === 'remove') {
+      if (!n) __undoSnapshot('Onarım: önceki aya yazılmış üye');
+      __spillJoinUndo195(g, h.mid, h.S, h.T); __spillJoinRecord195(g, h.mid, h.S, 'no'); n++;
+      try { __trace('ONARIM v213: ' + m.name + ' ' + h.S + ' paketinden çıkarıldı'); } catch(e) {}
+    } else if (ans === 'keep') { __spillJoinRecord195(g, h.mid, h.S, 'keep'); n++; }
+  }
+  if (n) { save(); try { renderMembers(); renderGroups(); renderDashboard(); renderCalendar(); refreshGroupDetailIfOpen(); refreshMemberDetailIfOpen(); } catch(e) {} }
+  return n;
 }
 async function __offerSpillJoinRepair191() {
   if (__spillRepairAsked191) return;
   __spillRepairAsked191 = true;
   try { await __offerSpillJoinUndecided195(); } catch(e) {} // v195
+  try { await __offerSpillJoinYes213(); } catch(e) {} // v213
   const hits = __spillJoinRepairScan191(); if (!hits.length) return;
   const lines = hits.map(function(h){
     const g = state.groups.find(function(x){ return x.id === h.gid; }) || {};
@@ -18722,7 +18781,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.10.24.135';
+const APP_VERSION = '2026.11.01.136';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
