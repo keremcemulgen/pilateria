@@ -1,3 +1,4 @@
+// v213 (Kerem 01.11): [1][2] sözleşmesi DEĞİŞTİ — Ekim'de eklenen yeni üye devam eden Eylül paketine YAZILMAZ ("Hiç sorma, asla yazma").
 // v186 — (Kerem 2026-10-04) "Nese gruptan ayrildi isaretledikten sonra yeni uye ekle deyip Kubis'i eklemeye
 // calistigimda izin vermiyor" + "6 ders girmeme ragmen 8 ders yaziyor / 8 ders disinda ders girilemiyor".
 // KOK 1: grubun Eylul paketi Ekim'e SARKIYOR (27.09 baslamis, kalan 7 ders Ekim tarihli ama paket ayi Eylul). Ekim'de
@@ -69,26 +70,18 @@ setTimeout(async ()=>{ try {
   d.querySelector('#mg-members input.gm-mc[value="N1"]').checked = false;
   d.querySelector('#mg-members input.gm-mc[value="K1"]').checked = true;
   w.eval('saveGroup()'); await tick(300);
-  t('KUBRA devam eden (Eylul) paketin kadrosunda, NESE\'nin yerinde', JSON.stringify(rosterS())===JSON.stringify(['S1','I1','K1','Y1']), JSON.stringify(rosterS()));
-  t('KUBRA Ekim kadrosunda da', rosterT().includes('K1') && !rosterT().includes('N1'), JSON.stringify(rosterT()));
-  t('v188: KUBRA hakki 7 = kalan 7 ders (secilecek bir sey yok) → HEPSINE otomatik; NESE hicbirinde', inLessons('K1').every(Boolean) && inLessons('N1').every(x=>!x), JSON.stringify(inLessons('K1')));
+  // v213 (Kerem 01.11 "Hiç sorma, asla yazma"): Ekim'de eklenen KUBRA devam eden EYLÜL paketine YAZILMAZ (v186/v195 kaldırıldı);
+  // gerekirse Eylül sayfasından elle eklenir. NESE'nin çıkışı ve Eylül payı (v179) aynen.
+  t('v213: KUBRA Eylul kadrosunda DEGIL (Ekim\'den eklendi)', !rosterS().includes('K1') && JSON.stringify(rosterS())===JSON.stringify(['S1','I1','Y1']), JSON.stringify(rosterS()));
+  t('KUBRA Ekim kadrosunda, NESE degil', rosterT().includes('K1') && !rosterT().includes('N1'), JSON.stringify(rosterT()));
+  t('v213: KUBRA Eylul-paketi (Ekim tarihli) derslerinin HICBIRINDE degil; NESE de yok', inLessons('K1').every(x=>!x) && inLessons('N1').every(x=>!x), JSON.stringify(inLessons('K1')));
   t('yapilmis Eylul dersi aynen (NESE orada, KUBRA yok)', J("state.lessons.find(l=>l.id==='s0').memberIds").join()==='S1,I1,N1,Y1');
-  t('KUBRA Eylul paketi: hak 7 (kalan), ucret kalan derse gore', w.eval(`memberEffectiveQuota('K1','${S}','G')`)===7 && eq(w.eval(`memberPriceForGroupMonth('K1','G','${S}')`), 3937.5), w.eval(`memberEffectiveQuota('K1','${S}','G')`) + ' / ' + w.eval(`memberPriceForGroupMonth('K1','G','${S}')`));
+  t('v213: KUBRA icin Eylul kaydi/ucreti yok', w.eval(`isMemberEnrolledInMonth('K1','${S}')`)===false, JSON.stringify(J(`state.members.find(m=>m.id==='K1').monthly`)));
   t('NESE Eylul payi 1 ders = 562,50', eq(J(`partialShareFor('G','N1','${S}')`).price, 562.5) && J(`partialShareFor('G','N1','${S}')`).sessions===1, JSON.stringify(J(`partialShareFor('G','N1','${S}')`)));
-  t('Eylul grup toplami 18.000 (3×4500 + 562,50 + 3.937,50)', eq(w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='G'),'${S}')`), 18000), w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='G'),'${S}')`));
+  t('v213: Eylul grup toplami 14.062,50 (3×4500 + NESE payi 562,50) — KUBRA icin hayali Eylul borcu YOK', eq(w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='G'),'${S}')`), 14062.5), w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='G'),'${S}')`));
   t('NESE sorusu soruldu ("Ekim\'de ne olsun") → Pasif secildi: NESE Ekim\'de kayitli degil, Ekim borcu yok', w.__msgs.some(m=>/NESE/.test(m) && /ne olsun/.test(m)) && w.eval(`isMemberEnrolledInMonth('N1','${T}')`)===false && w.eval(`memberBalanceForMonth('N1','${T}')`)===0, JSON.stringify(w.__msgs.filter(m=>/ne olsun/.test(m))));
   t('NESE Eylul\'de duruyor (ayrilan pay satiri)', w.eval(`isMemberEnrolledInMonth('N1','${S}')`)===true);
   w.eval("while(__modalStack.length){ closeModal(__modalStack[__modalStack.length-1]); }");
-  // v187 hala gecerli: hak kalan derslerden AZSA (5 < 7) otomatik yazilmaz, Kerem secer
-  w.eval(`state.lessons.forEach(l=>{ if(l.groupId==='G'&&l.status==='planned') l.memberIds=l.memberIds.filter(x=>x!=='K1'); }); setMemberMonthly('K1','${S}',{sessionsOverride:5}); syncGroupLessonsToRoster('G','${S}');`);
-  t('v187: hak 5 < kalan 7 → KUBRA otomatik YAZILMADI (Kerem secer)', inLessons('K1').every(x=>!x), JSON.stringify(inLessons('K1')));
-  w.eval(`openLessonModal('o1')`); await tick();
-  t('ders penceresinde KUBRA listede (isaretsiz — secim Kerem\'de)', !!d.querySelector('#modal-lesson input[type=checkbox][value="K1"]') && !d.querySelector('#modal-lesson input[type=checkbox][value="K1"]:checked'), JSON.stringify([...d.querySelectorAll('#modal-lesson input[type=checkbox]')].map(x=>x.value+':'+x.checked)));
-  { const cb = d.querySelector('#modal-lesson input[type=checkbox][value="K1"]'); if (cb) { cb.checked = true; cb.dispatchEvent(new w.Event('change',{bubbles:true})); } }
-  w.eval('saveLesson()'); await tick(150);
-  w.eval(`syncGroupLessonsToRoster('G','${S}')`);
-  t('KUBRA o1 dersine secildi ve senkronda KALDI; diger derslere eklenmedi', J("state.lessons.find(l=>l.id==='o1').memberIds").includes('K1') && J("state.lessons.filter(l=>l.groupId==='G'&&l.status==='planned'&&l.id!=='o1').every(l=>!l.memberIds.includes('K1'))"), JSON.stringify(J("state.lessons.filter(l=>l.groupId==='G').map(l=>l.id+':'+l.memberIds.join(''))")));
-  w.eval("closeModal('modal-lesson')");
 
   console.log('[2] SARKAN PAKET — "Pasife Al / bu aydan cikar" (v179: devam eden paket ve odemesi oldugu gibi) + bos slotu doldur');
   fixture(true);
@@ -100,9 +93,9 @@ setTimeout(async ()=>{ try {
   const kbtn = [...d.querySelectorAll('#modal-fill-slot button')].find(b=>/KUBRA/.test(b.textContent));
   t('slot listesinde KUBRA var', !!kbtn);
   if (kbtn) { kbtn.click(); await tick(250); }
-  t('KUBRA devam eden Eylul paketine de girdi', rosterS().includes('K1') && rosterT().includes('K1') && !rosterT().includes('N1'), JSON.stringify(rosterS()) + ' / ' + JSON.stringify(rosterT()));
-  t('v188: KUBRA (hak 7 = kalan 7) sarkan derslerin HEPSINDE; NESE yok (4 kisi)', inLessons('K1').every(Boolean) && inLessons('N1').every(x=>!x) && J("state.lessons.filter(l=>l.groupId==='G'&&l.status==='planned').every(l=>l.memberIds.length===4)"), JSON.stringify(inLessons('K1')));
-  t('KUBRA Eylul ucreti kalan derse gore (7 ders, 3.937,50)', w.eval(`memberEffectiveQuota('K1','${S}','G')`)===7 && eq(w.eval(`memberPriceForGroupMonth('K1','G','${S}')`), 3937.5));
+  t('v213: KUBRA Ekim kadrosunda, Eylul paketine YAZILMADI', !rosterS().includes('K1') && rosterT().includes('K1') && !rosterT().includes('N1'), JSON.stringify(rosterS()) + ' / ' + JSON.stringify(rosterT()));
+  t('v213: KUBRA Eylul-paketi derslerinde yok; NESE de yok', inLessons('K1').every(x=>!x) && inLessons('N1').every(x=>!x), JSON.stringify(inLessons('K1')));
+  t('v213: KUBRA icin Eylul ucreti/kaydi yok', w.eval(`isMemberEnrolledInMonth('K1','${S}')`)===false);
 
   console.log('[3] SARKMA YOKSA davranis ayni: ekleme yalniz baglam ayindan, onceki paket kadrosu sabit');
   fixture(false);

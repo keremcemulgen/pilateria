@@ -1,3 +1,6 @@
+// v213 (Kerem 01.11 "Uygulama yine geriye dönük üye ekliyor … Ekim için uyarı veriyor eylüle üye ekliyor borç ödeme çıkarıyor" → karar
+// "Hiç sorma, asla yazma"): [1][2][3][6] sözleşmesi DEĞİŞTİ — Ekim'e eklenen üye için sarkan paket sorusu ÇIKMAZ, hangi cevap/kanca
+// olursa olsun Eylül'e YAZILMAZ. [8]: eski akışta "Evet" denmiş kayıt v213 onarımında adıyla sorulur.
 // v195 (Kerem 15.10, canli AYŞE KAYA): "Ekim'e uye ekliyorum, Eylul'e de ekliyor. Bu olmamali; kokten cozulmeli."
 // KOK: v186 "yerine gelen uye devam eden pakete girer" OTOMATIKTI — Ekim'de gruba eklenen HER uye, grubun Eylul paketi
 // Ekim'e sarkiyorsa Eylul kadrosuna da yaziliyordu. Kumis (ayrilanin yerine) ile Ayse (yeni paket) ayni islem, farkli niyet.
@@ -20,6 +23,7 @@ function boot(){ return new JSDOM(html,{runScripts:'dangerously',url:'https://lo
       try { w.__atQuestion = { S: w.eval("JSON.stringify((state.groups.find(g=>g.id==='NG')||{}).monthlyMembers)"), L: w.eval("JSON.stringify(state.lessons.filter(l=>l.groupId==='NG'&&l.status==='planned').map(l=>l.memberIds.slice().sort().join(',')))") }; } catch(e) { w.__atQuestion = { err: String(e) }; }
       return w.__spillAns; }
     if(/listesinden çıkarılsın mı\?/.test(msg)) return w.__repairAns; // v195 onarim sorusu
+    if(/Önceki aya yazılmış üye/.test(msg)) return w.__repairAns; // v213 onarim sorusu
     return w.__ans; };
   w.alert=(m)=>{ w.__msgs.push('ALERT:'+m); }; w.confirm=()=>true; w.prompt=()=>null; w.scrollTo=()=>{};
 }}).window; }
@@ -67,45 +71,22 @@ setTimeout(async function(){try{
   const addViaModal=async (w,gid,mid)=>{ w.eval(`openGroupDetail('${gid}','${T}')`); await tick(); w.eval(`openGroupModal('${gid}')`); await tick();
     const cb=w.document.querySelector(`#mg-members input.gm-mc[value="${mid}"]`); if(!cb) return false; cb.checked=true; w.eval('saveGroup()'); await tick(500); return true; };
 
-  console.log('[1] saveGroup — Ekim sayfasinda AYSE KAYA gruba eklenir, sarkan Eylul paketi icin SORULUR; "Hayir" → Eylul\'e dokunulmaz');
-  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='no';
+  console.log('[1] v213 saveGroup — Ekim sayfasinda AYSE KAYA gruba eklenir; sarkan Eylul paketi icin SORULMAZ, Eylul\'e dokunulmaz');
+  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='yes';
     t('grup penceresinde AYSE secilebildi', await addViaModal(w,'NG','A'));
-    const qs=spillQs(w);
-    t('sarkan paket sorusu TAM 1 kez soruldu', qs.length===1, JSON.stringify(w.__msgs).slice(0,400));
-    t('soru: grup adi, Eylul→Ekim, 3 planli ders, kalan derslerde kadro 3/4, uyenin adi', qs.length===1 && /NURAY GRUBU/.test(qs[0]) && /3 planlı ders/.test(qs[0]) && /Kalan derslerde kadro 3\/4/.test(qs[0]) && /AYSE KAYA bu derslere de girsin mi/.test(qs[0]), qs[0]);
-    t('soru ANINDA Eylul kadrosuna henuz YAZILMAMIS', !!w.__atQuestion && !String(w.__atQuestion.S).includes('"A"'), JSON.stringify(w.__atQuestion));
-    t('soru ANINDA Eylul paketinin planli derslerine YAZILMAMIS', !!w.__atQuestion && !String(w.__atQuestion.L).includes('A'), JSON.stringify(w.__atQuestion));
-    t('Hayir → Eylul ham kadro N1,N2,N3 (A YOK)', rosterS(w,'NG')===JSON.stringify(['N1','N2','N3']), rosterS(w,'NG'));
-    t('Hayir → Eylul aktif kadro N1,N2,N3', activeS(w,'NG')===JSON.stringify(['N1','N2','N3']), activeS(w,'NG'));
-    t('Hayir → Ekim tarihli (gelecek) EYLUL-paketi derslerinde A YOK', plannedS(w,'NG')===JSON.stringify(['N1,N2,N3','N1,N2,N3','N1,N2,N3']), plannedS(w,'NG'));
-    t('Hayir → A.monthly[Eylul] acilmadi', w.eval(`state.members.find(m=>m.id==='A').monthly['${S}']===undefined`), J(w,`state.members.find(m=>m.id==='A').monthly`));
+    t('sarkan paket sorusu SORULMADI (v213)', spillQs(w).length===0, JSON.stringify(spillQs(w)).slice(0,300));
+    t('Eylul ham kadro N1,N2,N3 (A YOK)', rosterS(w,'NG')===JSON.stringify(['N1','N2','N3']), rosterS(w,'NG'));
+    t('Eylul aktif kadro N1,N2,N3', activeS(w,'NG')===JSON.stringify(['N1','N2','N3']), activeS(w,'NG'));
+    t('Ekim tarihli EYLUL-paketi derslerinde A YOK', plannedS(w,'NG')===JSON.stringify(['N1,N2,N3','N1,N2,N3','N1,N2,N3']), plannedS(w,'NG'));
+    t('A.monthly[Eylul] acilmadi', w.eval(`state.members.find(m=>m.id==='A').monthly['${S}']===undefined`), J(w,`state.members.find(m=>m.id==='A').monthly`));
     t('Ekim kadrosunda A VAR', activeT(w,'NG')===JSON.stringify(['A','N1','N2','N3']), activeT(w,'NG'));
     t('A Ekim kayitli (enrolled)', w.eval(`state.members.find(m=>m.id==='A').monthly['${T}'].enrolled===true`));
-    t('karar kaydedildi: spillJoin195["A|Eylul"] = no', decision(w,'NG','A')==='no', decision(w,'NG','A'));
-    t('Eylul icin "kalan derse gore ucret" SORULMADI', !w.__msgs.some(m=>/AYSE KAYA/.test(m) && /paketinde/.test(m) && /kaldı/.test(m)), JSON.stringify(w.__msgs.filter(m=>/paketinde/.test(m))));
+    t('Eylul icin "kalan derse gore ucret" SORULMADI', !w.__msgs.some(m=>/AYSE KAYA/.test(m) && /Eylül paketinde/.test(m)), JSON.stringify(w.__msgs.filter(m=>/paketinde/.test(m))));
   }
 
-  console.log('[2] "Evet" → Eylul paketine de girer (kadro, kayit, sarkan dersler, katilis tarihi, kalan derse gore ucret sorusu)');
-  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='yes';
-    await addViaModal(w,'NG','A');
-    t('soru soruldu', spillQs(w).length===1);
-    t('Evet → Eylul ham kadroda A', rosterS(w,'NG').includes('"A"'), rosterS(w,'NG'));
-    t('Evet → Eylul aktif kadro A,N1,N2,N3', activeS(w,'NG')===JSON.stringify(['A','N1','N2','N3']), activeS(w,'NG'));
-    t('Evet → Ekim tarihli (gelecek) Eylul-paketi derslerine A yazildi', plannedS(w,'NG')===JSON.stringify(['A,N1,N2,N3','A,N1,N2,N3','A,N1,N2,N3']), plannedS(w,'NG'));
-    t('Evet → A.monthly[Eylul].enrolled = true', w.eval(`!!(state.members.find(m=>m.id==='A').monthly['${S}']||{}).enrolled`));
-    t('Evet → katilis tarihi bugun (onceki dersler tiksiz)', w.eval(`state.groups.find(x=>x.id==='NG').memberJoinDates.A`)===TODAY, w.eval(`state.groups.find(x=>x.id==='NG').memberJoinDates.A`));
-    t('Evet → kalan derse gore ucret/hak onerisi soruldu (v171)', w.__msgs.some(m=>/paketinde 5 ders yapıldı, 3 ders kaldı/.test(m) && /AYSE KAYA/.test(m)), JSON.stringify(w.__msgs.filter(m=>/kaldı/.test(m))).slice(0,300));
-    t('karar kaydedildi: yes', decision(w,'NG','A')==='yes', decision(w,'NG','A'));
-    t('Ekim kadrosunda da A', activeT(w,'NG').includes('"A"'));
-    t('Geri Al yedegi alindi', w.eval("(__undoStack||[]).some(s=>/paketine katıl/.test(s.label))"), J(w,'(__undoStack||[]).map(s=>s.label)'));
-  }
-
-  console.log('[3] Eski kanca (true) = Evet; Esc/null = Hayir');
-  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns=true; await addViaModal(w,'NG','A');
-    t('true → Eylul kadrosunda A', rosterS(w,'NG').includes('"A"') && decision(w,'NG','A')==='yes'); }
-  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns=null; await addViaModal(w,'NG','A');
-    t('Esc → Eylul kadrosunda A YOK, karar no', !rosterS(w,'NG').includes('"A"') && decision(w,'NG','A')==='no', rosterS(w,'NG')+' '+decision(w,'NG','A'));
-    t('Esc → Ekim kadrosunda A VAR', activeT(w,'NG').includes('"A"')); }
+  console.log('[2] v213 "Evet" kancasi bile Eylul\'e yazdiramaz; [3] eski kanca (true) / Esc de ayni');
+  for (const ans of ['yes', true, null]) { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns=ans; await addViaModal(w,'NG','A');
+    t('cevap '+JSON.stringify(ans)+' → soru yok, Eylul kadrosu/dersleri aynen, Ekim\'de A', spillQs(w).length===0 && rosterS(w,'NG')===JSON.stringify(['N1','N2','N3']) && plannedS(w,'NG')===JSON.stringify(['N1,N2,N3','N1,N2,N3','N1,N2,N3']) && activeT(w,'NG').includes('"A"'), rosterS(w,'NG')+' '+plannedS(w,'NG')); }
 
   console.log('[4] Kadro DOLU (4/4) → SORULMAZ, yalniz Ekim');
   { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='yes';
@@ -134,20 +115,14 @@ setTimeout(async function(){try{
     t('(b) OG Eylul kadrosunda BURCU kaldi', rosterS(w,'OG').includes('"B2"'), rosterS(w,'OG'));
   }
 
-  console.log('[6] assignMemberToSlot (grup detay slotu) — ayni ilke');
-  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='no';
-    w.eval(`openGroupDetail('NG','${T}')`); await tick(); w.eval(`assignMemberToSlot('A','NG',3)`); await tick(500);
-    t('soru soruldu (1 kez)', spillQs(w).length===1, JSON.stringify(w.__msgs).slice(0,300));
-    t('soru aninda Eylul\'e yazilmamis', !!w.__atQuestion && !String(w.__atQuestion.S).includes('"A"') && !String(w.__atQuestion.L).includes('A'), JSON.stringify(w.__atQuestion));
-    t('Hayir → Eylul kadrosu aynen', rosterS(w,'NG')===JSON.stringify(['N1','N2','N3']), rosterS(w,'NG'));
-    t('Hayir → Eylul-paketi dersleri aynen', plannedS(w,'NG')===JSON.stringify(['N1,N2,N3','N1,N2,N3','N1,N2,N3']), plannedS(w,'NG'));
-    t('Ekim kadrosunda A (3. slot)', w.eval(`activeGroupRosterForMonth(state.groups.find(x=>x.id==='NG'),'${T}')[3]`)==='A', activeT(w,'NG'));
-    t('katilis tarihi bugun', w.eval(`state.groups.find(x=>x.id==='NG').memberJoinDates.A`)===TODAY);
-    t('karar no', decision(w,'NG','A')==='no');
-  }
+  console.log('[6] v213 assignMemberToSlot (grup detay slotu) — ayni ilke: soru yok, Eylul aynen');
   { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='yes';
     w.eval(`openGroupDetail('NG','${T}')`); await tick(); w.eval(`assignMemberToSlot('A','NG',3)`); await tick(500);
-    t('slot + Evet → Eylul kadrosunda A, dersler yazildi', rosterS(w,'NG').includes('"A"') && plannedS(w,'NG')===JSON.stringify(['A,N1,N2,N3','A,N1,N2,N3','A,N1,N2,N3']), rosterS(w,'NG')+' '+plannedS(w,'NG'));
+    t('soru SORULMADI', spillQs(w).length===0, JSON.stringify(w.__msgs).slice(0,300));
+    t('Eylul kadrosu aynen', rosterS(w,'NG')===JSON.stringify(['N1','N2','N3']), rosterS(w,'NG'));
+    t('Eylul-paketi dersleri aynen', plannedS(w,'NG')===JSON.stringify(['N1,N2,N3','N1,N2,N3','N1,N2,N3']), plannedS(w,'NG'));
+    t('Ekim kadrosunda A (3. slot)', w.eval(`activeGroupRosterForMonth(state.groups.find(x=>x.id==='NG'),'${T}')[3]`)==='A', activeT(w,'NG'));
+    t('katilis tarihi bugun', w.eval(`state.groups.find(x=>x.id==='NG').memberJoinDates.A`)===TODAY);
   }
 
   console.log('[7] ONARIM: v186\'nin OTOMATIK yazdigi uyeler acilista tek tek sorulur; ders yapmis (Kumis) / odemis (Pinar) sorulmaz');
@@ -194,7 +169,8 @@ setTimeout(async function(){try{
   { const w=boot(); await tick(1200); w.eval(FX); w.eval(BOZ); w.__repairAns='keep';
     if (typeof w.__offerSpillJoinRepair191==='function') await w.__offerSpillJoinRepair191(); await tick(200);
     t('Kalsin → hicbir sey degismedi', rosterS(w,'NG')===JSON.stringify(['A','E','K','N1','N2','N3','P','R']) && plannedS(w,'NG')===JSON.stringify(['A,K,N1,N2,N3','A,K,N1,N2,N3','A,K,N1,N2,N3']) && w.eval(`state.members.find(m=>m.id==='A').monthly['${S}'].sessionsOverride`)===3 && J(w,`state.members.find(m=>m.id==='R').archivePeriods`)===JSON.stringify([{from:'2026-07',to:S,reason:''}]), rosterS(w,'NG'));
-    t('Kalsin → karar yes kaydedildi (A,R,E), tarama 0', decision(w,'NG','A')==='yes' && decision(w,'NG','R')==='yes' && decision(w,'NG','E')==='yes' && scan(w).length===0);
+    t('Kalsin → karar keep kaydedildi (A,R,E; v213: "yes" yalniz eski soruda Evet demek), tarama 0', decision(w,'NG','A')==='keep' && decision(w,'NG','R')==='keep' && decision(w,'NG','E')==='keep' && scan(w).length===0, [decision(w,'NG','A'),decision(w,'NG','R'),decision(w,'NG','E')].join(','));
+    t('Kalsin → v213 onarimi ayni kisileri TEKRAR sormadi', !w.__msgs.some(m=>/Önceki aya yazılmış üye/.test(m)));
   }
   { const w=boot(); await tick(1200); w.eval(FX); w.eval(BOZ); w.__repairAns=null;
     if (typeof w.__offerSpillJoinRepair191==='function') await w.__offerSpillJoinRepair191(); await tick(200);
@@ -205,11 +181,19 @@ setTimeout(async function(){try{
     w.eval(`(function(){ const g=state.groups.find(x=>x.id==='OG'); g.monthlyMembers['2026-06']=['B2','O1','O2','K']; g.memberJoinDates.K='2026-07-10'; })()`);
     t('v186 oncesi aylar (Haziran) taranmaz — eski veri sorulmaz', scan(w).length===0, JSON.stringify(scan(w)));
   }
-  console.log('[8] Yeni akista "Evet" denen uye onarimda SORULMAZ (karar kayitli)');
-  { const w=boot(); await tick(1200); w.eval(FX); w.__spillAns='yes'; await addViaModal(w,'NG','A');
-    t('Evet sonrasi tarama 0', scan(w).length===0, JSON.stringify(scan(w)));
+  console.log('[8] v213 ONARIM-3: eski akista "Evet" denip Eylul\'e yazilmis uye acilista ADIYLA sorulur → cikar');
+  { const w=boot(); await tick(1200); w.eval(FX);
+    w.eval(`(function(){ const g=state.groups.find(x=>x.id==='NG'); g.monthlyMembers['${S}']=['N1','N2','N3','A']; g.memberJoinDates=g.memberJoinDates||{}; g.memberJoinDates.A='${TODAY}';
+      g.spillJoin195={'A|${S}':'yes'}; state.members.find(m=>m.id==='A').monthly['${S}']={enrolled:true,totalPrice:1687.5,__prorata:true,sessionsOverride:3};
+      state.lessons.filter(l=>l.groupId==='NG'&&l.status==='planned').forEach(l=>l.memberIds=['N1','N2','N3','A']); })()`);
     w.__msgs=[]; w.__repairAns='remove'; if (typeof w.__offerSpillJoinRepair191==='function') await w.__offerSpillJoinRepair191(); await tick(200);
-    t('acilis onarimi soru sormadi, A Eylul kadrosunda kaldi', !w.__msgs.some(m=>/çıkarılsın mı/.test(m)) && rosterS(w,'NG').includes('"A"'), JSON.stringify(w.__msgs).slice(0,200));
+    const q=w.__msgs.find(m=>/Önceki aya yazılmış üye/.test(m))||'';
+    const lblS=w.eval(`pkgMonthLabel('${S}')`);
+    t('onarim sorusu: AYSE KAYA, NURAY GRUBU, onceki ayin paketi', /AYSE KAYA/.test(q) && /NURAY GRUBU/.test(q) && q.indexOf(lblS+' paketine de girsin')!==-1, q.slice(0,300));
+    t('cikar → Eylul kadrosu N1,N2,N3', rosterS(w,'NG')===JSON.stringify(['N1','N2','N3']), rosterS(w,'NG'));
+    t('cikar → Eylul-paketi planli derslerinden A cikti', plannedS(w,'NG')===JSON.stringify(['N1,N2,N3','N1,N2,N3','N1,N2,N3']), plannedS(w,'NG'));
+    t('cikar → A Eylul kaydi kalkti (orantili ucret/hak dahil)', w.eval(`state.members.find(m=>m.id==='A').monthly['${S}']===undefined`), J(w,`state.members.find(m=>m.id==='A').monthly`));
+    t('karar no', decision(w,'NG','A')==='no');
   }
 
   console.log('SONUC: '+pass+' gecti, '+fail+' kaldi');

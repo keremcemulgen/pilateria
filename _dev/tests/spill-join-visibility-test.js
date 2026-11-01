@@ -67,6 +67,15 @@ setTimeout(async () => { try {
     if (how === 'slot') await newMemberViaSlot(w); else await newMemberViaGroupModal(w);
     const k = kumId(w);
     t('KUMIS olusturuldu', !!k);
+    if (ctx === T) { // v213 (Kerem 01.11 "asla yazma"): Ekim sayfasindan eklenen uye Eylul (sarkan) paketine YAZILMAZ — yalniz Ekim ve sonrasi
+      t('v213: KUMIS Eylul paketinde DEGIL (Ekim\'den eklendi)', w.eval(`isMemberEnrolledInMonth('${k}','${S}')`) === false, J(w, `state.members.find(m=>m.id==='${k}').monthly`));
+      t('v213: Eylul aktif kadro aynen SILA+IKRA+YASEMIN', J(w, `activeGroupRosterForMonth(state.groups[0],'${S}').slice().sort()`) === JSON.stringify(['I1','S1','Y1'].sort()), J(w, `activeGroupRosterForMonth(state.groups[0],'${S}')`));
+      t('v213: KUMIS Ekim kadrosunda', w.eval(`activeGroupRosterForMonth(state.groups[0],'${T}').includes('${k}')`) === true, J(w, `activeGroupRosterForMonth(state.groups[0],'${T}')`));
+      t('v213: KUMIS Eylul-paketi planli derslerinin HICBIRINDE degil', !w.eval(`state.lessons.some(l=>l.groupId==='G'&&l.status==='planned'&&l.packageMonth==='${S}'&&l.memberIds.includes('${k}'))`));
+      t('Nese "ayrildi · 2 ders" payi KORUNDU', partialN(w), J(w, 'state.groups[0].monthlyPartials'));
+      t('yapilmis dersler (Nese ile) DOKUNULMADI', J(w, `state.lessons.filter(l=>l.status==='completed').map(l=>l.memberIds.join(','))`) === JSON.stringify(['I1,N1,S1,Y1','I1,N1,S1,Y1']));
+      continue;
+    }
     t('KUMIS Eylul paketinde AKTIF (isMemberEnrolledInMonth)', w.eval(`isMemberEnrolledInMonth('${k}','${S}')`) === true, J(w, `state.members.find(m=>m.id==='${k}')`));
     t('Eylul aktif kadro: SILA+IKRA+YASEMIN+KUMIS', J(w, `activeGroupRosterForMonth(state.groups[0],'${S}').slice().sort()`) === JSON.stringify(['I1','S1','Y1',k].sort()), J(w, `activeGroupRosterForMonth(state.groups[0],'${S}')`));
     t('Nese "ayrildi · 2 ders" payi KORUNDU', partialN(w), J(w, 'state.groups[0].monthlyPartials'));
