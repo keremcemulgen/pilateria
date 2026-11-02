@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.11.01.136-onizleme">
+<meta name="app-version" content="2026.11.02.137-onizleme">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -4616,6 +4616,17 @@ function renderNextWeekMissing(){
   el.innerHTML = html;
   window.__nwmText = txt;
 }
+// v214: paketin kadrosundaki HERKES şu an pasif ve grubun bu ayki aktif kadrosu boş → grup fiilen pasif (pasif bireysel üyeyle aynı
+// kural, v153) — Panel "1 Kalan / Biten" listesinden düşer. Sarkan (bu ay süren) paketlere uygulanmaz (çağıran kontrol eder).
+function __grpAllPassive214(g, pkgAy, nowAy) {
+  try {
+    if (!g || !pkgAy || !nowAy) return false;
+    if ((activeGroupRosterForMonth(g, nowAy) || []).filter(Boolean).length) return false;
+    const ros = (activeGroupRosterForMonth(g, pkgAy) || []).filter(Boolean);
+    if (!ros.length) return false;
+    return ros.every(function(mid){ const mm = (state.members || []).find(function(x){ return x && x.id === mid; }); return !!mm && isMemberInactiveInMonth(mm, nowAy); });
+  } catch(e) { return false; }
+}
 function renderDashboard() {
   try { if (typeof finAutoPayDues209 === 'function' && finAutoPayDues209()) save(); } catch(e){} // v209
   try { renderNextWeekMissing(); } catch(e){}
@@ -4707,6 +4718,7 @@ function renderDashboard() {
         if (!__outG190) __months190('group', g.id).forEach(function(pm){
           if (pm >= ay || !__sticky190('group', g, pm)) return;
           if (isGroupInactiveInMonth(g, pm)) return;
+          if (!__liveG190 && __pkgEndMonth173('group', g.id, pm) < __nowAy && __grpAllPassive214(g, pm, __nowAy)) return; // v214: herkes pasif → grup fiilen pasif
           if (!(activeGroupRosterForMonth(g, pm) || []).length) return;
           const f2 = sessionsFinishState('group', g.id, pm); const s2 = __st(f2); if (!s2) return;
           rows.push({ tip:'group', id:g.id, ad: groupDisplayName(g, pm), ay: pm, st: s2, fin: f2, seen: false });
@@ -4720,6 +4732,7 @@ function renderDashboard() {
       const __live173 = (ay < __nowAy) && (__pkgEndMonth173('group', g.id, ay) >= __nowAy);
       if (!__live173 && isGroupInactiveInMonth(g, __nowAy)) return; // v153: pasife alinan grup listeden duser
       if (!__live173 && __groupRemovedForward(g, __nowAy)) return; // v159: sonraki aydan silinen grup takip edilmez
+      if (!__live173 && __grpAllPassive214(g, ay, __nowAy)) return; // v214: kadrodaki herkes pasif (bu ay aktif kadro yok) → grup fiilen pasif, bireysel pasif üye gibi düşer
       const __stk190 = __sticky190('group', g, ay);
       const ros = (typeof activeGroupRosterForMonth === 'function') ? activeGroupRosterForMonth(g, ay) : (g.memberIds||[]);
       if (!ros.length) return; // yetim/bos kadrolu grup listeyi kirletmesin (v143 vakasi)
@@ -10408,6 +10421,41 @@ function renderLessonMembersCheckboxes(preselect) {
   }).join('') : emptyMsg);
   setHTMLKeepFocus(mEl, __mlKeepHTML);
 }
+// v214 (B): birimin targetAy'dan önceki 2 ayında ÖDENMİŞ ama hiç (iptal dışı) dersi olmayan paket (en eski) — hedef paketin dersi yoksa
+function __unusedPaidPkg214(ownerType, ownerId, targetAy) {
+  try {
+    if (!ownerId || !/^\d{4}-\d{2}$/.test(String(targetAy || ''))) return '';
+    const pmOf = function(x){ return x.packageMonth || String(x.date || '').slice(0, 7); };
+    const mine = function(l){ return l && l.status !== 'cancelled' && (ownerType === 'group' ? l.groupId === ownerId : (!l.groupId && (l.memberIds || []).includes(ownerId))); };
+    if ((state.lessons || []).some(function(l){ return mine(l) && pmOf(l) === targetAy; })) return '';
+    const base = parseISO(targetAy + '-01'); const months = [];
+    for (let i = 2; i >= 1; i--) { const d = new Date(base.getFullYear(), base.getMonth() - i, 1); months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+    for (const S of months) {
+      const paid = (state.payments || []).some(function(p){ return p && !p.refund && (+p.amount || 0) > 0 && pmOf(p) === S && (ownerType === 'group' ? p.groupId === ownerId : (p.memberId === ownerId && !p.groupId)); });
+      if (!paid) continue;
+      if ((state.lessons || []).some(function(l){ return mine(l) && pmOf(l) === S; })) continue;
+      return S;
+    }
+  } catch(e) {}
+  return '';
+}
+var __unusedPkgDecided214 = {}; // oturum: 'tip:id|S' → 'no' (bir daha sorma)
+var __unusedPkgRoute214 = {};   // oturum: 'tip:id' → S (Evet denen paket; hak dolana kadar yeni dersler oraya)
+async function __askUnusedPkg214(ownerType, ownerId, T, S) {
+  const g = ownerType === 'group' ? (state.groups || []).find(function(x){ return x && x.id === ownerId; }) : null;
+  const name = ownerType === 'group' ? ((g && (groupDisplayName(g, S) || g.name)) || 'Grup') : memberName(ownerId);
+  const lblS = pkgMonthLabel(S), lblT = pkgMonthLabel(T);
+  const ans = await plDialog({
+    msg: '📦 ' + name + ': ' + lblS + ' paketi ÖDENMİŞ ama hiç dersi yok.\n\nYazacağın dersler ' + lblS + ' paketine mi yazılsın?\n(' + lblT + ' paketine yazılırsa ' + lblS + ' ödemesi derssiz kalır, dersler ' + lblT + ' paketinde görünür.)',
+    buttons: [{ label: '📦 ' + lblS + ' paketine yaz', value: 'S', cls: 'ok' }, { label: lblT + ' paketine yaz', value: 'T', cls: 'secondary' }],
+    escValue: null
+  });
+  if (ans === null || ans === undefined) return null; // vazgeç
+  const k = ownerType + ':' + ownerId;
+  if (ans === 'S') { __unusedPkgRoute214[k] = S; return S; }
+  __unusedPkgDecided214[k + '|' + S] = 'no';
+  return T;
+}
 function saveLesson() {
   clearModalErrors('modal-lesson');
   const id = document.getElementById('ml-id').value;
@@ -10468,6 +10516,40 @@ function saveLesson() {
   else if (groupId) packageMonth = (window.__lessonCtxMonth || String(date).slice(0,7)); // v107: dersin ayi (otomatik sarkan YOK)
   else if (checked.length === 1) packageMonth = String(date).slice(0,7); // v107: dersin ayi
   else packageMonth = String(date).slice(0,7);
+  // v214 (B): YENİ ders, paket ayı dersin ayında bırakılmış → birimin ödenmiş ama dersi olmayan önceki paketi varsa SOR (Kerem: "bana sorsun")
+  if (!id && !window.__unusedPkgSaving214 && packageMonth < String(date).slice(0, 7)) {
+    // Seçici bir önceki dersten "<önceki ay>" seçili kaldıysa ve o paket bu oturumda bu soruyla seçildiyse: hakkı dolunca dersin ayına döner
+    const __ow0 = groupId ? 'group:' + groupId : (checked.length === 1 ? 'member:' + checked[0] : '');
+    if (__ow0 && __unusedPkgRoute214[__ow0] === packageMonth && sessionsRemainingFor(__ow0.split(':')[0], __ow0.slice(__ow0.indexOf(':') + 1), packageMonth) <= 0) {
+      delete __unusedPkgRoute214[__ow0];
+      packageMonth = String(date).slice(0, 7);
+      try { const __sel0 = document.getElementById('ml-pkg-month'); if (__sel0 && [...__sel0.options].some(function(o){ return o.value === packageMonth; })) __sel0.value = packageMonth; } catch(e) {}
+    }
+  }
+  if (!id && !window.__unusedPkgSaving214 && packageMonth === String(date).slice(0, 7)) {
+    const __own214 = groupId ? ['group', groupId] : (checked.length === 1 ? ['member', checked[0]] : null);
+    if (__own214) {
+      const __k214 = __own214[0] + ':' + __own214[1];
+      const __r214 = __unusedPkgRoute214[__k214];
+      if (__r214 && __r214 < packageMonth && (sessionsRemainingFor(__own214[0], __own214[1], __r214) > 0)) {
+        packageMonth = __r214; // oturumda "Eylül paketine yaz" denmişti — hak dolana kadar
+        try { const __sel = document.getElementById('ml-pkg-month'); if (__sel) { if (![...__sel.options].some(function(o){ return o.value === __r214; })) { const o = document.createElement('option'); o.value = __r214; o.textContent = __r214; __sel.appendChild(o); } __sel.value = __r214; } } catch(e) {}
+      } else {
+        const __S214 = __unusedPaidPkg214(__own214[0], __own214[1], packageMonth);
+        if (__S214 && __unusedPkgDecided214[__k214 + '|' + __S214] !== 'no') {
+          (async function(){
+            const useAy = await __askUnusedPkg214(__own214[0], __own214[1], packageMonth, __S214);
+            if (!useAy) return;
+            const __sel = document.getElementById('ml-pkg-month');
+            if (__sel) { if (![...__sel.options].some(function(o){ return o.value === useAy; })) { const o = document.createElement('option'); o.value = useAy; o.textContent = useAy; __sel.appendChild(o); } __sel.value = useAy; }
+            window.__unusedPkgSaving214 = true;
+            try { saveLesson(); } finally { window.__unusedPkgSaving214 = false; }
+          })();
+          return;
+        }
+      }
+    }
+  }
   // v154 (Kerem): HAK TAVANI — dolu birime yeni ders girilemez; iptal kaydini duzenlemek hak yemez.
   {
     const __ex154 = id ? state.lessons.find(function(x){ return x.id === id; }) : null;
@@ -12172,6 +12254,10 @@ function openBatchDates(groupId, monthISO) {
 }
 function openBatchDatesGroup(groupId, monthISO) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
+  if (!window.__unusedPkgBatch214) { // v214 (B): ödenmiş ama dersi olmayan önceki paket → SOR
+    const __T = monthISO || currentMonth(); const __S = __unusedPaidPkg214('group', groupId, __T);
+    if (__S && __unusedPkgDecided214['group:' + groupId + '|' + __S] !== 'no') { (async function(){ const ay = await __askUnusedPkg214('group', groupId, __T, __S); if (!ay) return; window.__unusedPkgBatch214 = true; try { openBatchDatesGroup(groupId, ay); } finally { window.__unusedPkgBatch214 = false; } })(); return; }
+  }
   __batchDatesTarget = { type: 'group', id: groupId, packageMonth: monthISO || (g.packageStartDate ? g.packageStartDate.slice(0,7) : currentMonth()) };
   __bdCalMonth = __batchDatesTarget.packageMonth; // v160: mini takvim hedef ayda acilir
   document.getElementById('bd-title').textContent = `📅 ${groupDisplayName(g, monthISO || currentMonth())} — Toplu Ders Tarihleri`;
@@ -12190,6 +12276,10 @@ function openBatchDatesGroup(groupId, monthISO) {
 // v11: Bireysel üye için toplu ders modal'ı
 function openBatchDatesMember(memberId, monthISO) {
   const m = state.members.find(x => x.id === memberId); if (!m) return;
+  if (!window.__unusedPkgBatch214) { // v214 (B): ödenmiş ama dersi olmayan önceki paket → SOR
+    const __T = monthISO || currentMonth(); const __S = __unusedPaidPkg214('member', memberId, __T);
+    if (__S && __unusedPkgDecided214['member:' + memberId + '|' + __S] !== 'no') { (async function(){ const ay = await __askUnusedPkg214('member', memberId, __T, __S); if (!ay) return; window.__unusedPkgBatch214 = true; try { openBatchDatesMember(memberId, ay); } finally { window.__unusedPkgBatch214 = false; } })(); return; }
+  }
   const month = monthISO || currentMonth();
   __batchDatesTarget = { type: 'member', id: memberId, packageMonth: month };
   __bdCalMonth = month; // v160: mini takvim hedef ayda acilir
@@ -18793,7 +18883,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.11.01.136-onizleme';
+const APP_VERSION = '2026.11.02.137-onizleme';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
