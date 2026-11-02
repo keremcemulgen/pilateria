@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="2026.11.02.137">
+<meta name="app-version" content="2026.11.02.138">
 <script>/* v131 O-4: cerceve kirici — frame-ancestors meta CSP'de gecersizdir, clickjacking'e karsi */ if (window.top !== window.self) { try { window.top.location.replace(window.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }</script>
 <!-- v21 GÜVENLİK: İçerik Güvenlik Politikası — dış script yükleme + veri sızdırma engellenir.
      v121: Bağlantı YALNIZ kendi origin + Supabase'e. JSONBin (ikinci bulut) tamamen kapatıldı —
@@ -6174,7 +6174,7 @@ function __removeMemberFromMonthCore(memberId, monthISO) {
   state.lessons.forEach(l => {
     if (l.status !== 'planned') return; // v42: hem GRUP hem BIREYSEL planli dersler temizlenir
     const __pm = l.packageMonth || (l.date||'').slice(0,7);
-    if ((__pm >= monthISO || String(l.date || '') >= monthISO + '-01') && (l.memberIds||[]).includes(memberId)) { // v179 (U4): onceki paketin bu aya sarkan planli dersleri de
+    if (__pm >= monthISO && (l.memberIds||[]).includes(memberId)) { // v215 (Kerem "Hiçbir şeye dokunma"): önceki ayın paketinin bu aya sarkan planlı dersleri AYNEN (eski v179 U4 kaldırıldı)
       l.memberIds = (l.memberIds||[]).filter(x => x !== memberId);
     }
   });
@@ -6298,10 +6298,20 @@ function resolveGroupMembersForMonth(g, monthISO) {
 // v34 (Kerem kurali): HER ISLEM, YAPILDIGI SAYFANIN AYINA aittir.
 function __isGroupDetailOpen() {
   const bg = document.getElementById('modal-group-detail');
-  return !!(bg && bg.style.display && bg.style.display !== 'none');
+  return !!(bg && bg.classList.contains('open')); // v215: pencereler classList 'open' ile açılır — style.display hep boştu (grup ayı yok sayılıyordu)
 }
 function __groupOpsCtxMonth() {
-  if (__isGroupDetailOpen() && typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) return currentGroupDetailMonth;
+  // v215: EN ÜSTTEKİ açık bağlam penceresi kazanır — üye detayı (kendi ayı) ya da grup detayı (kendi ayı); ikisi de yoksa Üyeler sayfasının ayı
+  try {
+    for (let __i = __modalStack.length - 1; __i >= 0; __i--) {
+      const __id = __modalStack[__i]; const __el = document.getElementById(__id);
+      if (!__el || !__el.classList.contains('open')) continue;
+      if (__id === 'modal-member-detail') { if (typeof currentMemberDetailMonth !== 'undefined' && currentMemberDetailMonth) return currentMemberDetailMonth; break; }
+      if (__id === 'modal-group-detail') { if (typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) return currentGroupDetailMonth; break; }
+    }
+  } catch(e) {}
+  // v215: pencere yoksa AKTİF SAYFANIN ayı — Gruplar sayfası kendi ay seçicisiyle (eskiden hep Üyeler sayfasının ayı)
+  try { const __pg = document.querySelector('.page.active'); if (__pg && __pg.id === 'page-groups') { const __v = (document.getElementById('group-month') || {}).value || ''; if (/^\d{4}-\d{2}$/.test(__v)) return __v; } } catch(e) {}
   return ((document.getElementById('member-month')||{}).value || '') || currentMonth();
 }
 // Kadro degisikligini BAGLAM AYINDAN itibaren uygular:
@@ -6338,7 +6348,8 @@ function snapshotGroupMembers(g) {
 function archiveGroupMonthly(id) {
   const g = state.groups.find(x => x.id === id);
   if (!g) return;
-  const cm = currentMonth();
+  let cm = currentMonth();
+  { const __ctx215 = (typeof window.__groupEditCtxMonth === 'string' && window.__groupEditCtxMonth) || __groupOpsCtxMonth(); if (/^\d{4}-\d{2}$/.test(String(__ctx215 || '')) && __ctx215 > cm) cm = __ctx215; } // v215: ileri ayın sayfasından → o aydan itibaren
   // v176 (F24): bu ayda YAPILMIS ders ya da odeme varsa grup bu ayin muhasebesinden dusurulmez — GELECEK aydan pasif
   // (aksi halde odenmis/bitmis grup bu ay silinip uyeleri "borclu bireysel" gorunuyordu). Iptal: yalniz pasif
   // aydan itibaren PAKETLERIN planli dersleri — onceki paketin sarkan planli dersleri (odenmis hak) korunur.
@@ -6348,7 +6359,7 @@ function archiveGroupMonthly(id) {
   if (!confirm(`"${groupDisplayName(g, cm)}" grubu ${eff} ayından itibaren PASİFE alınacak.${eff !== cm ? `\n(Bu ay yapılmış ders/ödeme olduğu için ${cm} ayı olduğu gibi kalır.)` : ''}\n\n• Geçmiş aylar (dersler, ödemeler, üye listesi) AYNEN kalır.\n• ${eff} ve sonrasında listede görünmez; ${eff} ve sonrası paketlerin planlı dersleri iptal edilir (önceki paketin sarkan dersleri korunur).\n• İstediğinde yeniden aktive edebilirsin (geçmiş pasiflik kaydı sabit kalır).\n\nDevam?`)) return;
   __undoSnapshot('Grup pasife al: ' + groupDisplayName(g, cm)); // v165
   g.archived = true;
-  g.archivedAt = (eff === cm) ? todayISO() : (eff + '-01');
+  g.archivedAt = (eff === currentMonth()) ? todayISO() : (eff + '-01'); // v215: ileri ay → o ayın 1'i
   let cancelled = 0;
   state.lessons.forEach(l => {
     if (l.groupId === id && l.status === 'planned' && (l.packageMonth || String(l.date||'').slice(0,7)) >= eff) { l.status = 'cancelled'; cancelled++; }
@@ -8841,7 +8852,7 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
         return '«' + nm + '»' + (last ? ' (son paket: ' + pkgMonthLabel(last) + ')' : '');
       })();
       const __wasAuto = __isAutoGroupName(g.name, g.memberIds); // v28
-      const __effAy179 = __spillPackageMonth179(g, memberId, __ay) || __ay; // v179 (U4): sarkan paket → ayrilma paketin ayindan
+      const __effAy179 = __ay; // v215 (Kerem "Hiçbir şeye dokunma"): ayrılma YALNIZ işlem ayından — önceki ayın (sarkan) paketi, kadrosu, ödemesi aynen
       applyRosterChange(g, __effAy179, mids => {
         const out = mids.map(x => x === memberId ? '' : x);
         while (out.length > 0 && out[out.length-1] === '') out.pop();
@@ -8849,25 +8860,25 @@ function removeMemberFromOtherContexts(memberId, keepGroupId, ctxAy) {
       });
       __autoNameAfterRosterChange(g, __effAy179); // v41: ad AY BAZLI guncellenir (elle ay-adi korunur)
       syncGroupLessonsToRoster(g.id, __effAy179);
-      __dropFromFutureLessons179(g, memberId, __ay); // v179: onceki paketlerin bu aya sarkan planli dersleri
+      // v215: önceki paketlerin bu aya sarkan planlı derslerine DOKUNULMAZ (eski v179 __dropFromFutureLessons179 çağrısı kaldırıldı)
       __transferShareAndPayments177(g, memberId, keepGroupId, __effAy179, __ay); // v177 (P2): pay = 1-ders x alinan; fazla odeme yeni kayda (v179: baglam ayina DEVIR)
       __queuePartialOffer(g, memberId, __effAy179); // v171: (pay yazilmadiysa — fiyatsiz uye) payi sorulur
       removed.groups.push(__lbl162);
     }
   });
-  // İleri tarihli planned bireysel derslerden de çıkar
+  // İleri tarihli planned bireysel derslerden de çıkar — v215: YALNIZ işlem ayının ve sonrasının paketleri (önceki ayın paketi aynen)
   const today = todayISO();
+  const __emptied215 = new Set();
   state.lessons.forEach(l => {
-    if (!l.groupId && l.status === 'planned' && l.date >= today && l.memberIds.includes(memberId)) {
+    const __pm215 = l.packageMonth || String(l.date || '').slice(0, 7);
+    if (!l.groupId && l.status === 'planned' && l.date >= today && __pm215 >= __ay && l.memberIds.includes(memberId)) {
       l.memberIds = l.memberIds.filter(x => x !== memberId);
       removed.individualLessons++;
+      if (!l.memberIds.length) __emptied215.add(l.id);
     }
   });
-  // Boş kalan ileri tarihli bireysel planlı dersleri temizle
-  state.lessons = state.lessons.filter(l => {
-    if (!l.groupId && l.status === 'planned' && l.date >= today && l.memberIds.length === 0) return false;
-    return true;
-  });
+  // Bu işlemle boşalan ileri tarihli bireysel planlı dersler temizlenir (v215: başka boş kayıtlara dokunulmaz)
+  if (__emptied215.size) state.lessons = state.lessons.filter(l => !(l && __emptied215.has(l.id) && !l.groupId && l.status === 'planned' && !(l.memberIds || []).length));
   return removed;
 }
 // v28 (Kerem kurali): KADRO DEGISINCE DERSLER OTOMATIK GUNCEL — bu ay ve sonraki aylarin
@@ -10602,7 +10613,7 @@ function saveLesson() {
     isLastOfPackage: existing ? (existing.isLastOfPackage === true) : false // v18.1: duzenlemede ⭐ isareti korunur
   };
   // v10: Arşivdeki üye derste seçildiyse otomatik aktive et
-  checked.forEach(mid => { if (isMemberArchived(mid)) unarchiveMember(mid); });
+  checked.forEach(mid => { if (isMemberArchived(mid)) unarchiveMember(mid, packageMonth || undefined); }); // v215: dersin paket ayından
   if (id) { const i = state.lessons.findIndex(x=>x.id===id); state.lessons[i] = data; }
   else state.lessons.push(data);
   // v10: Paket otomatik tamamlama kontrolü
@@ -10854,7 +10865,7 @@ function renderGroups() {
 function openGroupModal(id) {
   const isEdit = !!id;
   const g = isEdit ? state.groups.find(x=>x.id===id) : { id:'', name:'', size:2, memberIds:[], defaultInstructorId:'', defaultPackageId:'', defaultDays:[], defaultTime:'', note:'' };
-  const __gmAy = (typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) ? currentGroupDetailMonth : (((document.getElementById('member-month')||{}).value || '') || currentMonth());
+  const __gmAy = (__isGroupDetailOpen() && typeof currentGroupDetailMonth !== 'undefined' && currentGroupDetailMonth) ? currentGroupDetailMonth : __groupOpsCtxMonth(); // v215: kapanmış detayın bayat ayı kullanılmaz; Gruplar sayfası kendi ayı
   window.__groupEditCtxMonth = __gmAy; // v41: kadro/ad/not islemleri BU AYA yapilir
   document.getElementById('mg-title').textContent = (isEdit?'Grubu Düzenle':'Yeni Grup') + ' — ' + __gmAy;
   document.getElementById('mg-id').value = g.id;
@@ -11406,9 +11417,7 @@ function saveGroup() {
           if (__am) __closeArchivePeriodAt(__am, __gAy);
         });
         __removed.forEach(rid => { // v171 + v179 (U4): sarkan paket varsa ayrilma o paketin ayindan
-          const __effR = __spillPackageMonth179(__pg0, rid, __gAy);
-          if (__effR) { applyRosterChange(__pg0, __effR, mids => { const out = mids.map(x => x === rid ? '' : x); while (out.length > 0 && out[out.length-1] === '') out.pop(); return out; }); syncGroupLessonsToRoster(__pg0.id, __effR); }
-          __dropFromFutureLessons179(__pg0, rid, __gAy);
+          const __effR = ''; // v215 (Kerem "Hiçbir şeye dokunma"): çıkarma YALNIZ bu aydan — önceki ayın (sarkan) paketi ve planlı dersleri aynen
           __queuePartialOffer(__pg0, rid, __effR || __gAy);
           __queueLeaveUnit186(__pg0, rid, __gAy); // v186: baska yere gitmiyorsa "Pasif mi / Bireysel mi"
         });
@@ -11866,7 +11875,7 @@ function openGroupDetail(id, monthISO) {
       <td>${badge}</td>
       <td>${priceLabel}</td>
       <td><button class="btn small" style="${tickStyle}padding:4px 10px;font-weight:600;" onclick="togglePaidTick('${m.id}','${id}',event,'${monthISO||''}')" title="${__full?((monthISO||'bu ay')+' ödemesini kaldır'):(__partial?'Kalanı tahsil et — taksit tamamlama':('Bu üye için '+(monthISO||'bu ay')+' ödeme kaydı yarat'))}">${tickLabel}</button></td>
-      <td><button class="btn small secondary" onclick="event.stopPropagation();openMemberDetail('${m.id}')" title="Üye detayı — grup detayı arka planda açık kalır">Detay</button></td>
+      <td><button class="btn small secondary" onclick="event.stopPropagation();openMemberDetail('${m.id}','${monthISO||''}')" title="Üye detayı — grup detayı arka planda açık kalır">Detay</button></td>
     </tr>`;
   }).join('') || '<tr><td colspan="6"><div class="empty" style="padding:20px;">Gruba henüz üye eklenmedi.</div></td></tr>';
 
@@ -12132,7 +12141,7 @@ function startGroupPackage(id) {
   g.rescheduleUsed = 0;
   g.cancelUsed = 0;
   save();
-  openGroupDetail(id);
+  openGroupDetail(id, (__isGroupDetailOpen() && currentGroupDetailMonth) || undefined); // v215: aynı ay
 }
 // v26: GORUNTULENEN AYIN paket baslangicini duzenle — yalniz o ayin paketi degisir
 async function editGroupPkgStart(groupId, monthISO) {
@@ -12158,7 +12167,7 @@ function resetGroupPackage(id) {
   g.rescheduleUsed = 0;
   g.cancelUsed = 0;
   save();
-  openGroupDetail(id);
+  openGroupDetail(id, (__isGroupDetailOpen() && currentGroupDetailMonth) || undefined); // v215: aynı ay
 }
 function scheduleGroupMonth(groupId) {
   const g = state.groups.find(x=>x.id===groupId); if (!g) return;
@@ -12198,7 +12207,7 @@ function scheduleGroupMonth(groupId) {
   }
   save();
   alert(`${created} ders oluşturuldu${skipped?`, ${skipped} ders atlandı (çakışma veya mevcut)`:''}.`);
-  openGroupDetail(groupId);
+  openGroupDetail(groupId, __ay156); // v215: aynı ay
   renderCalendar(); renderDashboard();
 }
 function openLessonModalForGroup(groupId, ctxMonth) {
@@ -13376,7 +13385,7 @@ function savePayment() {
     if (__capDsc.defined > 0) data.discount = 0;
   }
   // v10: Arşivdeki üye için ödeme yapılıyorsa otomatik aktive et
-  if (memberId && isMemberArchived(memberId)) unarchiveMember(memberId);
+  if (memberId && isMemberArchived(memberId)) unarchiveMember(memberId, data.packageMonth || undefined); // v215: ödemenin paket ayından
   if (id) { const i = state.payments.findIndex(x=>x.id===id); state.payments[i] = data; }
   else state.payments.push(data);
   // v22: Paket baslangici ODEME TARIHINDEN BAGIMSIZ (elle > ilk ders > ayin 1'i)
@@ -13469,7 +13478,7 @@ function saveGroupPaymentAll() {
     if (campaignId) __applyCampaignToRecord176(rec, camp, listPrice, mid, groupId, packageMonth, ''); // v176 (F23)
     if (!rec.campaignId) { const __cDsc = paymentCapCheck(mid, groupId, packageMonth, 0, ''); if (__cDsc.defined > 0) rec.discount = 0; } // v131: taksit indirim degildir
     state.payments.push(rec);
-    if (isMemberArchived(mid)) unarchiveMember(mid);
+    if (isMemberArchived(mid)) unarchiveMember(mid, packageMonth || undefined); // v215: ödemenin paket ayından
     if (packageMonth >= ROSTER_START_MONTH) setMemberMonthly(mid, packageMonth, { enrolled: true }); // v23
   }
   // v22: Paket baslangici odeme tarihinden bagimsiz
@@ -18871,7 +18880,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ========== SÜRÜM TAKİBİ ==========
-const APP_VERSION = '2026.11.02.137';
+const APP_VERSION = '2026.11.02.138';
 window.APP_VERSION = APP_VERSION; // debug/test için global
 if (!window.structuredClone) window.structuredClone = function(o){ return JSON.parse(JSON.stringify(o)); }; // v140: eski Chromium (<98) emniyeti — state JSON-güvenli
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 dakika
