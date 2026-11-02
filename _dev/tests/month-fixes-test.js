@@ -77,9 +77,9 @@ setTimeout(()=>{ try {
     t('cikarma tamam', ok===true);
     t('Temmuz PLANLI dersten cikti', !w.S().lessons.find(l=>l.id==='LJ1').memberIds.includes('b'));
     t('YAPILMIS ders TARIHSEL korunur', w.S().lessons.find(l=>l.id==='LJ2').memberIds.includes('b'));
-    // v211 test bakimi: v179 (U4) bilincli degisiklik — onceki paketin bu aya SARKAN planli dersi de temizlenir (eski sozlesme bayatti)
+    // v215 (Kerem 02.11 "Hiçbir şeye dokunma"): onceki paketin bu aya SARKAN planli dersi de KORUNUR (v179 U4 kaldirildi)
     t('HAZIRAN paketinin HAZIRAN tarihli dersi korunur (ay izolasyonu)', w.S().lessons.find(l=>l.id==='LH0').memberIds.includes('b'));
-    t('HAZIRAN paketinin TEMMUZA SARKAN planli dersi de temizlenir (v179 U4)', !w.S().lessons.find(l=>l.id==='LH1').memberIds.includes('b'), JSON.stringify(w.S().lessons.find(l=>l.id==='LH1').memberIds));
+    t('HAZIRAN paketinin TEMMUZA SARKAN planli dersi KORUNUR (v215)', w.S().lessons.find(l=>l.id==='LH1').memberIds.includes('b'), JSON.stringify(w.S().lessons.find(l=>l.id==='LH1').memberIds));
     w.eval("syncGroupLessonsToRoster('g1','2026-07');");
     t('kadro senkronu cikarilan uyeyi GERI GETIRMEZ (v41 kok fix)', !w.S().lessons.find(l=>l.id==='LJ1').memberIds.includes('b'), JSON.stringify(w.S().lessons.find(l=>l.id==='LJ1').memberIds));
     w.addMemberToMonth('b','2026-07');

@@ -109,25 +109,27 @@ setTimeout(async ()=>{ try {
   w.eval(`reactivateMemberForMonth('P','${CM}')`); await tick(60);
   t('programatik aktive: soru yok (v58)', !seen('hangi birimde') && inRoster('GA','P',CM));
 
-  console.log('[C] SARKAN PAKET — tasinma (' + CM + ' bagla­mi, GS ' + PREV1 + ' paketi ' + CM + "'e sarkiyor): pay " + PREV1 + " paketinden, odeme fazlasi " + CM + " devri");
+  // v215 (Kerem 02.11 "Hiçbir şeye dokunma"): CM bağlamında taşınma ÖNCEKİ (sarkan) paketi değiştirmez — kadro, ödeme, ücret ve CM tarihli
+  // planlı dersleri AYNEN (eski v179 U4: önceki aydan pay + ödeme devri + sarkan derslerden çıkarma — kaldırıldı).
+  console.log('[C] SARKAN PAKET — tasinma (' + CM + ' bagla­mi, GS ' + PREV1 + ' paketi ' + CM + "'e sarkiyor): v215 — " + PREV1 + ' paketi AYNEN');
   fixture();
   w.eval("assignMemberToSlot('S1','GB',2)"); await tick(150);
   t('S1 GB kadrosunda (' + CM + '), GS ' + CM + ' kadrosunda degil', inRoster('GB','S1',CM) && !inRoster('GS','S1',CM));
-  t('GS ' + PREV1 + ' kadrosu S1 i birakti (paket yarida) — pay ' + PREV1 + ': 5 ders · 2812,5', !inRoster('GS','S1',PREV1) && (function(){ const ps = J(`partialShareFor('GS','S1','${PREV1}')`); return !!ps && +ps.sessions===5 && eq(ps.price,2812.5); })(), JSON.stringify(J(`partialShareFor('GS','S1','${PREV1}')`)));
-  t('sarkan 3 planli derste S1 yok (S2,S3 kaldi)', J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds.join('+'))`).every(x => x==='S2+S3'), JSON.stringify(J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds)`)));
-  { const a = pays('S1','GS',PREV1), b = pays('S1','GB',CM); t('odeme: GS ' + PREV1 + ' 2812,5 kaldi · 1687,5 GB ' + CM + ' paketine DEVIR', a.length===1 && eq(a[0].amount,2812.5) && b.length===1 && eq(b[0].amount,1687.5), JSON.stringify({a:a.map(p=>[p.amount,p.packageMonth]), b:b.map(p=>[p.amount,p.packageMonth])})); }
-  t('S1 ' + PREV1 + ': bireysel satir YOK (yalniz kapali birim), GS altinda ayrildi satiri var', !rowsOf(PREV1).some(r=>r.type==='individual'&&r.memberId==='S1') && rowsOf(PREV1).some(r=>r.groupId==='GS'&&r.memberId==='S1'&&r.isPartial));
-  t('S1 ' + PREV1 + ' bakiyesi 0 (pay 2812,5 odendi)', eq(w.eval(`memberBalanceForMonth('S1','${PREV1}')`), 0), w.eval(`memberBalanceForMonth('S1','${PREV1}')`));
-  t('GS ' + PREV1 + ' beklenen 11812,5 (S2 4500 + S3 4500 + S1 payi 2812,5), toplanan 11812,5, kalan 0', eq(w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='GS'),'${PREV1}')`),11812.5) && eq(w.eval(`groupBalanceForMonth('GS','${PREV1}')`),0), w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='GS'),'${PREV1}')`) + '/' + w.eval(`groupBalanceForMonth('GS','${PREV1}')`));
-  { const u = units('S1', PREV1); t('S1 ' + PREV1 + ' birimleri: yalniz kapali GS (pay)', !!u && u.length===1 && u[0].gid==='GS' && u[0].open===false && !!u[0].share, JSON.stringify(u)); }
-  { const u = units('S1', CM); t('S1 ' + CM + ' birimleri: acik GB (odenen 1687,5)', !!u && u.length===1 && u[0].gid==='GB' && u[0].open===true && eq(u[0].paid,1687.5), JSON.stringify(u)); }
+  t('v215: GS ' + PREV1 + ' kadrosunda S1 DURUYOR, pay YAZILMADI', inRoster('GS','S1',PREV1) && !J(`partialShareFor('GS','S1','${PREV1}')`), JSON.stringify(J(`partialShareFor('GS','S1','${PREV1}')`)));
+  t('v215: sarkan 3 planli derste S1 DURUYOR (S1+S2+S3)', J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds.join('+'))`).every(x => x==='S1+S2+S3'), JSON.stringify(J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds)`)));
+  { const a = pays('S1','GS',PREV1), b = pays('S1','GB',CM); t('v215: odeme TASINMADI (GS ' + PREV1 + ' 4500 aynen, GB ' + CM + ' devri yok)', a.length===1 && eq(a[0].amount,4500) && a[0].packageMonth===PREV1 && b.length===0, JSON.stringify({a:a.map(p=>[p.amount,p.packageMonth]), b:b.map(p=>[p.amount,p.packageMonth])})); }
+  t('S1 ' + PREV1 + ': bireysel satir YOK, GS altinda normal uye satiri (ayrildi degil)', !rowsOf(PREV1).some(r=>r.type==='individual'&&r.memberId==='S1') && rowsOf(PREV1).some(r=>r.groupId==='GS'&&r.memberId==='S1'&&!r.isPartial));
+  t('S1 ' + PREV1 + ' bakiyesi 0 (4500 odendi)', eq(w.eval(`memberBalanceForMonth('S1','${PREV1}')`), 0), w.eval(`memberBalanceForMonth('S1','${PREV1}')`));
+  t('GS ' + PREV1 + ' beklenen 13500 (3 x 4500, aynen), kalan 0', eq(w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='GS'),'${PREV1}')`),13500) && eq(w.eval(`groupBalanceForMonth('GS','${PREV1}')`),0), w.eval(`groupExpectedTotal(state.groups.find(g=>g.id==='GS'),'${PREV1}')`) + ' / ' + w.eval(`groupBalanceForMonth('GS','${PREV1}')`));
+  { const u = units('S1', PREV1); t('S1 ' + PREV1 + ' birimleri: yalniz GS (pay yok)', !!u && u.length===1 && u[0].gid==='GS' && !u[0].share, JSON.stringify(u)); }
+  { const u = units('S1', CM); t('S1 ' + CM + ' birimleri: acik GB', !!u && u.length===1 && u[0].gid==='GB' && u[0].open===true, JSON.stringify(u)); }
   t('hoca hakedisi: GS in 5 dersi degismedi (3 x 562,5 x %30)', eq(w.eval(`state.lessons.filter(l=>l.id.startsWith('gsd')).reduce((a,l)=>a+instructorEarningForLesson(l),0)`), 5*1687.5*0.3), w.eval(`state.lessons.filter(l=>l.id.startsWith('gsd')).reduce((a,l)=>a+instructorEarningForLesson(l),0)`));
 
-  console.log('[D] SARKAN PAKET — pasife alma (' + CM + '): sarkan planli derslerden duser; ' + PREV1 + ' paketi (odeme) OLDUGU GIBI');
+  console.log('[D] SARKAN PAKET — pasife alma (' + CM + '): v215 — ' + PREV1 + ' paketi ve sarkan planli dersleri OLDUGU GIBI');
   fixture();
   w.eval(`removeMemberFromMonth('S1','${CM}')`); await tick(120);
   t('S1 ' + CM + ' pasif', w.eval(`isMemberEnrolledInMonth('S1','${CM}')`)===false);
-  t('sarkan 3 planli derste S1 yok', J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds.join('+'))`).every(x => x==='S2+S3'), JSON.stringify(J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds)`)));
+  t('v215: sarkan 3 planli derste S1 DURUYOR (onceki paket)', J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds.join('+'))`).every(x => x==='S1+S2+S3'), JSON.stringify(J(`state.lessons.filter(l=>l.id.startsWith('gsp')).map(l=>l.memberIds)`)));
   t(PREV1 + ' kadrosu ve odemesi dokunulmadi (S1 kadroda, pay yok, GS kalan 0)', inRoster('GS','S1',PREV1) && !J(`partialShareFor('GS','S1','${PREV1}')`) && eq(w.eval(`groupBalanceForMonth('GS','${PREV1}')`),0));
 
   console.log('[E] BIREYSEL → GRUP (I: 2 bireysel ders, 8000 odemis → GB): bireysel birim payi 2 x 1000, 6000 gruba');
