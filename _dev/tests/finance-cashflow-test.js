@@ -60,6 +60,7 @@ setTimeout(async function(){try{
     t('45 gün sonraki kalem 30 günlük pencerede YOK, 60 günlükte VAR', pr4.totOut===3000 && pr5.totOut===3100);
     // yenileme tahmini çizgiye girmez
     w.eval("['01','02','03','04','05','06','07'].forEach(d=>state.lessons.push({id:'LR'+d,groupId:'',instructorId:'G',date:'"+CUR+"-'+d,time:'11:00',durationMin:45,status:'completed',memberIds:['B'],packageMonth:'"+CUR+"',packageOwnerType:'member',packageOwnerId:'B',size:1}));");
+    if (DM3.slice(0,7)!==CUR) w.eval("state.payments.push({id:'PB2',memberId:'B',groupId:'',date:'"+DM3+"',packageMonth:'"+CUR+"',pkgName:'BIREYSEL',sessions:8,amount:4500,listPrice:4500,method:'IBAN',note:''})"); // v214 test bakimi: ay basinda DM3 gecen aya duser — bu ayin paketi de odenmis olsun (yoksa dogru olarak alacak gorunur)
     const pr6=JSON.parse(J(w,'finProjection196(90)'));
     t('BERNA 7/8 → yenileme tahmini listede (toplamda), seride DEĞİL', pr6.renewals.length===1 && pr6.totRen===4500 && pr6.end.a===pr6.start+4500-3000-100, JSON.stringify({ren:pr6.renewals.length,end:pr6.end.a}));
   }

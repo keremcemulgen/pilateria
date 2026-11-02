@@ -180,7 +180,7 @@ setTimeout(async function(){try{
     t('ödeme listesinde değil, tahsilat listesinde', !w.eval("finDueItems196().some(d=>d.dtype==='income')") && w.eval("typeof finIncomeDues200==='function' && finIncomeDues200().length===1"));
     const pr=JSON.parse(J(w,"(function(){ const p=finProjection196(60); return {inn:p.totIn, ev:p.events.filter(e=>e.kind==='income').length}; })()"));
     t('projeksiyon: +100.000 giriş olayı', pr.ev===1 && pr.inn>=100000, JSON.stringify(pr));
-    w.eval("finSwitchTab196('dues')"); await tick(60);
+    w.eval("__finDueWin196=60; finSwitchTab196('dues')"); await tick(60); // v214 test bakimi: vade gelecek ayin 5'i — ay basinda 30 gun penceresinin DISINDA kalir (uygulama dogru)
     const dues=w.document.getElementById('fin-dues-body').textContent;
     t('Vadeler: Yaklaşan Tahsilatlar altında "Kerem maaş" ve Alındı düğmesi', /Yaklaşan Tahsilatlar[\s\S]*Kerem maaş/.test(dues) && /Alındı/.test(dues), dues.slice(0,300));
     const id=w.eval("state.finDues.find(d=>d.templateId==='TM').id");

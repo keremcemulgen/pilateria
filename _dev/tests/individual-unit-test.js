@@ -104,7 +104,13 @@ setTimeout(async ()=>{ try {
     state.members.find(m=>m.id==='DZ').monthly={'${PREV2}':{enrolled:true}};
     state.members.find(m=>m.id==='BX').monthly={'${PREV2}':{enrolled:true}};
   `);
-  t('gecmiste kalmis (paketi gecen ay bitmis) grup listelenmez', !/DUYGU/.test(lowHtml()));
+  // v214 test bakimi: v190 (Kerem karar B) GORULMEMIS biten paketi "Goruldu" isaretlenene kadar listede tutar — paket bitis ayi
+  // __LF_SEEN_SINCE190 (Ekim 2026) esiginin altindayken bu kontrol tesadufen gecerdi; Kasim'da (bitis Ekim) sozlesme acikca yaziliyor.
+  { const __unseen = /DUYGU/.test(lowHtml()) && w.eval(`__pkgEndMonth173('group','G1','${PREV2}')`) >= w.eval('__LF_SEEN_SINCE190');
+    const __old = !/DUYGU/.test(lowHtml()) && w.eval(`__pkgEndMonth173('group','G1','${PREV2}')`) < w.eval('__LF_SEEN_SINCE190');
+    t('v190: gecen ay biten paket GORULMEMISSE listede (esik altindaysa zaten yok)', __unseen || __old, lowHtml().replace(/<[^>]*>/g,' ').slice(0,120)); }
+  w.eval(`state.groups[0].lfSeen={'${PREV2}':todayISO()};`);
+  t('gecmiste kalmis (paketi gecen ay bitmis) grup GORULDUYSE listelenmez (v158)', !/DUYGU/.test(lowHtml()));
   // ama paketi BU AY devam ediyorsa (sarkan) kadro olmasa da gorunur — asil talep
   fixtureSarkan('completed');
   w.eval(`state.groups[0].monthlyMembers={'${PREV2}':['DZ']}; state.members.find(m=>m.id==='DZ').monthly={'${PREV2}':{enrolled:true}};`);

@@ -101,7 +101,9 @@ setTimeout(async function(){try{
     w.eval("state.payments.push({id:'PRN',memberId:'R',groupId:'',date:'"+TODAY+"',packageMonth:'"+NEXT+"',pkgName:'BIREYSEL',sessions:8,amount:4500,listPrice:4500,method:'Nakit',note:''})");
     t('gelecek ay ödendiyse yenileme tahmini düşer', w.eval('finRenewals196().length')===0);
     const items=JSON.parse(J(w,'finDueItems196()'));
-    t('vade listesi: kira ×2 + hoca + kart, tarih sıralı', items.length===4 && items.every((x,i)=>i===0||x.dueDate>=items[i-1].dueDate), JSON.stringify(items.map(x=>x.dtype+':'+x.dueDate)));
+    // v214 test bakimi: ayin ilk 5 gununde DM5 (BERNA/CEYDA dersi) GECEN aya duser → GECEN ayin hakedis vadesi de listede (uygulama dogru)
+    const __hocaAy = (DM5.slice(0,7)!==CUR) ? 2 : 1;
+    t('vade listesi: kira ×2 + hoca ('+__hocaAy+' ay) + kart, tarih sıralı', items.length===3+__hocaAy && items.every((x,i)=>i===0||x.dueDate>=items[i-1].dueDate), JSON.stringify(items.map(x=>x.dtype+':'+x.dueDate)));
   }
 
   console.log('[4] Vadeler ekranı + gider formundan vadeli kalem + manuel kalem penceresi');
@@ -136,7 +138,7 @@ setTimeout(async function(){try{
     w.eval("switchPage('payments')"); await tick(100); w.eval("finSwitchTab196('cari')"); await tick(150);
     const body=w.document.getElementById('fin-cari-body'); const txt=body.textContent;
     t('bize borçlu: AYSE + BERNA = 9.000', /Bize borçlu \(üyeler\): 9\.000/.test(txt), txt.slice(0,200));
-    const hak=w.eval("instructorEarningsForMonth('G','"+CUR+"').total");
+    const hak=w.eval("instructorEarningsForMonth('G','"+CUR+"').total") + ((DM5.slice(0,7)!==CUR) ? w.eval("instructorEarningsForMonth('G','"+DM5.slice(0,7)+"').total") : 0); // v214: ay basinda gecen ayin hakedisi de borc
     t('biz borçluyuz: hoca + dış cari (kira 60.000) + kart (2.800)', new RegExp('Biz borçluyuz: '+w.eval("money("+hak+"+60000+2800)").replace(/\./g,'\\.')).test(txt), txt.slice(0,300));
     t('üye satırında Ekstre + Ödeme; BERNA gecikmiş', /BERNA/.test(txt) && [...body.querySelectorAll('.fin-row.overdue')].some(r=>/BERNA/.test(r.textContent)) && /Ekstre/.test(txt));
     t('DERYA (ortak) hoca listesinde YOK, GIZEM var', !/DERYA/.test(txt) && /GIZEM/.test(txt));
