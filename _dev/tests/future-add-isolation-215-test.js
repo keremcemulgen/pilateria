@@ -22,7 +22,7 @@ function boot() {
   return dom.window;
 }
 function addM(ym, k) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + k, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-function fixture(w, prepared) {
+function fixture(w, mode) { const prepared = mode === 'prepared', legacy = mode === 'legacy';
   const CUR = w.eval('currentMonth()'), TODAY = w.eval('todayISO()');
   const P2 = addM(CUR, -2), P1 = addM(CUR, -1), N1 = addM(CUR, 1), N2 = addM(CUR, 2);
   const lastDay = w.eval(`(function(){ const p=parseISO('${CUR}-01'); return isoDate(new Date(p.getFullYear(), p.getMonth()+1, 0)); })()`);
@@ -43,7 +43,7 @@ function fixture(w, prepared) {
       mk('Q','SEDA DENEME',en(['${P2}']),{archived:true,archivedAt:'${P1}-01'}),
       mk('Z','ZEYNEP DENEME',en(['${P2}','${P1}']))
     ];
-    const rost=(ids)=>{ const o={}; ms.forEach(a=>o[a]=ids.slice()); if(prep) o[N1]=ids.slice(); return o; };
+    const rost=(ids)=>{ const o={}; if (${legacy ? 'true' : 'false'}) return o; /* v216: ESKİ grup — ay kadrosu anahtarı yok (memberIds tüm aylar) */ ms.forEach(a=>o[a]=ids.slice()); if(prep) o[N1]=ids.slice(); return o; };
     const pk=(a)=>({month:a,startDate:a+'-03',sessions:8,price:0,status:'active'});
     state.groups=[
       {id:'GA',name:'AYLA - BERNA',size:3,memberIds:['A','B'],defaultInstructorId:'h1',defaultPackageId:'p8',defaultDays:[1,3],defaultTime:'10:00',customTotalPrice:9000,packages:ms.map(pk),monthlyMembers:rost(['A','B']),monthlyNotes:{}},
@@ -164,10 +164,10 @@ const EXPECT = {
   'Yeni grup: 1 kişilik (bireysel birim)': "__memberActiveInMonth(M_('A'), AY) && !activeGroupRosterForMonth(G('GA'),AY).includes('A')"
 };
 setTimeout(async () => { try {
-  for (const prepared of [false, true]) for (const k of ['N1', 'N2', 'CUR']) for (const name of Object.keys(OPS)) {
-    if (ONLY && !(name + ' ' + k + ' ' + (prepared ? 'prepared' : 'bare')).includes(ONLY)) continue;
+  for (const mode of ['bare', 'prepared', 'legacy']) for (const k of ['N1', 'N2', 'CUR']) for (const name of Object.keys(OPS)) { const prepared = mode === 'prepared';
+    if (ONLY && !(name + ' ' + k + ' ' + mode).includes(ONLY)) continue;
     const w = boot(); await tick(1100);
-    const M = fixture(w, prepared); const ay = M[k];
+    const M = fixture(w, mode); const ay = M[k];
     const months = [M.P2, M.P1, M.CUR, M.N1].filter(x => x < ay);
     const before = w.eval(SNAP + '(' + JSON.stringify(months) + ')');
     let err = '';
@@ -175,7 +175,7 @@ setTimeout(async () => { try {
     const after = w.eval(SNAP + '(' + JSON.stringify(months) + ')');
     const d = diff(before, after);
     if (EXPECT[name]) { const ok = w.eval(`(function(){ const AY='${ay}'; const G=id=>state.groups.find(g=>g.id===id); const addMonth215=(a,k)=>{ const p=a.split('-').map(Number); const d=new Date(p[0],p[1]-1+k,1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }; const M_=id=>state.members.find(m=>m.id===id); return !!(${EXPECT[name]}); })()`); if (!ok) d.push('İŞLEM ' + ay + ' AYINDA YAPILMADI: ' + EXPECT[name]); }
-    t('[' + (prepared ? 'hazır' : 'çıplak') + ' · ' + k + '=' + ay + '] ' + name + ' → önceki aylar (' + months.join(',') + ') DEĞİŞMEDİ', !err && d.length === 0, (err ? 'HATA ' + err + ' · ' : '') + d.join('\n        '));
+    t('[' + ({ bare: 'çıplak', prepared: 'hazır', legacy: 'eski grup' })[mode] + ' · ' + k + '=' + ay + '] ' + name + ' → önceki aylar (' + months.join(',') + ') DEĞİŞMEDİ', !err && d.length === 0, (err ? 'HATA ' + err + ' · ' : '') + d.join('\n        '));
     w.close();
   }
   console.log('\nSONUC: ' + pass + ' gecti, ' + fail + ' kaldi');
