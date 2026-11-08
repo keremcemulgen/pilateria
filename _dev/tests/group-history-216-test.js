@@ -85,6 +85,13 @@ setTimeout(async () => { try {
     t('Sonra: veri aynen, sonraki açılışta yine sorulur', rowsOf(w, '2026-06', 'Z').join() === 'individual::6000' && w.eval("typeof __groupOrphanScan216") === 'function' && J(w, '__groupOrphanScan216().length') === 1);
     w.close(); }
 
+  console.log('[4] v217 (Kerem 03.11 "Bir daha hiçbir güncelleme mevcut girilmiş bilgileri değiştirmeyecek"): açılış onarım zinciri bu soruyu SORMAZ');
+  { const w = boot('fix'); await tick(1100); fixture(w, true);
+    w.eval("__spillRepairAsked191 = false; __offerSpillJoinRepair191()"); await tick(400);
+    t('açılışta "Grubundan düşmüş üye" sorusu YOK', !w.__msgs.some(m => /Grubundan düşmüş üye/.test(m)), JSON.stringify(w.__msgs.map(m => m.slice(0, 60))));
+    t('veri aynen (Haziran hâlâ bireysel — onarım yalnız Kerem isterse)', rowsOf(w, '2026-06', 'Z').join() === 'individual::6000');
+    w.close(); }
+
   console.log('\nSONUC: ' + pass + ' gecti, ' + fail + ' kaldi');
   process.exit(fail ? 1 : 0);
 } catch (e) { console.log('TEST COKTU', e && e.stack || e); process.exit(2); } }, 50);
